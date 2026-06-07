@@ -28,6 +28,7 @@ export const memberInputSchema = z.object({
   membershipDue: isoDate,
   feesAmount: z.coerce.number().min(0),
   paymentStatus: z.enum(["Paid", "Pending"]),
+  avatar: z.string().optional(),
 });
 
 export const renewSchema = z.object({

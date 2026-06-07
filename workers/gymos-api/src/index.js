@@ -591,6 +591,7 @@ function validateMemberInput(body) {
     membershipDue: requiredDate(body.membershipDue ?? body.membership_due, "membership due"),
     feesAmount: requiredNumber(body.feesAmount ?? body.fees_amount, "fees amount", 0),
     paymentStatus: assertEnum(body.paymentStatus ?? body.payment_status, PAYMENT_STATUSES, "payment status"),
+    avatar: typeof body.avatar === "string" ? body.avatar : undefined,
   };
 
   if (!/^\d{10}$/.test(input.phone)) {
@@ -653,6 +654,7 @@ function memberInputToDb(input) {
     membership_due: input.membershipDue,
     fees_amount: input.feesAmount,
     payment_status: input.paymentStatus,
+    avatar: input.avatar ?? null,
   };
 }
 
@@ -682,6 +684,7 @@ function mapMember(row) {
     paymentStatus: row.payment_status,
     status: row.status,
     smsSent3days: row.sms_sent_3days,
+    avatar: row.avatar ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

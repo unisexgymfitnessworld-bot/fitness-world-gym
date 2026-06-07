@@ -8,7 +8,7 @@ import {
   type FilterFn,
   type SortingState,
 } from "@tanstack/react-table";
-import { Eye, MessageCircle, MessageSquare, Pencil, UserX, SearchX, Plus } from "lucide-react";
+import { Eye, MessageCircle, MessageSquare, Pencil, UserX, SearchX, Plus, Download } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { createWhatsAppLink, formatDisplayDate, formatPhone, getDueTone } from "../../lib/utils";
@@ -56,6 +56,60 @@ export function MemberTable({
   const [sorting, setSorting] = useState<SortingState>([{ id: "membershipDue", desc: false }]);
   const [globalFilter, setGlobalFilter] = useState(query);
 
+  function exportToCsv(): void {
+    const headers = [
+      "Reg No",
+      "Name",
+      "Phone",
+      "Age",
+      "Gender",
+      "Join Date",
+      "Weight (kg)",
+      "Height (cm)",
+      "BMI",
+      "Goal",
+      "Plan Type",
+      "Start Date",
+      "Due Date",
+      "Fees",
+      "Payment Status",
+      "Status"
+    ];
+    
+    const csvRows = [headers.join(",")];
+    
+    for (const member of members) {
+      const row = [
+        `"${member.regNo}"`,
+        `"${member.name.replace(/"/g, '""')}"`,
+        `"${member.phone}"`,
+        member.age,
+        `"${member.gender}"`,
+        `"${member.joinDate}"`,
+        member.weightKg,
+        member.heightCm,
+        member.bmi,
+        `"${member.goal}"`,
+        `"${member.planType}"`,
+        `"${member.membershipStart}"`,
+        `"${member.membershipDue}"`,
+        member.feesAmount,
+        `"${member.paymentStatus}"`,
+        `"${member.status}"`
+      ];
+      csvRows.push(row.join(","));
+    }
+    
+    const csvContent = "data:text/csv;charset=utf-8," + csvRows.join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `fitness_world_members_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
   useEffect(() => {
     setGlobalFilter(query);
   }, [query]);
@@ -68,7 +122,21 @@ export function MemberTable({
       }),
       columnHelper.accessor("name", {
         header: "Name",
-        cell: (info) => <span className="font-semibold text-text-primary">{info.getValue()}</span>,
+        cell: (info) => {
+          const member = info.row.original;
+          return (
+            <div className="flex items-center gap-2.5">
+              <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full border border-border-default bg-surface-raised flex items-center justify-center">
+                {member.avatar ? (
+                  <img src={member.avatar} alt={member.name} className="h-full w-full object-cover" />
+                ) : (
+                  <span className="text-[12px] font-bold text-text-muted">{member.name.slice(0, 2).toUpperCase()}</span>
+                )}
+              </div>
+              <span className="font-semibold text-text-primary">{info.getValue()}</span>
+            </div>
+          );
+        },
       }),
       columnHelper.accessor("phone", {
         header: "Phone",
@@ -249,7 +317,13 @@ export function MemberTable({
           <p className="text-[11px] font-bold uppercase tracking-wider text-brand-primary sm:text-[12px]">Member Register</p>
           <h2 className="text-[18px] font-black text-text-primary sm:text-[20px] lg:text-[24px]">Fitness World Members</h2>
         </div>
-        <div className="rounded-full bg-surface-overlay px-2.5 py-1 text-[13px] font-bold text-text-secondary sm:px-3 sm:py-1.5 sm:text-[14px]">{rows.length} visible</div>
+        <div className="flex items-center gap-2">
+          <div className="rounded-full bg-surface-overlay px-2.5 py-1 text-[13px] font-bold text-text-secondary sm:px-3 sm:py-1.5 sm:text-[14px]">{rows.length} visible</div>
+          <Button variant="secondary" className="!h-9 !min-h-0 !px-3 !py-1 text-[13px] font-bold shadow-sm" onClick={exportToCsv} title="Export CSV" aria-label="Export CSV">
+            <Download size={14} />
+            <span>Export</span>
+          </Button>
+        </div>
       </header>
 
       {/* Mobile Card View */}
@@ -265,9 +339,16 @@ export function MemberTable({
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: Math.min(i * 0.05, 0.4) }}
             >
-              <div className="flex items-start justify-between gap-2">
+              <div className="flex items-start gap-3">
+                <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full border border-border-default bg-surface-raised flex items-center justify-center">
+                  {member.avatar ? (
+                    <img src={member.avatar} alt={member.name} className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="text-[12px] font-bold text-text-muted">{member.name.slice(0, 2).toUpperCase()}</span>
+                  )}
+                </div>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono text-[11px] font-bold text-brand-primary">{member.regNo}</span>
                     <Badge tone={member.status === "Active" ? "active" : member.status === "Expired" ? "expired" : "neutral"}>
                       {member.status}

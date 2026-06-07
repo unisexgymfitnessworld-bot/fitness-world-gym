@@ -26,6 +26,7 @@ export function mapMember(row: DbMember): Member {
     paymentStatus: row.payment_status,
     status: row.status,
     smsSent3days: row.sms_sent_3days,
+    avatar: row.avatar ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -52,6 +53,7 @@ export function memberInputToDb(input: MemberInput) {
     membership_due: input.membershipDue,
     fees_amount: input.feesAmount,
     payment_status: input.paymentStatus,
+    avatar: input.avatar ?? null,
   };
 }
 

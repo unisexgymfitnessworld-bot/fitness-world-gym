@@ -30,6 +30,7 @@ export const memberInputSchema = z.object({
   membershipDue: isoDate,
   feesAmount: z.coerce.number().min(0, "Fees cannot be negative"),
   paymentStatus: z.enum(paymentOptions),
+  avatar: z.string().optional(),
 }).superRefine((value, ctx) => {
   if (value.goal === "Other" && !value.goalOther) {
     ctx.addIssue({

@@ -35,6 +35,7 @@ const fieldNames = [
   "membershipDue",
   "feesAmount",
   "paymentStatus",
+  "avatar",
 ] as const satisfies readonly (keyof MemberInputValues)[];
 
 function isMemberInputField(value: PropertyKey): value is keyof MemberInputValues {
@@ -62,6 +63,7 @@ function defaults(member: Member | null): MemberInputValues {
     membershipDue: member?.membershipDue ?? calculateDueDate(todayISO(), "1 Month"),
     feesAmount: member?.feesAmount ?? 1800,
     paymentStatus: member?.paymentStatus ?? "Pending",
+    avatar: member?.avatar ?? "",
   };
 }
 
@@ -180,6 +182,43 @@ export function MemberSheet({ open, member, onClose, onSave }: MemberSheetProps)
             </header>
 
             <form className="scrollbar-soft flex-1 overflow-y-auto pb-28" onSubmit={handleSubmit(submit)}>
+              <div className="flex flex-col items-center justify-center border-b border-border-default bg-surface-raised py-6">
+                <div className="relative group flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border border-border-default bg-brand-white shadow-sm ring-4 ring-brand-primary-light">
+                  {watch("avatar") ? (
+                    <img src={watch("avatar")} alt="Profile preview" className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="text-[20px] font-black text-text-muted">{watch("name") ? watch("name").slice(0, 2).toUpperCase() : "FW"}</span>
+                  )}
+                  <label className="absolute inset-0 flex cursor-pointer flex-col items-center justify-center bg-black/60 opacity-0 transition-opacity group-hover:opacity-100">
+                    <span className="text-[12px] font-bold text-white uppercase">Upload</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setValue("avatar", reader.result as string, { shouldDirty: true });
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+                {watch("avatar") && (
+                  <button
+                    type="button"
+                    className="mt-2 text-[12px] font-bold text-status-expired hover:underline"
+                    onClick={() => setValue("avatar", "", { shouldDirty: true })}
+                  >
+                    Remove Photo
+                  </button>
+                )}
+              </div>
+
               <Section title="Personal" delay={0.1}>
                 <div className="grid gap-3 md:grid-cols-2 lg:gap-4">
                   <Input label="Name" error={errors.name?.message} {...register("name")} />

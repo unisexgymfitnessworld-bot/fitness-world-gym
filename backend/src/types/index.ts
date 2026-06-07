@@ -36,6 +36,7 @@ export interface DbMember {
   payment_status: PaymentStatus;
   status: MemberStatus;
   sms_sent_3days: boolean;
+  avatar: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -65,6 +66,7 @@ export interface Member {
   paymentStatus: PaymentStatus;
   status: MemberStatus;
   smsSent3days: boolean;
+  avatar?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -89,6 +91,7 @@ export interface MemberInput {
   membershipDue: string;
   feesAmount: number;
   paymentStatus: PaymentStatus;
+  avatar?: string;
 }
 
 export interface DbAttendanceEntry {

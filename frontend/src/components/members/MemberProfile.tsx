@@ -66,7 +66,13 @@ export function MemberProfile({ member, attendance, onBack, onEdit, onSms, onRen
       >
         <div className="studio-dark grid gap-4 p-4 text-brand-white lg:min-h-56 lg:grid-cols-[1fr_280px] lg:gap-6 lg:p-6">
           <div className="flex items-start gap-4 lg:gap-5">
-            <div className="grid h-16 w-16 shrink-0 place-items-center rounded-[var(--radius-card)] bg-gradient-to-br from-brand-primary to-[#F0447D] text-[20px] font-extrabold shadow-[0_18px_40px_rgba(232,23,93,0.34)] lg:h-20 lg:w-20 lg:text-[24px]">{member.regNo.replace("FW-", "")}</div>
+            <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full border-2 border-white/20 bg-brand-white/10 flex items-center justify-center shadow-[0_18px_40px_rgba(232,23,93,0.34)] lg:h-20 lg:w-20">
+              {member.avatar ? (
+                <img src={member.avatar} alt={member.name} className="h-full w-full object-cover rounded-full" />
+              ) : (
+                <span className="text-[20px] font-black text-brand-white lg:text-[24px]">{member.name.slice(0, 2).toUpperCase()}</span>
+              )}
+            </div>
             <div>
             <p className="font-mono text-[12px] font-semibold text-brand-primary-light lg:text-[13px]">{member.regNo}</p>
             <h1 className="mt-1 text-[26px] font-extrabold leading-tight lg:mt-2 lg:text-[34px]">{member.name}</h1>

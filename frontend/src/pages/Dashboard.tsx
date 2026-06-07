@@ -10,6 +10,7 @@ import { MemberSheet } from "../components/members/MemberSheet";
 import { MemberTable } from "../components/members/MemberTable";
 import { SmsModal } from "../components/sms/SmsModal";
 import { ConfirmModal } from "../components/ui/ConfirmModal";
+import { SettingsModal } from "../components/layout/SettingsModal";
 import { useAuth } from "../hooks/useAuth";
 import { useMembers } from "../hooks/useMembers";
 import { api, isApiConfigured } from "../lib/api";
@@ -32,6 +33,7 @@ export function Dashboard() {
   const setSmsMemberId = useAppStore((state) => state.setSmsMemberId);
   const pushToast = useAppStore((state) => state.pushToast);
   const [confirmingSuspendId, setConfirmingSuspendId] = useState<string | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const baseFilteredMembers = useMemo(() => {
     return members.filter((member) => {
@@ -159,7 +161,7 @@ export function Dashboard() {
   if (selectedMember) {
     return (
       <>
-        <TopBar trainer={trainer} onLogout={() => void signOut()} />
+        <TopBar trainer={trainer} onLogout={() => void signOut()} onSettings={() => setIsSettingsOpen(true)} />
         <MemberProfile
           member={selectedMember}
           attendance={attendance}
@@ -171,6 +173,7 @@ export function Dashboard() {
         />
         <MemberSheet open={editingMemberId !== null} member={editingMember} onClose={() => setEditingMemberId(null)} onSave={saveMember} />
         <SmsModal member={smsMember} open={smsMember !== null} onClose={() => setSmsMemberId(null)} onSend={handleSms} />
+        <SettingsModal open={isSettingsOpen} trainer={trainer} onClose={() => setIsSettingsOpen(false)} />
         <Toast toast={toast} />
       </>
     );
@@ -178,7 +181,7 @@ export function Dashboard() {
 
   return (
     <>
-      <TopBar trainer={trainer} onLogout={() => void signOut()} />
+      <TopBar trainer={trainer} onLogout={() => void signOut()} onSettings={() => setIsSettingsOpen(true)} />
       <main className="studio-shell animated-grid relative min-h-screen overflow-hidden">
         <div className="relative mx-auto grid max-w-[1500px] gap-3 px-3 pb-24 pt-3 sm:px-4 lg:gap-5 lg:px-8 lg:pt-6">
           <motion.section
@@ -297,6 +300,7 @@ export function Dashboard() {
         }}
         onClose={() => setConfirmingSuspendId(null)}
       />
+      <SettingsModal open={isSettingsOpen} trainer={trainer} onClose={() => setIsSettingsOpen(false)} />
       <Toast toast={toast} />
     </>
   );

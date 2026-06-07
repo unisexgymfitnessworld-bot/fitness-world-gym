@@ -41,6 +41,7 @@ export interface Member {
   paymentStatus: PaymentStatus;
   status: MemberStatus;
   smsSent3days: boolean;
+  avatar?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -65,6 +66,7 @@ export interface MemberInput {
   membershipDue: string;
   feesAmount: number;
   paymentStatus: PaymentStatus;
+  avatar?: string;
 }
 
 export interface AttendanceEntry {

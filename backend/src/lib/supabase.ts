@@ -13,7 +13,7 @@ export function getSupabaseAdmin(): SupabaseClient {
         persistSession: false,
       },
       realtime: {
-        transport: ws,
+        transport: ws as any,
       },
     });
   }
@@ -28,7 +28,7 @@ export function getSupabaseAuthClient(): SupabaseClient {
         persistSession: false,
       },
       realtime: {
-        transport: ws,
+        transport: ws as any,
       },
     });
   }
