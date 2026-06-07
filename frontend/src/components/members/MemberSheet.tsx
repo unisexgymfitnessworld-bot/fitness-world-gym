@@ -166,7 +166,9 @@ export function MemberSheet({ open, member, onClose, onSave }: MemberSheetProps)
             <header className="studio-dark relative flex items-center justify-between border-b border-white/[0.10] px-4 py-4 text-brand-white lg:px-6 lg:py-5">
               <div className="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-brand-primary via-[#F0447D] to-transparent" />
               <div className="flex items-center gap-3 lg:gap-4">
-                <div className="grid h-12 w-12 place-items-center rounded-[var(--radius-card)] bg-gradient-to-br from-brand-primary to-[#F0447D] text-[15px] font-extrabold shadow-[0_16px_34px_rgba(232,23,93,0.32)] lg:h-14 lg:w-14 lg:text-[17px]">FW</div>
+                <div className="grid h-12 w-12 place-items-center overflow-hidden rounded-full bg-brand-white p-1 shadow-sm ring-1 ring-black/10 lg:h-14 lg:w-14">
+                  <img className="h-full w-full object-contain rounded-full" src="/brand/fitness-world-logo-tight.png" alt="Fitness World logo" />
+                </div>
                 <div>
                   <p className="font-mono text-[12px] font-semibold text-brand-primary-light lg:text-[13px]">{member?.regNo ?? "FW-AUTO"}</p>
                   <h2 className="text-[20px] font-bold text-brand-white lg:text-[22px]">{member ? "Edit Member" : "Add Member"}</h2>

@@ -91,8 +91,8 @@ export function Login() {
             transition={{ duration: 0.5, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
           >
             <div className="grid gap-4 lg:gap-5">
-              <div className="grid h-24 w-24 place-items-center overflow-hidden rounded-[var(--radius-card)] border border-border-default bg-brand-white shadow-sm lg:h-28 lg:w-28">
-                <img className="safe-logo-img h-full w-full p-2" src="/brand/fitness-world-logo-tight.png" alt="Fitness World logo" />
+              <div className="grid h-24 w-24 place-items-center overflow-hidden rounded-full border border-border-default bg-brand-white shadow-sm lg:h-28 lg:w-28">
+                <img className="safe-logo-img h-full w-full object-contain p-2 rounded-full" src="/brand/fitness-world-logo-tight.png" alt="Fitness World logo" />
               </div>
               <div>
                 <h2 className="text-[28px] font-black leading-tight text-text-primary lg:text-[32px]">Sign in</h2>
