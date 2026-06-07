@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "fitness-world-gymos-api",
+  "main": "src/index.js",
+  "compatibility_date": "2026-06-07",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "triggers": {
+    "crons": [
+      "30 18 * * *",
+      "30 3 * * *"
+    ]
+  },
+  "vars": {
+    "SUPABASE_URL": "https://anlkjdlixiwespogdozf.supabase.co"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}

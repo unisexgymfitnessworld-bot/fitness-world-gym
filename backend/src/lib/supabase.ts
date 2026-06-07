@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import ws from "ws";
 import { requireEnv } from "./env.js";
 
 let adminClient: SupabaseClient | null = null;
@@ -11,6 +12,9 @@ export function getSupabaseAdmin(): SupabaseClient {
         autoRefreshToken: false,
         persistSession: false,
       },
+      realtime: {
+        transport: ws,
+      },
     });
   }
   return adminClient;
@@ -22,6 +26,9 @@ export function getSupabaseAuthClient(): SupabaseClient {
       auth: {
         autoRefreshToken: false,
         persistSession: false,
+      },
+      realtime: {
+        transport: ws,
       },
     });
   }

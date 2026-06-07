@@ -8,4 +8,4 @@
 6. Run the workflow manually once with **workflow_dispatch**.
 7. Confirm the run succeeds.
 
-The scheduled workflow runs every 5 days at 8:00 AM UTC and sends a lightweight REST request to Supabase.
+The scheduled workflow runs every 5 days at 8:00 AM UTC and sends a lightweight REST request to Supabase. This is now an optional fallback because the Cloudflare Worker cron jobs also touch Supabase daily.
