@@ -14,6 +14,7 @@ export interface Trainer {
   id: string;
   name: string;
   email: string;
+  avatar?: string;
 }
 
 export interface Member {

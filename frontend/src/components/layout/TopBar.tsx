@@ -26,7 +26,13 @@ export function TopBar({ trainer, onLogout, onSettings }: TopBarProps) {
             <p className="text-[18px] font-black">{trainer.name}</p>
             <p className="text-[14px] text-white/70 font-semibold">{trainer.email}</p>
           </div>
-          <div className="grid h-12 w-12 place-items-center rounded-full border border-white/[0.14] bg-gradient-to-br from-brand-primary/30 to-white/[0.08] text-[15px] font-extrabold ring-1 ring-white/10">{initials(trainer.name)}</div>
+          <div className="h-12 w-12 shrink-0 overflow-hidden rounded-full border border-white/[0.14] bg-gradient-to-br from-brand-primary/30 to-white/[0.08] flex items-center justify-center ring-1 ring-white/10 shadow-sm">
+            {trainer.avatar ? (
+              <img src={trainer.avatar} alt={trainer.name} className="h-full w-full object-cover" />
+            ) : (
+              <span className="text-[15px] font-extrabold text-brand-white">{initials(trainer.name)}</span>
+            )}
+          </div>
           {onSettings && (
             <Button aria-label="Settings" title="Settings" variant="ghost" className="!text-brand-white hover:!bg-white/10 hover:!text-brand-white !h-12 !w-12 !p-0" onClick={onSettings}>
               <Settings size={22} />

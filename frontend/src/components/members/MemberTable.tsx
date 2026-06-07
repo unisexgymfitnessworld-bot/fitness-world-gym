@@ -254,31 +254,6 @@ export function MemberTable({
     );
   }
 
-  if (isDbEmpty) {
-    return (
-      <motion.section
-        className="studio-card flex flex-col items-center justify-center p-8 text-center sm:p-12 lg:p-16 border-2 border-dashed border-border-default bg-brand-white/80 backdrop-blur-sm shadow-[0_12px_40px_rgba(26,26,46,0.04)]"
-        initial={{ opacity: 0, y: 15 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-      >
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-primary-light text-brand-primary shadow-[0_12px_24px_rgba(232,23,93,0.12)]">
-          <Plus size={28} className="animate-pulse" />
-        </div>
-        <h2 className="mt-6 text-[22px] font-black text-text-primary sm:text-[24px]">Welcome to GymOS!</h2>
-        <p className="mt-2.5 max-w-md text-[14px] font-semibold text-text-secondary leading-relaxed sm:text-[15px]">
-          Start by registering your first member to track their plans, body metrics, BMI, and daily attendance.
-        </p>
-        {onAddClick && (
-          <Button className="mt-6 px-6 py-2.5 bg-gradient-to-r from-brand-primary to-[#F0447D] shadow-[0_10px_24px_rgba(232,23,93,0.24)] hover:shadow-[0_12px_28px_rgba(232,23,93,0.3)] hover:-translate-y-0.5 transition-all" onClick={onAddClick}>
-            <Plus size={18} />
-            Add First Member
-          </Button>
-        )}
-      </motion.section>
-    );
-  }
-
   const rows = table.getRowModel().rows;
 
   return (
@@ -303,20 +278,38 @@ export function MemberTable({
       </header>
 
       {rows.length === 0 ? (
-        <div className="flex flex-col items-center justify-center p-8 text-center sm:p-12 border-t border-border-default bg-brand-white/80 backdrop-blur-sm">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 text-slate-400">
-            <SearchX size={28} />
+        isDbEmpty ? (
+          <div className="flex flex-col items-center justify-center p-8 text-center sm:p-12 lg:p-16 border-t border-border-default bg-brand-white/80 backdrop-blur-sm shadow-[0_12px_40px_rgba(26,26,46,0.04)]">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-primary-light text-brand-primary shadow-[0_12px_24px_rgba(232,23,93,0.12)]">
+              <Plus size={28} className="animate-pulse" />
+            </div>
+            <h2 className="mt-6 text-[22px] font-black text-text-primary sm:text-[24px]">Welcome to GymOS!</h2>
+            <p className="mt-2.5 max-w-md text-[14px] font-semibold text-text-secondary leading-relaxed sm:text-[15px]">
+              Start by registering your first member to track their plans, body metrics, BMI, and daily attendance.
+            </p>
+            {onAddClick && (
+              <Button className="mt-6 px-6 py-2.5 bg-gradient-to-r from-brand-primary to-[#F0447D] shadow-[0_10px_24px_rgba(232,23,93,0.24)] hover:shadow-[0_12px_28px_rgba(232,23,93,0.3)] hover:-translate-y-0.5 transition-all" onClick={onAddClick}>
+                <Plus size={18} />
+                Add First Member
+              </Button>
+            )}
           </div>
-          <h2 className="mt-6 text-[20px] font-black text-text-primary sm:text-[22px]">No members found</h2>
-          <p className="mt-2 max-w-sm text-[14px] font-semibold text-text-secondary sm:text-[15px]">
-            No members match your current search query or active filter selections.
-          </p>
-          {onClearFilters && (
-            <Button className="mt-6" variant="secondary" onClick={onClearFilters}>
-              Clear All Filters
-            </Button>
-          )}
-        </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center p-8 text-center sm:p-12 border-t border-border-default bg-brand-white/80 backdrop-blur-sm">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+              <SearchX size={28} />
+            </div>
+            <h2 className="mt-6 text-[20px] font-black text-text-primary sm:text-[22px]">No members found</h2>
+            <p className="mt-2 max-w-sm text-[14px] font-semibold text-text-secondary sm:text-[15px]">
+              No members match your current search query or active filter selections.
+            </p>
+            {onClearFilters && (
+              <Button className="mt-6" variant="secondary" onClick={onClearFilters}>
+                Clear All Filters
+              </Button>
+            )}
+          </div>
+        )
       ) : (
         <>
           {/* Mobile Card View */}
