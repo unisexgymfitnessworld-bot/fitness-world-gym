@@ -8,7 +8,7 @@ import {
   type FilterFn,
   type SortingState,
 } from "@tanstack/react-table";
-import { Eye, MessageCircle, MessageSquare, Pencil, UserX } from "lucide-react";
+import { Eye, MessageCircle, MessageSquare, Pencil, UserX, SearchX, Plus } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { createWhatsAppLink, formatDisplayDate, formatPhone, getDueTone } from "../../lib/utils";
@@ -25,6 +25,9 @@ interface MemberTableProps {
   onEdit: (memberId: string) => void;
   onSms: (memberId: string) => void;
   onSuspend: (memberId: string) => void;
+  isDbEmpty?: boolean;
+  onAddClick?: () => void;
+  onClearFilters?: () => void;
 }
 
 const columnHelper = createColumnHelper<Member>();
@@ -38,7 +41,18 @@ const memberGlobalFilter: FilterFn<Member> = (row, _columnId, filterValue) => {
   return [member.name, member.phone, member.regNo].some((value) => value.toLowerCase().includes(query));
 };
 
-export function MemberTable({ members, query, loading, onView, onEdit, onSms, onSuspend }: MemberTableProps) {
+export function MemberTable({
+  members,
+  query,
+  loading,
+  onView,
+  onEdit,
+  onSms,
+  onSuspend,
+  isDbEmpty = false,
+  onAddClick,
+  onClearFilters,
+}: MemberTableProps) {
   const [sorting, setSorting] = useState<SortingState>([{ id: "membershipDue", desc: false }]);
   const [globalFilter, setGlobalFilter] = useState(query);
 
@@ -173,14 +187,50 @@ export function MemberTable({ members, query, loading, onView, onEdit, onSms, on
   }
 
   if (table.getRowModel().rows.length === 0) {
+    if (isDbEmpty) {
+      return (
+        <motion.section
+          className="studio-card flex flex-col items-center justify-center p-8 text-center sm:p-12 lg:p-16 border-2 border-dashed border-border-default bg-brand-white/80 backdrop-blur-sm shadow-[0_12px_40px_rgba(26,26,46,0.04)]"
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+        >
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-primary-light text-brand-primary shadow-[0_12px_24px_rgba(232,23,93,0.12)]">
+            <Plus size={28} className="animate-pulse" />
+          </div>
+          <h2 className="mt-6 text-[22px] font-black text-text-primary sm:text-[24px]">Welcome to GymOS!</h2>
+          <p className="mt-2.5 max-w-md text-[14px] font-semibold text-text-secondary leading-relaxed sm:text-[15px]">
+            Start by registering your first member to track their plans, body metrics, BMI, and daily attendance.
+          </p>
+          {onAddClick && (
+            <Button className="mt-6 px-6 py-2.5 bg-gradient-to-r from-brand-primary to-[#F0447D] shadow-[0_10px_24px_rgba(232,23,93,0.24)] hover:shadow-[0_12px_28px_rgba(232,23,93,0.3)] hover:-translate-y-0.5 transition-all" onClick={onAddClick}>
+              <Plus size={18} />
+              Add First Member
+            </Button>
+          )}
+        </motion.section>
+      );
+    }
+
     return (
       <motion.section
-        className="studio-card rounded-[var(--radius-card)] border-dashed p-8 text-center lg:p-10"
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
+        className="studio-card flex flex-col items-center justify-center p-8 text-center sm:p-12 border-2 border-dashed border-border-default bg-brand-white/80 backdrop-blur-sm shadow-[0_12px_40px_rgba(26,26,46,0.04)]"
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
       >
-        <h2 className="text-[20px] font-bold text-text-primary lg:text-[22px]">No members found</h2>
-        <p className="mt-2 text-[14px] text-text-secondary lg:text-[15px]">Adjust filters or add a new Fitness World member.</p>
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+          <SearchX size={28} />
+        </div>
+        <h2 className="mt-6 text-[20px] font-black text-text-primary sm:text-[22px]">No members found</h2>
+        <p className="mt-2 max-w-sm text-[14px] font-semibold text-text-secondary sm:text-[15px]">
+          No members match your current search query or active filter selections.
+        </p>
+        {onClearFilters && (
+          <Button className="mt-6" variant="secondary" onClick={onClearFilters}>
+            Clear All Filters
+          </Button>
+        )}
       </motion.section>
     );
   }
