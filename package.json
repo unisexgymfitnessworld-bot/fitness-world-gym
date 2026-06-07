@@ -1,0 +1,22 @@
+{
+  "name": "fitness-world-gymos",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm:dev --workspace frontend\" \"npm:dev --workspace backend\"",
+    "build": "npm run build --workspace frontend && npm run build --workspace backend",
+    "typecheck": "npm run typecheck --workspace frontend && npm run typecheck --workspace backend",
+    "start": "npm run start --workspace backend"
+  },
+  "devDependencies": {
+    "concurrently": "9.2.1"
+  },
+  "engines": {
+    "node": ">=20.19.6"
+  }
+}
