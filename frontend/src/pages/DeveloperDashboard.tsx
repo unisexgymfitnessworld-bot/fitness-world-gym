@@ -41,6 +41,7 @@ export function DeveloperDashboard() {
       { label: "Supabase", ok: diagnostics.supabase === "ok", value: diagnostics.supabase.toUpperCase() },
       { label: "Isolation", ok: diagnostics.memberOwnershipReady, value: diagnostics.memberOwnershipReady ? "READY" : "CHECK" },
       { label: "SMS", ok: diagnostics.smsConfigured, value: diagnostics.smsConfigured ? "READY" : "MISSING" },
+      { label: "WhatsApp", ok: Boolean(diagnostics.whatsAppConfigured), value: diagnostics.whatsAppConfigured ? "READY" : "MISSING" },
     ];
   }, [diagnostics]);
 

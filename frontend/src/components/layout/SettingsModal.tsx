@@ -271,33 +271,53 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
           </div>
         </section>
 
-        {/* SMS Gateway Configuration status */}
+        {/* Notification Gateways Configuration status */}
         <section className="grid gap-4">
           <div className="flex items-center gap-2">
             <span className="p-1 rounded-md bg-brand-primary/10 text-brand-primary">
               <Key size={14} />
             </span>
-            <h3 className="text-[13px] font-black uppercase tracking-wider text-text-muted">SMS Gateway Status</h3>
+            <h3 className="text-[13px] font-black uppercase tracking-wider text-text-muted">Notification Gateways Status</h3>
           </div>
-          <div className="rounded-xl bg-surface-raised/80 p-5 border border-border-default/60 grid gap-2 hover:border-brand-primary/20 transition-all duration-300 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
-            <div className="flex items-center justify-between">
-              <span className="text-[14px] font-bold text-text-primary">Fast2SMS Service Gateway</span>
-              <span
-                className={`rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wider border ${
-                  isSupabaseConfigured ? "bg-green-100/80 border-green-200 text-status-active" : "bg-red-100/80 border-red-200 text-status-expired"
-                }`}
-              >
-                {isSupabaseConfigured ? "Configured" : "Disabled (Using WhatsApp fallbacks)"}
-              </span>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {/* Fast2SMS */}
+            <div className="rounded-xl bg-surface-raised/80 p-5 border border-border-default/60 grid gap-2 hover:border-brand-primary/20 transition-all duration-300 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
+              <div className="flex items-center justify-between">
+                <span className="text-[14px] font-bold text-text-primary">Fast2SMS (SMS)</span>
+                <span
+                  className={`rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wider border ${
+                    isSupabaseConfigured ? "bg-green-100/80 border-green-200 text-status-active" : "bg-red-100/80 border-red-200 text-status-expired"
+                  }`}
+                >
+                  {isSupabaseConfigured ? "Enabled" : "Disabled"}
+                </span>
+              </div>
+              <p className="text-[12px] text-text-secondary leading-relaxed font-semibold mt-1">
+                Automated SMS alerts sent 3 days before renewal. Requires a Fast2SMS API Key and wallet balance.
+              </p>
+              <div className="mt-2 border-t border-border-default/60 pt-2 text-[11px] text-text-muted font-semibold">
+                To configure, set the <code>FAST2SMS_API_KEY</code> secret in the Cloudflare Worker.
+              </div>
             </div>
-            <p className="text-[13px] text-text-secondary leading-relaxed font-semibold mt-1">
-              Automated renewal notifications are scheduled daily at 9:00 AM IST. In-app manual alerts can also be sent directly to client phones.
-            </p>
-            <div className="mt-3 border-t border-border-default/60 pt-3 flex items-start gap-2 text-[12px] text-text-muted font-semibold">
-              <HelpCircle size={15} className="shrink-0 text-brand-primary mt-0.5" />
-              <span>
-                To configure your Fast2SMS credentials, update the <code>FAST2SMS_API_KEY</code> secret in your Cloudflare Worker environment.
-              </span>
+
+            {/* UltraMsg WhatsApp */}
+            <div className="rounded-xl bg-surface-raised/80 p-5 border border-border-default/60 grid gap-2 hover:border-brand-primary/20 transition-all duration-300 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
+              <div className="flex items-center justify-between">
+                <span className="text-[14px] font-bold text-text-primary">UltraMsg (WhatsApp)</span>
+                <span
+                  className={`rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wider border ${
+                    isSupabaseConfigured ? "bg-green-100/80 border-green-200 text-status-active" : "bg-red-100/80 border-red-200 text-status-expired"
+                  }`}
+                >
+                  {isSupabaseConfigured ? "Enabled" : "Disabled"}
+                </span>
+              </div>
+              <p className="text-[12px] text-text-secondary leading-relaxed font-semibold mt-1">
+                Automated WhatsApp reminders sent by scanning a QR Code. Flat monthly fee, unlimited messages.
+              </p>
+              <div className="mt-2 border-t border-border-default/60 pt-2 text-[11px] text-text-muted font-semibold">
+                To configure, set <code>WHATSAPP_INSTANCE_ID</code> & <code>WHATSAPP_TOKEN</code> secrets.
+              </div>
             </div>
           </div>
         </section>

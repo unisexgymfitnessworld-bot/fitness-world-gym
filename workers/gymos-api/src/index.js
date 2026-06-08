@@ -202,7 +202,25 @@ async function handleRequest(request, env) {
     applyRateLimit(request, "sms", 15 * 60 * 1000, 10);
     const body = validateSmsInput(await parseJsonBody(request));
     const member = await getMember(env, authUser, body.memberId);
-    const requestId = await sendSms(env, member.phone, body.message);
+    
+    let requestId = "skipped";
+    let sentSMS = false;
+    let sentWA = false;
+
+    if (env.FAST2SMS_API_KEY) {
+      requestId = await sendSms(env, member.phone, body.message);
+      sentSMS = true;
+    }
+    if (env.WHATSAPP_INSTANCE_ID && env.WHATSAPP_TOKEN) {
+      const waId = await sendWhatsApp(env, member.phone, body.message);
+      if (!sentSMS) requestId = waId;
+      sentWA = true;
+    }
+
+    if (!sentSMS && !sentWA) {
+      throw new ApiError(503, "NOTIFICATIONS_NOT_CONFIGURED", "Neither SMS nor WhatsApp is configured");
+    }
+
     await markReminderSent(env, member.id);
     return jsonResponse(request, env, { success: true, data: { requestId } });
   }
@@ -386,6 +404,7 @@ async function developerDiagnostics(env) {
     api: "ok",
     supabase,
     smsConfigured: Boolean(env.FAST2SMS_API_KEY),
+    whatsAppConfigured: Boolean(env.WHATSAPP_INSTANCE_ID && env.WHATSAPP_TOKEN),
     memberOwnershipReady,
     orphanMembers,
     expiredActiveMembers,
@@ -742,19 +761,45 @@ async function runExpireStatus(env) {
 
 async function runSmsReminder(env) {
   const members = await membersDueInThreeDays(env);
-  if (!env.FAST2SMS_API_KEY) {
-    logWarn("fast2sms_not_configured", { dueMembers: members.length });
+  const hasSms = Boolean(env.FAST2SMS_API_KEY);
+  const hasWhatsApp = Boolean(env.WHATSAPP_INSTANCE_ID && env.WHATSAPP_TOKEN);
+
+  if (!hasSms && !hasWhatsApp) {
+    logWarn("notifications_not_configured", { dueMembers: members.length });
     return 0;
   }
 
   let sent = 0;
   for (const member of members) {
     try {
-      await sendSms(env, member.phone, createReminderText(member));
-      await markReminderSent(env, member.id);
-      sent += 1;
+      let sentSMS = false;
+      let sentWA = false;
+      const messageText = createReminderText(member);
+
+      if (hasSms) {
+        try {
+          await sendSms(env, member.phone, messageText);
+          sentSMS = true;
+        } catch (error) {
+          logError("sms_reminder_failed", error, { memberId: member.id });
+        }
+      }
+
+      if (hasWhatsApp) {
+        try {
+          await sendWhatsApp(env, member.phone, messageText);
+          sentWA = true;
+        } catch (error) {
+          logError("whatsapp_reminder_failed", error, { memberId: member.id });
+        }
+      }
+
+      if (sentSMS || sentWA) {
+        await markReminderSent(env, member.id);
+        sent += 1;
+      }
     } catch (error) {
-      logError("sms_reminder_failed", error, { memberId: member.id });
+      logError("reminder_general_failed", error, { memberId: member.id });
     }
   }
   return sent;
@@ -814,6 +859,39 @@ async function sendSms(env, phone, message) {
   }
 
   return payload.request_id ?? "sent";
+}
+
+async function sendWhatsApp(env, phone, message) {
+  if (!env.WHATSAPP_INSTANCE_ID || !env.WHATSAPP_TOKEN) {
+    throw new ApiError(503, "WHATSAPP_NOT_CONFIGURED", "WhatsApp instance ID or token is not configured");
+  }
+
+  // UltraMsg expects international phone format (e.g., +91XXXXXXXXXX or 91XXXXXXXXXX)
+  // Our database stores exactly 10 digits, so we prepend '91' for India.
+  const formattedPhone = phone.startsWith("91") && phone.length === 12 ? phone : `91${phone}`;
+
+  const params = new URLSearchParams({
+    token: env.WHATSAPP_TOKEN,
+    to: formattedPhone,
+    body: message,
+    priority: "10"
+  });
+
+  const response = await fetch(`https://api.ultramsg.com/${env.WHATSAPP_INSTANCE_ID}/messages/chat`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: params.toString()
+  });
+
+  const payload = await safeJson(response);
+  if (!response.ok || (payload?.sent !== "true" && payload?.sent !== true)) {
+    const errorMsg = payload?.error?.message ?? payload?.error ?? "WhatsApp request failed";
+    throw new ApiError(502, "WHATSAPP_SEND_FAILED", errorMsg);
+  }
+
+  return payload.id ?? "sent";
 }
 
 function createReminderText(member) {

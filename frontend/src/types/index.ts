@@ -63,6 +63,7 @@ export interface DeveloperDiagnostics {
   api: "ok";
   supabase: "ok" | "error";
   smsConfigured: boolean;
+  whatsAppConfigured?: boolean;
   memberOwnershipReady: boolean;
   orphanMembers: number;
   expiredActiveMembers: number;
