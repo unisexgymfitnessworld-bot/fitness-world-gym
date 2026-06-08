@@ -236,7 +236,7 @@ export function MemberSheet({ open, member, onClose, onSave }: MemberSheetProps)
                   <Input label="Age" type="number" error={errors.age?.message} {...register("age", { valueAsNumber: true })} />
                   <label className="grid gap-2 text-[15px] font-semibold">
                     Gender
-                    <select className="focus-ring rounded-[var(--radius-card)] border border-transparent bg-surface-overlay px-4 py-2.5 lg:py-3" {...register("gender")}>
+                    <select className="studio-input w-full px-4 py-2.5 lg:py-3" {...register("gender")}>
                       {genderOptions.map((option) => (
                         <option key={option}>{option}</option>
                       ))}
@@ -283,7 +283,7 @@ export function MemberSheet({ open, member, onClose, onSave }: MemberSheetProps)
                   ).map(([name, label]) => (
                     <label key={name} className="grid gap-2 text-[14px] font-semibold lg:text-[15px]">
                       {label}
-                      <textarea className="focus-ring min-h-20 rounded-[var(--radius-card)] border border-transparent bg-surface-overlay px-3 py-2.5 text-[14px] font-normal lg:min-h-24 lg:px-4 lg:py-3 lg:text-[15px]" {...register(name)} />
+                      <textarea className="studio-input min-h-20 w-full px-3 py-2.5 text-[14px] font-normal lg:min-h-24 lg:px-4 lg:py-3 lg:text-[15px]" {...register(name)} />
                     </label>
                   ))}
                 </div>
@@ -293,7 +293,7 @@ export function MemberSheet({ open, member, onClose, onSave }: MemberSheetProps)
                 <div className="grid gap-3 md:grid-cols-2 lg:gap-4">
                   <label className="grid gap-2 text-[14px] font-semibold lg:text-[15px]">
                     Plan Type
-                    <select className="focus-ring rounded-[var(--radius-card)] border border-transparent bg-surface-overlay px-3 py-2.5 lg:px-4 lg:py-3" {...register("planType")}>
+                    <select className="studio-input w-full px-3 py-2.5 lg:px-4 lg:py-3" {...register("planType")}>
                       {planOptions.map((option) => (
                         <option key={option}>{option}</option>
                       ))}
@@ -304,7 +304,7 @@ export function MemberSheet({ open, member, onClose, onSave }: MemberSheetProps)
                   <Input label="Fees" type="number" step="1" error={errors.feesAmount?.message} {...register("feesAmount", { valueAsNumber: true })} />
                   <label className="grid gap-2 text-[14px] font-semibold lg:text-[15px]">
                     Payment Status
-                    <select className="focus-ring rounded-[var(--radius-card)] border border-transparent bg-surface-overlay px-3 py-2.5 lg:px-4 lg:py-3" {...register("paymentStatus")}>
+                    <select className="studio-input w-full px-3 py-2.5 lg:px-4 lg:py-3" {...register("paymentStatus")}>
                       {paymentOptions.map((option) => (
                         <option key={option}>{option}</option>
                       ))}

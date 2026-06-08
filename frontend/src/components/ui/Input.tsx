@@ -15,7 +15,7 @@ export function Input({ label, id, className, error, labelClassName, ...props }:
       <input
         id={inputId}
         className={cn(
-          "focus-ring w-full rounded-card border border-transparent bg-surface-overlay px-4 py-3 text-[15px] font-normal text-text-primary placeholder:text-text-muted",
+          "studio-input w-full px-4 py-3 text-[15px] font-normal text-text-primary placeholder:text-text-muted",
           error && "border-status-expired bg-red-50",
           className,
         )}

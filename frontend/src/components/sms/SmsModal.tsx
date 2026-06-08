@@ -64,7 +64,7 @@ export function SmsModal({ member, open, onClose, onSend }: SmsModalProps) {
             <textarea
               value={message}
               onChange={(event) => setMessage(event.target.value)}
-              className="focus-ring min-h-36 rounded-card border border-transparent bg-surface-overlay px-4 py-3 text-[15px] font-normal text-text-primary"
+              className="studio-input min-h-36 px-4 py-3 text-[15px] font-normal text-text-primary placeholder:text-text-muted"
             />
             {error ? <span className="text-[13px] font-semibold text-status-expired">{error}</span> : null}
           </label>

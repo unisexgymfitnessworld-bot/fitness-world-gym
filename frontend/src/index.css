@@ -380,6 +380,10 @@ img {
   transition: border-color 200ms ease, background 200ms ease, box-shadow 200ms ease, transform 200ms ease;
 }
 
+.studio-input:hover {
+  border-color: var(--text-muted);
+}
+
 .studio-input::placeholder {
   color: var(--text-muted);
 }
