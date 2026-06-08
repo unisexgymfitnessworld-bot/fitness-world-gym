@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { ArrowRight, CalendarClock, Loader2, MessageCircle, Search, ShieldCheck } from "lucide-react";
+import { ArrowRight, CalendarClock, CheckCircle2, Download, Loader2, MessageCircle, Search, Share2, ShieldCheck, Smartphone } from "lucide-react";
 import { motion } from "motion/react";
 import { FwMark } from "../components/layout/FwMark";
 import { useAuth } from "../hooks/useAuth";
+import { usePwaInstall } from "../hooks/usePwaInstall";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -19,12 +20,19 @@ const itemVariants = {
 
 export function Login() {
   const { signIn, loading, error } = useAuth();
+  const { canInstall, install, isIos, isStandalone } = usePwaInstall();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [installStatus, setInstallStatus] = useState<"idle" | "installed" | "dismissed">("idle");
 
   function submit(event: React.FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     void signIn({ email, password });
+  }
+
+  async function installApp(): Promise<void> {
+    const accepted = await install();
+    setInstallStatus(accepted ? "installed" : "dismissed");
   }
 
   return (
@@ -158,21 +166,63 @@ export function Login() {
               Secure trainer access for shared gym data.
             </div>
 
-            <div className="mt-2 border-t border-border-default pt-4 flex flex-col gap-2">
-              <p className="text-[12px] font-bold uppercase tracking-wider text-text-muted">Desktop Application</p>
-              <a
-                href="/GymOS_macOS.zip"
-                download
-                className="focus-ring inline-flex min-h-11 items-center justify-center gap-2.5 rounded-[var(--radius-card)] border border-border-default bg-surface-raised px-4 py-2 text-[14px] font-bold text-text-primary transition-all hover:bg-brand-white hover:border-brand-primary/40 shadow-sm"
-              >
-                <img className="h-5 w-5 object-contain rounded-full" src="/brand/fitness-world-logo-tight.png" alt="FW Logo" />
-                Download for macOS (.app)
-              </a>
-            </div>
+            <AppInstallPanel
+              canInstall={canInstall}
+              installStatus={installStatus}
+              isIos={isIos}
+              isStandalone={isStandalone}
+              onInstall={() => void installApp()}
+            />
           </motion.form>
         </motion.div>
       </section>
     </main>
+  );
+}
+
+interface AppInstallPanelProps {
+  canInstall: boolean;
+  installStatus: "idle" | "installed" | "dismissed";
+  isIos: boolean;
+  isStandalone: boolean;
+  onInstall: () => void;
+}
+
+function AppInstallPanel({ canInstall, installStatus, isIos, isStandalone, onInstall }: AppInstallPanelProps) {
+  if (isStandalone || installStatus === "installed") {
+    return (
+      <div className="mt-2 flex items-center gap-3 rounded-[var(--radius-card)] border border-green-100 bg-green-50 px-4 py-3 text-[13px] font-bold text-status-active">
+        <CheckCircle2 size={18} />
+        GymOS is ready as an installed app.
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 flex flex-col gap-2 border-t border-border-default pt-4">
+      <p className="text-[12px] font-bold uppercase tracking-wider text-text-muted">Mobile & Tablet App</p>
+      {canInstall ? (
+        <button
+          type="button"
+          className="focus-ring inline-flex min-h-11 items-center justify-center gap-2.5 rounded-[var(--radius-card)] border border-border-default bg-surface-raised px-4 py-2 text-[14px] font-bold text-text-primary shadow-sm transition-all hover:border-brand-primary/40 hover:bg-brand-white"
+          onClick={onInstall}
+        >
+          <Download size={18} className="text-brand-primary" />
+          Install GymOS
+        </button>
+      ) : (
+        <div className="rounded-[var(--radius-card)] border border-border-default bg-surface-raised px-4 py-3">
+          <div className="flex items-center gap-2.5 text-[14px] font-bold text-text-primary">
+            {isIos ? <Share2 size={18} className="text-brand-primary" /> : <Smartphone size={18} className="text-brand-primary" />}
+            {isIos ? "Add GymOS from Safari Share" : "Install GymOS from browser menu"}
+          </div>
+          <p className="mt-1 text-[12px] font-semibold leading-5 text-text-muted">
+            {isIos ? "Choose Add to Home Screen to open it like a tablet app." : "After deploy, supported browsers show the install option automatically."}
+          </p>
+        </div>
+      )}
+      {installStatus === "dismissed" ? <p className="text-[12px] font-semibold text-text-muted">Install skipped. You can add GymOS later from the browser menu.</p> : null}
+    </div>
   );
 }
 
