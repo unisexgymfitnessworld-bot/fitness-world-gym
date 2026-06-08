@@ -51,7 +51,7 @@ Update these placeholders once the production environments are provisioned:
    ```
    Set `TRAINER_EMAILS` to the exact trainer allowlist:
    ```text
-   trainer@fitnessworld.in,trainer1@fitnessworld.in,trainer2@fitnessworld.in
+   developer@fitnessworld.in,trainer@fitnessworld.in,trainer2@fitnessworld.in
    ```
 3. **Deploy Worker**:
    ```bash
@@ -64,10 +64,10 @@ Update these placeholders once the production environments are provisioned:
    ```bash
    SUPABASE_URL="your-url" \
    SUPABASE_SERVICE_ROLE_KEY="your-key" \
-   TRAINER_SEED_ACCOUNTS="trainer@fitnessworld.in:strong-password-here,trainer1@fitnessworld.in:strong-password-here,trainer2@fitnessworld.in:strong-password-here" \
+   TRAINER_SEED_ACCOUNTS="developer@fitnessworld.in:strong-password-here,trainer@fitnessworld.in:strong-password-here,trainer2@fitnessworld.in:strong-password-here" \
    npm run seed:trainers
    ```
-   Use unique passwords with at least 12 characters. Do not use shared demo passwords in production.
+   Use unique passwords with at least 12 characters. Do not use shared demo passwords in production. The developer account is labeled with developer metadata, while the other two are trainer accounts.
 
 ### Phase C: Frontend Setup on Vercel
 1. **Connect Repo**: Import the repository on [vercel.com](https://vercel.com).
@@ -76,9 +76,13 @@ Update these placeholders once the production environments are provisioned:
    - Root Directory: `frontend`
 3. **Define Environment Variables**:
    - `VITE_SUPABASE_URL=https://your-project.supabase.co`
-   - `VITE_SUPABASE_ANON_KEY=your-anon-key`
+   - `VITE_SUPABASE_PUBLISHABLE_KEY=your-publishable-key`
    - `VITE_API_BASE_URL=https://fitness-world-gymos-api.your-subdomain.workers.dev/api`
-4. **Deploy**: Build and verify.
+4. **Add Supabase Redirect URL for password reset**:
+   - Open Supabase Dashboard -> Auth -> URL Configuration.
+   - Add `https://your-vercel-app.vercel.app/reset-password` to allowed redirect URLs.
+   - Keep local development redirect too if needed: `http://localhost:5173/reset-password`.
+5. **Deploy**: Build and verify.
 
 ---
 

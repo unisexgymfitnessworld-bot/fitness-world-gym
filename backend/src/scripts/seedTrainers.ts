@@ -4,6 +4,8 @@ import { logger } from "../lib/logger.js";
 interface TrainerSeedAccount {
   email: string;
   password: string;
+  role: "developer" | "trainer";
+  name: string;
 }
 
 function trainerSeedAccounts(): TrainerSeedAccount[] {
@@ -18,7 +20,10 @@ function trainerSeedAccounts(): TrainerSeedAccount[] {
     if (!email?.includes("@") || password.length < 12) {
       throw new Error("Each TRAINER_SEED_ACCOUNTS entry must be email:password with a password of at least 12 characters.");
     }
-    return { email: email.trim().toLowerCase(), password };
+    const normalizedEmail = email.trim().toLowerCase();
+    const role = normalizedEmail.startsWith("developer@") || normalizedEmail.startsWith("dev@") ? "developer" : "trainer";
+    const name = role === "developer" ? "Developer Console" : "Fitness World Trainer";
+    return { email: normalizedEmail, password, role, name };
   });
 }
 
@@ -35,7 +40,10 @@ async function seed() {
         password: trainer.password,
         email_confirm: true,
         app_metadata: {
-          role: "trainer",
+          role: trainer.role,
+        },
+        user_metadata: {
+          name: trainer.name,
         },
       });
 

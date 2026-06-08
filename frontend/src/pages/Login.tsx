@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ArrowRight, CalendarClock, CheckCircle2, Download, Loader2, MessageCircle, Search, Share2, ShieldCheck, Smartphone } from "lucide-react";
 import { motion } from "motion/react";
 import { FwMark } from "../components/layout/FwMark";
+import { friendlyAuthError } from "../lib/authMessages";
 import { useAuth } from "../hooks/useAuth";
 import { usePwaInstall } from "../hooks/usePwaInstall";
 
@@ -19,15 +20,49 @@ const itemVariants = {
 };
 
 export function Login() {
-  const { signIn, loading, error } = useAuth();
+  const { signIn, sendPasswordReset, clearError, loading, error } = useAuth();
   const { canInstall, install, isIos, isStandalone } = usePwaInstall();
+  const [mode, setMode] = useState<"signin" | "forgot">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [resetNotice, setResetNotice] = useState<string | null>(null);
   const [installStatus, setInstallStatus] = useState<"idle" | "installed" | "dismissed">("idle");
 
   function submit(event: React.FormEvent<HTMLFormElement>): void {
     event.preventDefault();
+    if (mode === "forgot") {
+      void submitPasswordReset();
+      return;
+    }
     void signIn({ email, password });
+  }
+
+  async function submitPasswordReset(): Promise<void> {
+    const targetEmail = (resetEmail || email).trim();
+    setResetLoading(true);
+    setResetError(null);
+    setResetNotice(null);
+    try {
+      await sendPasswordReset(targetEmail);
+      setResetNotice(`Password reset link sent to ${targetEmail}. Open the email, set a new password, then sign in again.`);
+    } catch (caught) {
+      setResetError(friendlyAuthError(caught));
+    } finally {
+      setResetLoading(false);
+    }
+  }
+
+  function switchMode(nextMode: "signin" | "forgot"): void {
+    setMode(nextMode);
+    clearError();
+    setResetError(null);
+    setResetNotice(null);
+    if (nextMode === "forgot" && !resetEmail) {
+      setResetEmail(email);
+    }
   }
 
   async function installApp(): Promise<void> {
@@ -103,8 +138,12 @@ export function Login() {
                 <img className="safe-logo-img h-full w-full object-contain p-2 rounded-full" src="/brand/fitness-world-logo-tight.png" alt="Fitness World logo" />
               </div>
               <div>
-                <h2 className="text-[28px] font-black leading-tight text-text-primary lg:text-[32px]">Sign in</h2>
-                <p className="mt-1.5 text-[14px] font-semibold text-text-secondary lg:mt-2 lg:text-[15px]">Open the Fitness World trainer workspace.</p>
+                <h2 className="text-[28px] font-black leading-tight text-text-primary lg:text-[32px]">
+                  {mode === "signin" ? "Sign in" : "Reset password"}
+                </h2>
+                <p className="mt-1.5 text-[14px] font-semibold text-text-secondary lg:mt-2 lg:text-[15px]">
+                  {mode === "signin" ? "Open the Fitness World trainer workspace." : "Send a secure reset link to a trainer email."}
+                </p>
               </div>
             </div>
 
@@ -112,46 +151,81 @@ export function Login() {
               <span className="text-[12px] font-bold uppercase tracking-wider text-text-muted">Email</span>
               <input
                 className="studio-input min-h-12 rounded-[var(--radius-card)] px-4 text-[16px] font-semibold lg:min-h-14"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
+                value={mode === "signin" ? email : resetEmail}
+                onChange={(event) => {
+                  if (mode === "signin") {
+                    setEmail(event.target.value);
+                  } else {
+                    setResetEmail(event.target.value);
+                  }
+                }}
                 autoComplete="email"
                 placeholder="trainer@fitnessworld.in"
               />
             </label>
 
-            <label className="grid gap-1.5 lg:gap-2">
-              <span className="text-[12px] font-bold uppercase tracking-wider text-text-muted">Password</span>
-              <input
-                className="studio-input min-h-12 rounded-[var(--radius-card)] px-4 text-[16px] font-semibold lg:min-h-14"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                autoComplete="current-password"
-                placeholder="Enter password"
-              />
-            </label>
+            {mode === "signin" ? (
+              <label className="grid gap-1.5 lg:gap-2">
+                <span className="text-[12px] font-bold uppercase tracking-wider text-text-muted">Password</span>
+                <input
+                  className="studio-input min-h-12 rounded-[var(--radius-card)] px-4 text-[16px] font-semibold lg:min-h-14"
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete="current-password"
+                  placeholder="Enter password"
+                />
+              </label>
+            ) : null}
 
-            {error ? (
+            {mode === "signin" ? (
+              <div className="-mt-2 flex justify-end">
+                <button
+                  type="button"
+                  className="text-[13px] font-black text-brand-primary transition hover:text-brand-primary-hover"
+                  onClick={() => switchMode("forgot")}
+                >
+                  Forgot password?
+                </button>
+              </div>
+            ) : null}
+
+            {(mode === "signin" ? error : resetError) ? (
               <motion.p
                 className="rounded-[var(--radius-card)] border border-red-100 bg-red-50 px-4 py-3 text-[14px] font-semibold text-status-expired"
                 initial={{ opacity: 0, y: -8 }}
                 animate={{ opacity: 1, y: 0 }}
               >
-                {error}
+                {mode === "signin" ? error : resetError}
+              </motion.p>
+            ) : null}
+
+            {mode === "forgot" && resetNotice ? (
+              <motion.p
+                className="rounded-[var(--radius-card)] border border-green-100 bg-green-50 px-4 py-3 text-[14px] font-semibold text-status-active"
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                {resetNotice}
               </motion.p>
             ) : null}
 
             <motion.button
               type="submit"
-              disabled={loading}
+              disabled={mode === "signin" ? loading : resetLoading}
               className="focus-ring inline-flex min-h-12 w-full items-center justify-center gap-3 rounded-[var(--radius-card)] bg-gradient-to-r from-brand-primary to-[#F0447D] px-5 py-3 text-[16px] font-black text-brand-white shadow-[0_14px_34px_rgba(232,23,93,0.26)] transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_40px_rgba(232,23,93,0.32)] disabled:cursor-not-allowed disabled:opacity-60 lg:min-h-14"
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
             >
-              {loading ? (
+              {(mode === "signin" ? loading : resetLoading) ? (
                 <>
                   <Loader2 size={20} className="animate-spin" />
-                  Signing In
+                  {mode === "signin" ? "Signing In" : "Sending Link"}
+                </>
+              ) : mode === "forgot" ? (
+                <>
+                  Send Reset Link
+                  <ArrowRight size={20} />
                 </>
               ) : (
                 <>
@@ -160,6 +234,16 @@ export function Login() {
                 </>
               )}
             </motion.button>
+
+            {mode === "forgot" ? (
+              <button
+                type="button"
+                className="text-center text-[13px] font-black text-text-secondary transition hover:text-brand-primary"
+                onClick={() => switchMode("signin")}
+              >
+                Back to sign in
+              </button>
+            ) : null}
 
             <div className="flex items-center gap-2 text-[12px] font-semibold text-text-muted lg:text-[13px]">
               <ShieldCheck size={16} className="text-status-active" />

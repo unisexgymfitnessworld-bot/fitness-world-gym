@@ -7,6 +7,7 @@ import { loginSchema } from "../services/schemas.js";
 import type { AuthenticatedRequest } from "../types/index.js";
 import { createRateLimiter } from "../middleware/rateLimit.js";
 import { assertTrainerAllowed } from "../lib/trainerAccess.js";
+import type { User } from "@supabase/supabase-js";
 
 const loginLimiter = createRateLimiter(
   15 * 60 * 1000,
@@ -15,6 +16,21 @@ const loginLimiter = createRateLimiter(
 );
 
 export const authRouter = Router();
+
+function trainerFromUser(user: User, fallbackEmail = "") {
+  const metadata = user.user_metadata;
+  const name = typeof metadata?.name === "string" && metadata.name.trim()
+    ? metadata.name.trim()
+    : user.email?.split("@")[0] ?? "Fitness World Trainer";
+  const avatar = typeof metadata?.avatar === "string" && metadata.avatar.trim() ? metadata.avatar.trim() : undefined;
+
+  return {
+    id: user.id,
+    name,
+    email: user.email ?? fallbackEmail,
+    avatar,
+  };
+}
 
 authRouter.post("/login", loginLimiter, validateBody(loginSchema), async (req, res, next) => {
   try {
@@ -31,11 +47,7 @@ authRouter.post("/login", loginLimiter, validateBody(loginSchema), async (req, r
       success: true,
       data: {
         token: data.session.access_token,
-        trainer: {
-          id: data.user.id,
-          name: data.user.email?.split("@")[0] ?? "Fitness World Trainer",
-          email: data.user.email ?? body.email,
-        },
+        trainer: trainerFromUser(data.user, body.email),
       },
     });
   } catch (error) {
@@ -60,11 +72,7 @@ authRouter.get("/me", authMiddleware, (req: AuthenticatedRequest, res, next) => 
     res.json({
       success: true,
       data: {
-        trainer: {
-          id: req.authUser.id,
-          name: req.authUser.email?.split("@")[0] ?? "Fitness World Trainer",
-          email: req.authUser.email ?? "",
-        },
+        trainer: trainerFromUser(req.authUser),
       },
     });
   } catch (error) {

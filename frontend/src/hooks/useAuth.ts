@@ -1,12 +1,15 @@
 import { useState } from "react";
-import { loginSchema, type LoginValues } from "../lib/validations";
+import { friendlyAuthError } from "../lib/authMessages";
+import { emailOnlySchema, loginSchema, type LoginValues } from "../lib/validations";
 import { api, isApiConfigured } from "../lib/api";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { useAppStore } from "../store/useAppStore";
 
 interface AuthResult {
   signIn: (values: LoginValues) => Promise<void>;
+  sendPasswordReset: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
+  clearError: () => void;
   loading: boolean;
   error: string | null;
 }
@@ -56,10 +59,29 @@ export function useAuth(): AuthResult {
         email: parsed.data.email,
       });
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Unable to sign in";
-      setError(message);
+      setError(friendlyAuthError(caught));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function sendPasswordReset(email: string): Promise<void> {
+    const parsed = emailOnlySchema.safeParse({ email });
+    if (!parsed.success) {
+      throw new Error(parsed.error.issues[0]?.message ?? "Enter a valid trainer email");
+    }
+
+    if (!isSupabaseConfigured || !supabase) {
+      throw new Error("Supabase auth is not configured. Add the Supabase URL and publishable key first.");
+    }
+
+    const redirectTo = `${window.location.origin}/reset-password`;
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
+      redirectTo,
+    });
+
+    if (resetError) {
+      throw new Error(friendlyAuthError(resetError));
     }
   }
 
@@ -75,5 +97,5 @@ export function useAuth(): AuthResult {
     }
   }
 
-  return { signIn, signOut, loading, error };
+  return { signIn, sendPasswordReset, signOut, clearError: () => setError(null), loading, error };
 }

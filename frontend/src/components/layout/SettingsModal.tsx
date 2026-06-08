@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
-import { Camera, HelpCircle, Key, Loader2, Save, User } from "lucide-react";
+import { Camera, HelpCircle, Key, Loader2, LockKeyhole, Save, ShieldCheck, User } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { useAppStore } from "../../store/useAppStore";
+import { friendlyAuthError } from "../../lib/authMessages";
 import { supabase, isSupabaseConfigured } from "../../lib/supabase";
 import { initials } from "../../lib/utils";
+import { passwordChangeSchema } from "../../lib/validations";
 import type { Trainer } from "../../types";
 
 interface SettingsModalProps {
@@ -21,12 +23,24 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
   const [name, setName] = useState(trainer.name);
   const [avatar, setAvatar] = useState(trainer.avatar ?? "");
   const [saving, setSaving] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
 
   // Sync state with prop updates
   useEffect(() => {
     setName(trainer.name);
     setAvatar(trainer.avatar ?? "");
   }, [trainer]);
+
+  useEffect(() => {
+    if (!open) {
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    }
+  }, [open]);
 
   async function handleSave() {
     if (!name.trim()) {
@@ -72,6 +86,67 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
       });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handlePasswordChange() {
+    const parsed = passwordChangeSchema.safeParse({
+      currentPassword,
+      password: newPassword,
+      confirmPassword,
+    });
+
+    if (!parsed.success) {
+      pushToast({
+        title: "Password Check Failed",
+        message: parsed.error.issues[0]?.message ?? "Check the password fields.",
+        tone: "error",
+      });
+      return;
+    }
+
+    if (!isSupabaseConfigured || !supabase) {
+      pushToast({
+        title: "Password Change Disabled",
+        message: "Supabase auth is not configured for this deployment.",
+        tone: "error",
+      });
+      return;
+    }
+
+    setChangingPassword(true);
+    try {
+      const { error: verifyError } = await supabase.auth.signInWithPassword({
+        email: trainer.email,
+        password: parsed.data.currentPassword,
+      });
+      if (verifyError) {
+        throw new Error("Current password is incorrect. Try again or use Forgot password from the sign in screen.");
+      }
+
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: parsed.data.password,
+      });
+      if (updateError) {
+        throw updateError;
+      }
+
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      pushToast({
+        title: "Password Changed",
+        message: "Your new password is active for the next sign in.",
+        tone: "success",
+      });
+    } catch (err) {
+      pushToast({
+        title: "Password Change Failed",
+        message: friendlyAuthError(err),
+        tone: "error",
+      });
+    } finally {
+      setChangingPassword(false);
     }
   }
 
@@ -143,6 +218,51 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
             >
               {saving ? <Loader2 size={16} className="animate-spin mr-2" /> : <Save size={16} className="mr-2" />}
               Save Profile Details
+            </Button>
+          </div>
+        </section>
+
+        {/* Account Password */}
+        <section className="rounded-lg bg-surface-raised p-4 border border-border-default grid gap-4">
+          <h3 className="text-[14px] font-black uppercase tracking-wider text-text-muted flex items-center gap-1.5">
+            <LockKeyhole size={15} className="text-brand-primary" />
+            <span>Account Password</span>
+          </h3>
+          <div className="grid gap-3">
+            <Input
+              label="Current Password"
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              disabled={changingPassword}
+              autoComplete="current-password"
+              placeholder="Enter current password"
+            />
+            <Input
+              label="New Password"
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              disabled={changingPassword}
+              autoComplete="new-password"
+              placeholder="At least 12 characters"
+            />
+            <Input
+              label="Confirm New Password"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              disabled={changingPassword}
+              autoComplete="new-password"
+              placeholder="Re-enter new password"
+            />
+            <Button
+              className="mt-1 w-full bg-gradient-to-r from-brand-primary to-[#F0447D] text-white font-bold"
+              disabled={changingPassword}
+              onClick={handlePasswordChange}
+            >
+              {changingPassword ? <Loader2 size={16} className="animate-spin mr-2" /> : <ShieldCheck size={16} className="mr-2" />}
+              Change Password
             </Button>
           </div>
         </section>

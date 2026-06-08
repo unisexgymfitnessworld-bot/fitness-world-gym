@@ -30,7 +30,7 @@ This Worker is the no-card backend deployment path for Fitness World GymOS. It m
    `TRAINER_EMAILS` should be the exact comma-separated trainer email allowlist:
 
    ```text
-   trainer@fitnessworld.in,trainer1@fitnessworld.in,trainer2@fitnessworld.in
+   developer@fitnessworld.in,trainer@fitnessworld.in,trainer2@fitnessworld.in
    ```
 
 3. Deploy:

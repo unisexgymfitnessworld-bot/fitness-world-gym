@@ -8,7 +8,7 @@ const GOALS = new Set(["Weight Loss", "Weight Gain", "Muscle Gain", "General Fit
 const PLAN_TYPES = new Set(["1 Month", "3 Months", "6 Months", "1 Year", "Custom"]);
 const PAYMENT_STATUSES = new Set(["Paid", "Pending"]);
 const STATUS_VALUES = new Set(["Active", "Expired", "Suspended"]);
-const DEFAULT_TRAINER_EMAILS = ["trainer@fitnessworld.in", "trainer1@fitnessworld.in", "trainer2@fitnessworld.in"];
+const DEFAULT_TRAINER_EMAILS = ["developer@fitnessworld.in", "trainer@fitnessworld.in", "trainer2@fitnessworld.in"];
 const rateLimitStore = new Map();
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -251,10 +251,12 @@ async function loginTrainer(env, body) {
 }
 
 function trainerFromUser(user) {
+  const metadata = user.user_metadata ?? {};
   return {
     id: user.id,
-    name: user.email?.split("@")[0] ?? "Fitness World Trainer",
+    name: typeof metadata.name === "string" && metadata.name.trim() ? metadata.name.trim() : user.email?.split("@")[0] ?? "Fitness World Trainer",
     email: user.email ?? "",
+    avatar: typeof metadata.avatar === "string" && metadata.avatar.trim() ? metadata.avatar.trim() : undefined,
   };
 }
 
