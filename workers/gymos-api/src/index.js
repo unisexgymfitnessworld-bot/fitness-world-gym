@@ -211,7 +211,12 @@ async function handleRequest(request, env) {
       requestId = await sendSms(env, member.phone, body.message);
       sentSMS = true;
     }
-    if (env.WHATSAPP_INSTANCE_ID && env.WHATSAPP_TOKEN) {
+    const isWhatsAppConfigured = Boolean(
+      (env.WHATSAPP_INSTANCE_ID && env.WHATSAPP_TOKEN) ||
+      (env.WHATSAPP_INSTANCE_ID === "self_hosted" && env.WHATSAPP_GATEWAY_URL)
+    );
+
+    if (isWhatsAppConfigured) {
       const waId = await sendWhatsApp(env, member.phone, body.message);
       if (!sentSMS) requestId = waId;
       sentWA = true;
@@ -765,7 +770,10 @@ async function runExpireStatus(env) {
 async function runSmsReminder(env) {
   const members = await membersDueInThreeDays(env);
   const hasSms = Boolean(env.FAST2SMS_API_KEY);
-  const hasWhatsApp = Boolean(env.WHATSAPP_INSTANCE_ID && env.WHATSAPP_TOKEN);
+  const hasWhatsApp = Boolean(
+    (env.WHATSAPP_INSTANCE_ID && env.WHATSAPP_TOKEN) ||
+    (env.WHATSAPP_INSTANCE_ID === "self_hosted" && env.WHATSAPP_GATEWAY_URL)
+  );
 
   if (!hasSms && !hasWhatsApp) {
     logWarn("notifications_not_configured", { dueMembers: members.length });
