@@ -147,106 +147,194 @@ export function DeveloperDashboard() {
   return (
     <>
       <TopBar trainer={trainer} onLogout={() => void signOut()} onSettings={() => setSettingsOpen(true)} />
-      <main className="studio-shell animated-grid min-h-screen">
-        <div className="mx-auto grid max-w-[1500px] gap-5 px-4 pb-24 pt-5 lg:px-8">
+      <main className="ink-panel min-h-screen relative overflow-hidden">
+        {/* Glowing grids */}
+        <div className="absolute inset-0 future-grid pointer-events-none opacity-40" />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#090A16]/60 via-transparent to-[#060813]/90 pointer-events-none" />
+
+        <div className="mx-auto grid max-w-[1500px] gap-6 px-4 pb-24 pt-6 lg:px-8 relative z-10">
+          {/* System Health Overview */}
           <motion.section
-            className="studio-card rounded-[var(--radius-panel)] p-5 lg:p-8"
+            className="neon-panel rounded-[var(--radius-panel)] p-6 lg:p-8"
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45 }}
           >
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <p className="text-[12px] font-black uppercase tracking-wider text-brand-primary">Developer Console</p>
-                <h1 className="mt-2 text-[28px] font-black leading-tight text-text-primary lg:text-[40px]">GymOS System Health</h1>
+                <p className="text-[12px] font-black uppercase tracking-wider text-brand-primary">System Dashboard</p>
+                <h1 className="mt-2 text-[28px] font-black leading-tight text-white lg:text-[40px] bg-gradient-to-r from-white via-white to-white/70 bg-clip-text text-transparent">
+                  GymOS System Health
+                </h1>
               </div>
-              <Button onClick={() => void loadDeveloperData()} disabled={loading} variant="secondary">
+              <Button
+                onClick={() => void loadDeveloperData()}
+                disabled={loading}
+                variant="secondary"
+                className="bg-white/5 border border-white/10 text-white hover:bg-white/10 hover:border-white/20 shadow-sm transition-all duration-300"
+              >
                 {loading ? <Loader2 size={17} className="animate-spin" /> : <ShieldCheck size={17} />}
-                Refresh Checks
+                Refresh Status
               </Button>
             </div>
 
-            <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {statusItems.map((item) => (
                 <StatusCard key={item.label} {...item} />
               ))}
             </div>
 
-            <div className="mt-5 grid gap-3 lg:grid-cols-3">
+            <div className="mt-5 grid gap-4 lg:grid-cols-3">
               <IssueCard label="Unassigned Member Records" value={diagnostics?.orphanMembers ?? 0} ok={(diagnostics?.orphanMembers ?? 0) === 0} />
               <IssueCard label="Expired Active Records" value={diagnostics?.expiredActiveMembers ?? 0} ok={(diagnostics?.expiredActiveMembers ?? 0) === 0} />
               <IssueCard label="Managed Accounts" value={diagnostics?.accounts.total ?? accounts.length} ok={accounts.length > 0} />
             </div>
 
-            <div className="mt-5 flex flex-wrap gap-3">
-              <Button onClick={() => void runExpiryFix()} disabled={fixing}>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Button
+                onClick={() => void runExpiryFix()}
+                disabled={fixing}
+                className="bg-gradient-to-r from-brand-primary to-[#F0447D] text-white hover:opacity-95 font-bold shadow-[0_12px_32px_rgba(232,23,93,0.3)] hover:shadow-[0_16px_40px_rgba(232,23,93,0.4)]"
+              >
                 {fixing ? <Loader2 size={17} className="animate-spin" /> : <Wrench size={17} />}
                 Run Expiry Fix
               </Button>
             </div>
           </motion.section>
 
-          <section className="grid gap-5 lg:grid-cols-[380px_minmax(0,1fr)]">
-            <div className="studio-card rounded-[var(--radius-panel)] p-5">
-              <h2 className="text-[18px] font-black text-text-primary">Create Account</h2>
-              <div className="mt-4 grid gap-3">
-                <Input label="Email" value={createForm.email} onChange={(event) => setCreateForm((form) => ({ ...form, email: event.target.value }))} placeholder="trainer@fitnessworld.in" />
-                <Input label="Display Name" value={createForm.name} onChange={(event) => setCreateForm((form) => ({ ...form, name: event.target.value }))} placeholder="Trainer name" />
-                <label className="grid gap-2 text-[15px] font-semibold text-text-primary">
+          {/* Action Sections */}
+          <section className="grid gap-6 lg:grid-cols-[380px_minmax(0,1fr)]">
+            {/* Create Account Panel */}
+            <div className="neon-panel rounded-[var(--radius-panel)] p-6">
+              <h2 className="text-[18px] font-black text-white">Create Account</h2>
+              <div className="mt-5 grid gap-4">
+                <Input
+                  label="Email"
+                  value={createForm.email}
+                  onChange={(event) => setCreateForm((form) => ({ ...form, email: event.target.value }))}
+                  placeholder="trainer@fitnessworld.in"
+                  className="bg-white/5 border border-white/10 text-white placeholder-white/30 focus:border-brand-primary focus:bg-white/10"
+                  labelClassName="!text-white/85"
+                />
+                <Input
+                  label="Display Name"
+                  value={createForm.name}
+                  onChange={(event) => setCreateForm((form) => ({ ...form, name: event.target.value }))}
+                  placeholder="Trainer name"
+                  className="bg-white/5 border border-white/10 text-white placeholder-white/30 focus:border-brand-primary focus:bg-white/10"
+                  labelClassName="!text-white/85"
+                />
+                <label className="grid gap-2 text-[15px] font-semibold text-white/85">
                   Role
                   <select
-                    className="focus-ring w-full rounded-card border border-transparent bg-surface-overlay px-4 py-3 text-[15px] font-normal text-text-primary"
+                    className="focus-ring w-full rounded-card border border-white/10 bg-white/5 px-4 py-3 text-[15px] font-normal text-white focus:border-brand-primary focus:bg-[#101426]"
                     value={createForm.role}
                     onChange={(event) => setCreateForm((form) => ({ ...form, role: event.target.value as "developer" | "trainer" }))}
                   >
-                    <option value="trainer">Trainer</option>
-                    <option value="developer">Developer</option>
+                    <option value="trainer" className="bg-[#101426] text-white">Trainer</option>
+                    <option value="developer" className="bg-[#101426] text-white">Developer</option>
                   </select>
                 </label>
-                <Input label="Temporary Password" type="password" value={createForm.password} onChange={(event) => setCreateForm((form) => ({ ...form, password: event.target.value }))} placeholder="At least 12 characters" />
-                <Button onClick={() => void createAccount()}>
+                <Input
+                  label="Temporary Password"
+                  type="password"
+                  value={createForm.password}
+                  onChange={(event) => setCreateForm((form) => ({ ...form, password: event.target.value }))}
+                  placeholder="At least 12 characters"
+                  className="bg-white/5 border border-white/10 text-white placeholder-white/30 focus:border-brand-primary focus:bg-white/10"
+                  labelClassName="!text-white/85"
+                />
+                <Button
+                  onClick={() => void createAccount()}
+                  className="w-full bg-gradient-to-r from-brand-primary to-[#F0447D] text-white font-bold"
+                >
                   <UserPlus size={17} />
                   Create Account
                 </Button>
               </div>
             </div>
 
-            <div className="studio-card rounded-[var(--radius-panel)] p-5">
+            {/* Account Manager List */}
+            <div className="neon-panel rounded-[var(--radius-panel)] p-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-[18px] font-black text-text-primary">Account Manager</h2>
-                <span className="rounded-full bg-surface-overlay px-3 py-1 text-[12px] font-black uppercase tracking-wider text-text-muted">{accounts.length} accounts</span>
+                <h2 className="text-[18px] font-black text-white">Account Manager</h2>
+                <span className="rounded-full bg-white/10 border border-white/10 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-white/70">
+                  {accounts.length} accounts
+                </span>
               </div>
-              <div className="mt-4 grid gap-3">
+              <div className="mt-5 grid gap-4 max-h-[600px] overflow-y-auto scrollbar-soft pr-1">
                 {accounts.map((account) => {
                   const form = editForms[account.id] ?? { name: account.name, role: account.role, password: "" };
                   return (
-                    <div key={account.id} className="rounded-[var(--radius-card)] border border-border-default bg-surface-raised p-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div
+                      key={account.id}
+                      className="rounded-[var(--radius-card)] border border-white/5 bg-white/5 hover:bg-white/8 hover:border-white/10 transition-all duration-300 p-4"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
-                          <p className="text-[15px] font-black text-text-primary">{account.email}</p>
-                          <p className="text-[12px] font-bold uppercase tracking-wider text-text-muted">{account.currentUser ? "Current account" : account.confirmed ? "Confirmed" : "Unconfirmed"}</p>
+                          <p className="text-[16px] font-black text-white">{account.email}</p>
+                          <p className="mt-0.5 flex items-center gap-1.5">
+                            <span className={`h-1.5 w-1.5 rounded-full ${account.confirmed ? "bg-green-400" : "bg-amber-400"}`} />
+                            <span className={`text-[12px] font-semibold tracking-wider ${
+                              account.currentUser ? "text-brand-primary-light" : account.confirmed ? "text-green-400/80" : "text-amber-400/80"
+                            }`}>
+                              {account.currentUser ? "Current Account" : account.confirmed ? "Confirmed Account" : "Unconfirmed"}
+                            </span>
+                          </p>
                         </div>
-                        <span className={account.role === "developer" ? "rounded-full bg-brand-primary-light px-3 py-1 text-[11px] font-black uppercase text-brand-primary" : "rounded-full bg-green-50 px-3 py-1 text-[11px] font-black uppercase text-status-active"}>{account.role}</span>
+                        <span
+                          className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider border ${
+                            account.role === "developer"
+                              ? "bg-brand-primary/10 border-brand-primary/20 text-brand-primary-light"
+                              : "bg-green-500/10 border-green-500/20 text-green-400"
+                          }`}
+                        >
+                          {account.role}
+                        </span>
                       </div>
-                      <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_150px_minmax(0,1fr)_auto_auto] lg:items-end">
-                        <Input label="Name" value={form.name} onChange={(event) => setEditForms((forms) => ({ ...forms, [account.id]: { ...form, name: event.target.value } }))} />
-                        <label className="grid gap-2 text-[15px] font-semibold text-text-primary">
+
+                      <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_140px_minmax(0,1fr)_auto_auto] lg:items-end">
+                        <Input
+                          label="Name"
+                          value={form.name}
+                          onChange={(e) => setEditForms((f) => ({ ...f, [account.id]: { ...form, name: e.target.value } }))}
+                          className="bg-white/5 border border-white/10 text-white placeholder-white/30 focus:border-brand-primary focus:bg-white/10"
+                          labelClassName="!text-white/70"
+                        />
+                        <label className="grid gap-2 text-[15px] font-semibold text-white/70">
                           Role
                           <select
-                            className="focus-ring w-full rounded-card border border-transparent bg-surface-overlay px-4 py-3 text-[15px] font-normal text-text-primary"
+                            className="focus-ring w-full rounded-card border border-white/10 bg-white/5 px-4 py-3 text-[15px] font-normal text-white focus:border-brand-primary focus:bg-[#101426]"
                             value={form.role}
-                            onChange={(event) => setEditForms((forms) => ({ ...forms, [account.id]: { ...form, role: event.target.value as "developer" | "trainer" } }))}
+                            onChange={(e) => setEditForms((f) => ({ ...f, [account.id]: { ...form, role: e.target.value as "developer" | "trainer" } }))}
                           >
-                            <option value="trainer">Trainer</option>
-                            <option value="developer">Developer</option>
+                            <option value="trainer" className="bg-[#101426] text-white">Trainer</option>
+                            <option value="developer" className="bg-[#101426] text-white">Developer</option>
                           </select>
                         </label>
-                        <Input label="New Password" type="password" value={form.password} onChange={(event) => setEditForms((forms) => ({ ...forms, [account.id]: { ...form, password: event.target.value } }))} placeholder="Optional" />
-                        <Button variant="secondary" onClick={() => void saveAccount(account)}>
+                        <Input
+                          label="New Password"
+                          type="password"
+                          value={form.password}
+                          onChange={(e) => setEditForms((f) => ({ ...f, [account.id]: { ...form, password: e.target.value } }))}
+                          placeholder="Optional"
+                          className="bg-white/5 border border-white/10 text-white placeholder-white/30 focus:border-brand-primary focus:bg-white/10"
+                          labelClassName="!text-white/70"
+                        />
+                        <Button
+                          variant="secondary"
+                          onClick={() => void saveAccount(account)}
+                          className="w-full lg:w-auto bg-white/5 border-white/10 text-white hover:bg-white/10 hover:border-white/20 transition-all duration-300"
+                        >
                           <Save size={16} />
                           Save
                         </Button>
-                        <Button variant="danger" disabled={account.currentUser} onClick={() => setDeleteAccount(account)}>
+                        <Button
+                          variant="danger"
+                          disabled={account.currentUser}
+                          onClick={() => setDeleteAccount(account)}
+                          className="w-full lg:w-auto"
+                        >
                           <Trash2 size={16} />
                           Delete
                         </Button>
@@ -259,6 +347,7 @@ export function DeveloperDashboard() {
           </section>
         </div>
       </main>
+
       <SettingsModal open={settingsOpen} trainer={trainer} onClose={() => setSettingsOpen(false)} />
       <ConfirmModal
         open={deleteAccount !== null}
@@ -276,21 +365,29 @@ export function DeveloperDashboard() {
 function StatusCard({ label, ok, value }: { label: string; ok: boolean; value: string }) {
   const Icon = ok ? CheckCircle2 : AlertTriangle;
   return (
-    <div className="rounded-[var(--radius-card)] border border-border-default bg-brand-white p-4">
+    <div className="holo-card rounded-[var(--radius-card)] p-4 hover:border-white/20 transition-all duration-300 hover:-translate-y-0.5">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-[12px] font-black uppercase tracking-wider text-text-muted">{label}</p>
-        <Icon size={19} className={ok ? "text-status-active" : "text-status-due"} />
+        <p className="text-[12px] font-black uppercase tracking-wider text-white/50">{label}</p>
+        <span className="flex items-center gap-1.5">
+          <span className={`inline-block h-2 w-2 rounded-full ${ok ? "bg-green-500 animate-pulse shadow-[0_0_10px_#22c55e]" : "bg-amber-500 animate-pulse shadow-[0_0_10px_#f59e0b]"}`} />
+          <Icon size={16} className={ok ? "text-green-400" : "text-amber-400"} />
+        </span>
       </div>
-      <p className="mt-3 text-[24px] font-black text-text-primary">{value}</p>
+      <p className="mt-3 font-mono text-[24px] font-black text-white">{value}</p>
     </div>
   );
 }
 
 function IssueCard({ label, value, ok }: { label: string; value: number; ok: boolean }) {
   return (
-    <div className="rounded-[var(--radius-card)] border border-border-default bg-brand-white p-4">
-      <p className="text-[12px] font-black uppercase tracking-wider text-text-muted">{label}</p>
-      <p className={ok ? "mt-2 text-[28px] font-black text-status-active" : "mt-2 text-[28px] font-black text-status-due"}>{value}</p>
+    <div className="holo-card rounded-[var(--radius-card)] p-4 hover:border-white/20 transition-all duration-300 hover:-translate-y-0.5">
+      <p className="text-[12px] font-black uppercase tracking-wider text-white/50">{label}</p>
+      <div className="mt-3 flex items-baseline justify-between">
+        <p className={`font-mono text-[28px] font-black ${ok ? "text-green-400" : "text-amber-400"}`}>{value}</p>
+        <span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${ok ? "bg-green-500/10 text-green-400 border border-green-500/20" : "bg-amber-500/10 text-amber-400 border border-amber-500/20 animate-pulse"}`}>
+          {ok ? "Healthy" : "Attention"}
+        </span>
+      </div>
     </div>
   );
 }

@@ -152,11 +152,13 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
 
   return (
     <Modal open={open} title="GymOS Settings" onClose={onClose}>
-      <div className="grid gap-5 py-2 text-text-primary">
+      <div className="grid gap-6 py-2 text-text-primary">
         {/* Profile Edit Panel */}
-        <section className="rounded-lg bg-surface-raised p-4 border border-border-default grid gap-4">
-          <h3 className="text-[14px] font-black uppercase tracking-wider text-text-muted flex items-center gap-1.5">
-            <User size={15} className="text-brand-primary" />
+        <section className="rounded-xl bg-surface-raised/80 p-5 border border-border-default/60 grid gap-4 hover:border-brand-primary/20 transition-all duration-300 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
+          <h3 className="text-[13px] font-black uppercase tracking-wider text-text-muted flex items-center gap-2">
+            <span className="p-1 rounded-md bg-brand-primary/10 text-brand-primary">
+              <User size={14} />
+            </span>
             <span>Trainer Profile</span>
           </h3>
 
@@ -189,12 +191,12 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
               </label>
             </div>
 
-            <div className="grid gap-1 w-full">
-              <span className="block text-[12px] text-text-muted font-semibold">{trainer.email}</span>
+            <div className="grid gap-1 w-full text-center sm:text-left">
+              <span className="block text-[13px] text-text-muted font-bold tracking-wide">{trainer.email}</span>
               {avatar && (
                 <button
                   type="button"
-                  className="text-left text-[11px] font-bold text-status-expired hover:underline mt-0.5"
+                  className="text-center sm:text-left text-[11px] font-extrabold text-status-expired hover:underline mt-0.5"
                   onClick={() => setAvatar("")}
                 >
                   Remove Avatar Photo
@@ -212,7 +214,7 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
               placeholder="e.g. Trainer Name"
             />
             <Button
-              className="mt-1 w-full bg-gradient-to-r from-brand-primary to-[#F0447D] text-white font-bold"
+              className="mt-1 w-full bg-gradient-to-r from-brand-primary to-[#F0447D] text-white font-bold shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200"
               disabled={saving}
               onClick={handleSave}
             >
@@ -223,9 +225,11 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
         </section>
 
         {/* Account Password */}
-        <section className="rounded-lg bg-surface-raised p-4 border border-border-default grid gap-4">
-          <h3 className="text-[14px] font-black uppercase tracking-wider text-text-muted flex items-center gap-1.5">
-            <LockKeyhole size={15} className="text-brand-primary" />
+        <section className="rounded-xl bg-surface-raised/80 p-5 border border-border-default/60 grid gap-4 hover:border-brand-primary/20 transition-all duration-300 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
+          <h3 className="text-[13px] font-black uppercase tracking-wider text-text-muted flex items-center gap-2">
+            <span className="p-1 rounded-md bg-brand-primary/10 text-brand-primary">
+              <LockKeyhole size={14} />
+            </span>
             <span>Account Password</span>
           </h3>
           <div className="grid gap-3">
@@ -257,7 +261,7 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
               placeholder="Re-enter new password"
             />
             <Button
-              className="mt-1 w-full bg-gradient-to-r from-brand-primary to-[#F0447D] text-white font-bold"
+              className="mt-1 w-full bg-gradient-to-r from-brand-primary to-[#F0447D] text-white font-bold shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200"
               disabled={changingPassword}
               onClick={handlePasswordChange}
             >
@@ -268,26 +272,28 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
         </section>
 
         {/* SMS Gateway Configuration status */}
-        <section className="grid gap-3">
+        <section className="grid gap-4">
           <div className="flex items-center gap-2">
-            <Key size={16} className="text-brand-primary" />
-            <h3 className="text-[14px] font-black uppercase tracking-wider text-text-muted">SMS Gateway Status</h3>
+            <span className="p-1 rounded-md bg-brand-primary/10 text-brand-primary">
+              <Key size={14} />
+            </span>
+            <h3 className="text-[13px] font-black uppercase tracking-wider text-text-muted">SMS Gateway Status</h3>
           </div>
-          <div className="rounded-lg bg-surface-raised p-3 border border-border-default grid gap-2">
+          <div className="rounded-xl bg-surface-raised/80 p-5 border border-border-default/60 grid gap-2 hover:border-brand-primary/20 transition-all duration-300 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
             <div className="flex items-center justify-between">
-              <span className="text-[13px] font-bold">Fast2SMS Service Gateway</span>
+              <span className="text-[14px] font-bold text-text-primary">Fast2SMS Service Gateway</span>
               <span
-                className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider ${
-                  isSupabaseConfigured ? "bg-green-100 text-status-active" : "bg-red-100 text-status-expired"
+                className={`rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wider border ${
+                  isSupabaseConfigured ? "bg-green-100/80 border-green-200 text-status-active" : "bg-red-100/80 border-red-200 text-status-expired"
                 }`}
               >
                 {isSupabaseConfigured ? "Configured" : "Disabled (Using WhatsApp fallbacks)"}
               </span>
             </div>
-            <p className="text-[12px] text-text-secondary leading-relaxed font-semibold mt-1">
+            <p className="text-[13px] text-text-secondary leading-relaxed font-semibold mt-1">
               Automated renewal notifications are scheduled daily at 9:00 AM IST. In-app manual alerts can also be sent directly to client phones.
             </p>
-            <div className="mt-2 border-t border-border-default pt-2.5 flex items-start gap-2 text-[12px] text-text-muted font-semibold">
+            <div className="mt-3 border-t border-border-default/60 pt-3 flex items-start gap-2 text-[12px] text-text-muted font-semibold">
               <HelpCircle size={15} className="shrink-0 text-brand-primary mt-0.5" />
               <span>
                 To configure your Fast2SMS credentials, update the <code>FAST2SMS_API_KEY</code> secret in your Cloudflare Worker environment.
