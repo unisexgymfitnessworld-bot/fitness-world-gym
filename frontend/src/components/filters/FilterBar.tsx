@@ -10,6 +10,12 @@ interface FilterBarProps {
 }
 
 export function FilterBar({ filters, resultCount, onChange }: FilterBarProps) {
+  const statusHelp: Record<"All" | "Active" | "Expired", string> = {
+    All: "Show all members in this trainer workspace",
+    Active: "Show members whose membership is currently active",
+    Expired: "Show members whose membership due date has passed",
+  };
+
   return (
     <motion.section
       className="studio-card grid gap-3 rounded-[var(--radius-card)] p-3 lg:grid-cols-[minmax(260px,1fr)_auto] lg:gap-4 lg:p-4"
@@ -39,6 +45,8 @@ export function FilterBar({ filters, resultCount, onChange }: FilterBarProps) {
           <motion.button
             key={status}
             type="button"
+            aria-label={`${status} members filter. ${statusHelp[status]}`}
+            title={statusHelp[status]}
             className={cn(
               "focus-ring min-h-10 shrink-0 rounded-[var(--radius-card)] border px-3 text-[14px] font-bold transition-colors lg:min-h-12 lg:text-[15px]",
               filters.status === status
@@ -80,6 +88,7 @@ export function FilterBar({ filters, resultCount, onChange }: FilterBarProps) {
         <motion.button
           type="button"
           aria-pressed={filters.dueSoon}
+          title="Show active members whose renewal date is coming soon"
           onClick={() => onChange("dueSoon", !filters.dueSoon)}
           className={cn(
             "focus-ring min-h-10 shrink-0 rounded-[var(--radius-card)] border px-3 text-[14px] font-bold transition-colors lg:min-h-12 lg:text-[15px]",

@@ -12,7 +12,7 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
       auth: {
         autoRefreshToken: true,
         detectSessionInUrl: true,
-        persistSession: false,
+        persistSession: true,
       },
     })
   : null;

@@ -32,6 +32,14 @@ interface MemberTableProps {
 
 const columnHelper = createColumnHelper<Member>();
 
+const actionLegend = [
+  "View profile",
+  "WhatsApp reminder",
+  "SMS reminder",
+  "Edit details",
+  "Suspend member",
+] as const;
+
 const memberGlobalFilter: FilterFn<Member> = (row, _columnId, filterValue) => {
   const query = String(filterValue ?? "").trim().toLowerCase();
   if (!query) {
@@ -197,7 +205,7 @@ export function MemberTable({
           const member = info.row.original;
           return (
             <div className="flex items-center gap-1.5">
-              <Button variant="icon" className="!border-border-default !bg-brand-white !text-text-secondary hover:!border-brand-primary hover:!text-brand-primary" title="View" aria-label={`View ${member.name}`} onClick={() => onView(member.id)}>
+              <Button variant="icon" className="!border-border-default !bg-brand-white !text-text-secondary hover:!border-brand-primary hover:!text-brand-primary" title="View full member profile" aria-label={`View full profile for ${member.name}`} onClick={() => onView(member.id)}>
                 <Eye size={17} />
               </Button>
               <a
@@ -205,18 +213,18 @@ export function MemberTable({
                 href={createWhatsAppLink(member)}
                 target="_blank"
                 rel="noreferrer"
-                title="WhatsApp"
-                aria-label={`WhatsApp ${member.name}`}
+                title="Send WhatsApp renewal reminder"
+                aria-label={`Send WhatsApp renewal reminder to ${member.name}`}
               >
                 <MessageCircle size={17} />
               </a>
-              <Button variant="icon" className="!border-border-default !bg-brand-white !text-text-secondary hover:!border-brand-primary hover:!text-brand-primary" title="SMS" aria-label={`SMS ${member.name}`} onClick={() => onSms(member.id)}>
+              <Button variant="icon" className="!border-border-default !bg-brand-white !text-text-secondary hover:!border-brand-primary hover:!text-brand-primary" title="Send SMS renewal reminder" aria-label={`Send SMS renewal reminder to ${member.name}`} onClick={() => onSms(member.id)}>
                 <MessageSquare size={17} />
               </Button>
-              <Button variant="icon" className="!border-border-default !bg-brand-white !text-text-secondary hover:!border-brand-primary hover:!text-brand-primary" title="Edit" aria-label={`Edit ${member.name}`} onClick={() => onEdit(member.id)}>
+              <Button variant="icon" className="!border-border-default !bg-brand-white !text-text-secondary hover:!border-brand-primary hover:!text-brand-primary" title="Edit member details" aria-label={`Edit member details for ${member.name}`} onClick={() => onEdit(member.id)}>
                 <Pencil size={17} />
               </Button>
-              <Button variant="icon" className="!border-border-default !bg-brand-white !text-text-secondary hover:!border-status-expired hover:!text-status-expired" title="Suspend" aria-label={`Suspend ${member.name}`} onClick={() => onSuspend(member.id)}>
+              <Button variant="icon" className="!border-border-default !bg-brand-white !text-text-secondary hover:!border-status-expired hover:!text-status-expired" title="Suspend member access" aria-label={`Suspend member access for ${member.name}`} onClick={() => onSuspend(member.id)}>
                 <UserX size={17} />
               </Button>
             </div>
@@ -267,6 +275,9 @@ export function MemberTable({
         <div>
           <p className="text-[11px] font-bold uppercase tracking-wider text-brand-primary sm:text-[12px]">Member Register</p>
           <h2 className="text-[18px] font-black text-text-primary sm:text-[20px] lg:text-[24px]">Fitness World Members</h2>
+          <p className="mt-1 hidden max-w-[680px] text-[11px] font-bold uppercase tracking-wide text-text-muted lg:block">
+            Actions: {actionLegend.join(" · ")}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <div className="rounded-full bg-surface-overlay px-2.5 py-1 text-[13px] font-bold text-text-secondary sm:px-3 sm:py-1.5 sm:text-[14px]">{rows.length} visible</div>
@@ -370,7 +381,7 @@ export function MemberTable({
               </div>
 
               <div className="mt-2 flex items-center gap-1 sm:mt-3 sm:gap-1.5">
-                <Button variant="icon" className="!h-8 !w-8 !min-h-0 !p-0 !border-border-default !bg-brand-white !text-text-secondary hover:!border-brand-primary hover:!text-brand-primary" title="View" aria-label={`View ${member.name}`} onClick={() => onView(member.id)}>
+                <Button variant="icon" className="!h-8 !w-8 !min-h-0 !p-0 !border-border-default !bg-brand-white !text-text-secondary hover:!border-brand-primary hover:!text-brand-primary" title="View full member profile" aria-label={`View full profile for ${member.name}`} onClick={() => onView(member.id)}>
                   <Eye size={15} />
                 </Button>
                 <a
@@ -378,18 +389,18 @@ export function MemberTable({
                   href={createWhatsAppLink(member)}
                   target="_blank"
                   rel="noreferrer"
-                  title="WhatsApp"
-                  aria-label={`WhatsApp ${member.name}`}
+                  title="Send WhatsApp renewal reminder"
+                  aria-label={`Send WhatsApp renewal reminder to ${member.name}`}
                 >
                   <MessageCircle size={15} />
                 </a>
-                <Button variant="icon" className="!h-8 !w-8 !min-h-0 !p-0 !border-border-default !bg-brand-white !text-text-secondary hover:!border-brand-primary hover:!text-brand-primary" title="SMS" aria-label={`SMS ${member.name}`} onClick={() => onSms(member.id)}>
+                <Button variant="icon" className="!h-8 !w-8 !min-h-0 !p-0 !border-border-default !bg-brand-white !text-text-secondary hover:!border-brand-primary hover:!text-brand-primary" title="Send SMS renewal reminder" aria-label={`Send SMS renewal reminder to ${member.name}`} onClick={() => onSms(member.id)}>
                   <MessageSquare size={15} />
                 </Button>
-                <Button variant="icon" className="!h-8 !w-8 !min-h-0 !p-0 !border-border-default !bg-brand-white !text-text-secondary hover:!border-brand-primary hover:!text-brand-primary" title="Edit" aria-label={`Edit ${member.name}`} onClick={() => onEdit(member.id)}>
+                <Button variant="icon" className="!h-8 !w-8 !min-h-0 !p-0 !border-border-default !bg-brand-white !text-text-secondary hover:!border-brand-primary hover:!text-brand-primary" title="Edit member details" aria-label={`Edit member details for ${member.name}`} onClick={() => onEdit(member.id)}>
                   <Pencil size={15} />
                 </Button>
-                <Button variant="icon" className="!h-8 !w-8 !min-h-0 !p-0 !border-border-default !bg-brand-white !text-text-secondary hover:!border-status-expired hover:!text-status-expired" title="Suspend" aria-label={`Suspend ${member.name}`} onClick={() => onSuspend(member.id)}>
+                <Button variant="icon" className="!h-8 !w-8 !min-h-0 !p-0 !border-border-default !bg-brand-white !text-text-secondary hover:!border-status-expired hover:!text-status-expired" title="Suspend member access" aria-label={`Suspend member access for ${member.name}`} onClick={() => onSuspend(member.id)}>
                   <UserX size={15} />
                 </Button>
               </div>
