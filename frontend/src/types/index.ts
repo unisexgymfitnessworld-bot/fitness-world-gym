@@ -76,6 +76,16 @@ export interface DeveloperDiagnostics {
     sms: string;
   };
   checkedAt: string;
+  totalMembers?: number;
+  totalAttendance?: number;
+}
+
+export interface LogEntry {
+  timestamp: string;
+  level: "info" | "warn" | "error";
+  event: string;
+  message: string;
+  details?: Record<string, unknown>;
 }
 
 export interface MemberInput {

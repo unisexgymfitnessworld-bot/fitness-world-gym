@@ -1,4 +1,4 @@
-import type { ApiEnvelope, AttendanceEntry, DashboardStats, DeveloperDiagnostics, Member, MemberInput, Trainer, TrainerAccount } from "../types";
+import type { ApiEnvelope, AttendanceEntry, DashboardStats, DeveloperDiagnostics, LogEntry, Member, MemberInput, Trainer, TrainerAccount } from "../types";
 import { supabase } from "./supabase";
 
 export const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
@@ -47,6 +47,8 @@ export const api = {
     }),
   me: () => request<{ trainer: Trainer }>("/auth/me"),
   developerDiagnostics: () => request<DeveloperDiagnostics>("/developer/diagnostics"),
+  developerLogs: () => request<LogEntry[]>("/developer/logs"),
+  pingDb: () => request<{ latency: number; supabase: string; checkedAt: string }>("/developer/ping-db"),
   runDeveloperFix: (action: "expire-members") =>
     request<{ message: string; changed: number }>("/developer/fix", {
       method: "POST",

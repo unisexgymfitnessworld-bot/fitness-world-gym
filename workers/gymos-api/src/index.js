@@ -10,6 +10,7 @@ const PAYMENT_STATUSES = new Set(["Paid", "Pending"]);
 const STATUS_VALUES = new Set(["Active", "Expired", "Suspended"]);
 const DEFAULT_TRAINER_EMAILS = ["fitnessworld@gmail.com", "trainer@fitnessworld.in", "vedasaradhiv@gmail.com"];
 const rateLimitStore = new Map();
+const logBuffer = [];
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -73,6 +74,32 @@ async function handleRequest(request, env) {
   if (path === "/developer/diagnostics" && method === "GET") {
     assertDeveloper(authUser);
     return jsonResponse(request, env, { success: true, data: await developerDiagnostics(env) });
+  }
+
+  if (path === "/developer/logs" && method === "GET") {
+    assertDeveloper(authUser);
+    return jsonResponse(request, env, { success: true, data: logBuffer });
+  }
+
+  if (path === "/developer/ping-db" && method === "GET") {
+    assertDeveloper(authUser);
+    const start = Date.now();
+    let supabaseStatus = "ok";
+    try {
+      await keepSupabaseAlive(env);
+    } catch (err) {
+      supabaseStatus = "error";
+    }
+    const latency = Date.now() - start;
+    logInfo("developer_ping_db", { latency, dbStatus: supabaseStatus });
+    return jsonResponse(request, env, {
+      success: true,
+      data: {
+        latency,
+        supabase: supabaseStatus,
+        checkedAt: new Date().toISOString()
+      }
+    });
   }
 
   if (path === "/developer/fix" && method === "POST") {
@@ -336,6 +363,8 @@ async function developerDiagnostics(env) {
   let memberOwnershipReady = true;
   let orphanMembers = 0;
   let expiredActiveMembers = 0;
+  let totalMembers = 0;
+  let totalAttendance = 0;
 
   try {
     await keepSupabaseAlive(env);
@@ -344,6 +373,8 @@ async function developerDiagnostics(env) {
       ["status", "eq.Active"],
       ["membership_due", `lt.${isoDateInTimeZone()}`],
     ]);
+    totalMembers = await countRows(env, "members", []);
+    totalAttendance = await countRows(env, "attendance", []);
   } catch (error) {
     supabase = "error";
     memberOwnershipReady = false;
@@ -358,6 +389,8 @@ async function developerDiagnostics(env) {
     memberOwnershipReady,
     orphanMembers,
     expiredActiveMembers,
+    totalMembers,
+    totalAttendance,
     accounts: {
       total: accounts.length,
       developers: accounts.filter((account) => account.role === "developer").length,
@@ -1143,21 +1176,33 @@ function normalizeOrigins(origins) {
   return origins.map((origin) => origin.trim().replace(/\/$/, "")).filter(Boolean);
 }
 
+function addLog(level, event, message, details) {
+  const timestamp = new Date().toISOString();
+  logBuffer.unshift({ timestamp, level, event, message, details });
+  if (logBuffer.length > 100) {
+    logBuffer.pop();
+  }
+}
+
 function logInfo(event, details = {}) {
   console.log(JSON.stringify({ level: "info", event, ...details }));
+  addLog("info", event, "", details);
 }
 
 function logWarn(event, details = {}) {
   console.warn(JSON.stringify({ level: "warn", event, ...details }));
+  addLog("warn", event, "", details);
 }
 
 function logError(event, error, details = {}) {
+  const message = error instanceof Error ? error.message : "Unknown error";
   console.error(
     JSON.stringify({
       level: "error",
       event,
-      message: error instanceof Error ? error.message : "Unknown error",
+      message,
       ...details,
     }),
   );
+  addLog("error", event, message, details);
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Loader2, Save, ShieldCheck, Trash2, UserPlus, Wrench } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, Save, ShieldCheck, Trash2, UserPlus, Wrench, Terminal, Cpu, Database, RefreshCw } from "lucide-react";
 import { motion } from "motion/react";
 import { SettingsModal } from "../components/layout/SettingsModal";
 import { Toast } from "../components/layout/Toast";
@@ -11,7 +11,7 @@ import { useAuth } from "../hooks/useAuth";
 import { api } from "../lib/api";
 import { accountCreateSchema, accountUpdateSchema } from "../lib/validations";
 import { useAppStore } from "../store/useAppStore";
-import type { DeveloperDiagnostics, TrainerAccount } from "../types";
+import type { DeveloperDiagnostics, TrainerAccount, LogEntry } from "../types";
 
 type AccountRole = "developer" | "trainer";
 
@@ -23,8 +23,12 @@ export function DeveloperDashboard() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [diagnostics, setDiagnostics] = useState<DeveloperDiagnostics | null>(null);
   const [accounts, setAccounts] = useState<TrainerAccount[]>([]);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [fixing, setFixing] = useState(false);
+  const [pinging, setPinging] = useState(false);
+  const [dbLatency, setDbLatency] = useState<number | null>(null);
+  const [dbSleepStatus, setDbSleepStatus] = useState<string>("unknown");
   const [deleteAccount, setDeleteAccount] = useState<TrainerAccount | null>(null);
   const [createForm, setCreateForm] = useState<{ email: string; name: string; role: AccountRole; password: string }>({ email: "", name: "", role: "trainer", password: "" });
   const [editForms, setEditForms] = useState<Record<string, { name: string; role: AccountRole; password: string }>>({});
@@ -41,6 +45,7 @@ export function DeveloperDashboard() {
 
   useEffect(() => {
     void loadDeveloperData();
+    void handlePingDb();
   }, []);
 
   if (!trainer) return null;
@@ -48,9 +53,14 @@ export function DeveloperDashboard() {
   async function loadDeveloperData(): Promise<void> {
     setLoading(true);
     try {
-      const [nextDiagnostics, nextAccounts] = await Promise.all([api.developerDiagnostics(), api.trainerAccounts()]);
+      const [nextDiagnostics, nextAccounts, nextLogs] = await Promise.all([
+        api.developerDiagnostics(),
+        api.trainerAccounts(),
+        api.developerLogs(),
+      ]);
       setDiagnostics(nextDiagnostics);
       setAccounts(nextAccounts);
+      setLogs(nextLogs);
       setEditForms(
         Object.fromEntries(
           nextAccounts.map((account) => [
@@ -71,6 +81,29 @@ export function DeveloperDashboard() {
       });
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handlePingDb(): Promise<void> {
+    setPinging(true);
+    try {
+      const result = await api.pingDb();
+      setDbLatency(result.latency);
+      setDbSleepStatus(result.latency > 1500 ? "cold-started" : "active");
+      
+      // Refresh diagnostics if latency was recorded
+      const [nextDiag, nextLogs] = await Promise.all([api.developerDiagnostics(), api.developerLogs()]);
+      setDiagnostics(nextDiag);
+      setLogs(nextLogs);
+    } catch (error) {
+      setDbSleepStatus("error");
+      pushToast({
+        title: "Database connection failed",
+        message: error instanceof Error ? error.message : "Unable to reach database",
+        tone: "error",
+      });
+    } finally {
+      setPinging(false);
     }
   }
 
@@ -184,13 +217,15 @@ export function DeveloperDashboard() {
               ))}
             </div>
 
-            <div className="mt-5 grid gap-4 lg:grid-cols-3">
-              <IssueCard label="Unassigned Member Records" value={diagnostics?.orphanMembers ?? 0} ok={(diagnostics?.orphanMembers ?? 0) === 0} />
-              <IssueCard label="Expired Active Records" value={diagnostics?.expiredActiveMembers ?? 0} ok={(diagnostics?.expiredActiveMembers ?? 0) === 0} />
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+              <IssueCard label="Unassigned Members" value={diagnostics?.orphanMembers ?? 0} ok={(diagnostics?.orphanMembers ?? 0) === 0} />
+              <IssueCard label="Expired Active Members" value={diagnostics?.expiredActiveMembers ?? 0} ok={(diagnostics?.expiredActiveMembers ?? 0) === 0} />
               <IssueCard label="Managed Accounts" value={diagnostics?.accounts.total ?? accounts.length} ok={accounts.length > 0} />
+              <IssueCard label="Total Members" value={diagnostics?.totalMembers ?? 0} ok={true} />
+              <IssueCard label="Total Attendance Visits" value={diagnostics?.totalAttendance ?? 0} ok={true} />
             </div>
 
-            <div className="mt-6 flex flex-wrap gap-3">
+            <div className="mt-6 flex flex-wrap items-center gap-4">
               <Button
                 onClick={() => void runExpiryFix()}
                 disabled={fixing}
@@ -199,6 +234,83 @@ export function DeveloperDashboard() {
                 {fixing ? <Loader2 size={17} className="animate-spin" /> : <Wrench size={17} />}
                 Run Expiry Fix
               </Button>
+
+              <Button
+                onClick={() => void handlePingDb()}
+                disabled={pinging}
+                className="bg-white/5 border border-white/10 text-[#38BDF8] hover:bg-white/10 hover:border-white/20 shadow-sm font-bold flex items-center gap-2"
+              >
+                {pinging ? <Loader2 size={17} className="animate-spin" /> : <RefreshCw size={17} />}
+                Ping & Wake Database
+              </Button>
+
+              {dbLatency !== null && (
+                <div className="flex items-center gap-2 rounded-lg bg-white/5 px-3 py-2 border border-white/10">
+                  <Database size={15} className="text-[#38BDF8]" />
+                  <span className="text-[13px] font-mono text-white/80">
+                    DB Latency: <strong className="text-white">{dbLatency}ms</strong>
+                  </span>
+                  <span className={`h-1.5 w-1.5 rounded-full ${dbSleepStatus === "active" ? "bg-green-400" : "bg-amber-400"}`} />
+                  <span className="text-[11px] font-bold text-white/60 uppercase">
+                    {dbSleepStatus === "active" ? "Active" : dbSleepStatus === "cold-started" ? "Waking Cold Start" : dbSleepStatus}
+                  </span>
+                </div>
+              )}
+            </div>
+          </motion.section>
+
+          {/* Live System Logs Console */}
+          <motion.section
+            className="neon-panel rounded-[var(--radius-panel)] p-6"
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, delay: 0.1 }}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <Terminal size={20} className="text-[#38BDF8]" />
+                <h2 className="text-[18px] font-black text-white">Live System Logs</h2>
+              </div>
+              <Button
+                onClick={() => void loadDeveloperData()}
+                variant="ghost"
+                className="!h-9 !min-h-0 bg-white/5 hover:bg-white/10 border border-white/5 text-[11px] text-white/80 font-bold uppercase py-1 px-3"
+              >
+                Refresh Buffer
+              </Button>
+            </div>
+            
+            <div className="mt-4 overflow-hidden rounded-lg border border-white/5 bg-[#080913] p-4 shadow-inner">
+              <div className="scrollbar-soft h-64 overflow-y-auto font-mono text-[12px] leading-relaxed text-slate-300">
+                {logs.length === 0 ? (
+                  <p className="text-slate-500 italic">No system logs in this isolate session yet. Perform actions to generate logs.</p>
+                ) : (
+                  <div className="grid gap-2">
+                    {logs.map((log, index) => {
+                      const levelColors = {
+                        info: "text-green-400",
+                        warn: "text-amber-400",
+                        error: "text-red-400",
+                      };
+                      return (
+                        <div key={index} className="flex flex-col border-b border-white/5 pb-2 last:border-0 hover:bg-white/5 px-2 py-1 rounded transition-colors">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-slate-500">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
+                            <span className={`font-bold uppercase ${levelColors[log.level]}`}>[{log.level}]</span>
+                            <span className="text-white font-semibold">{log.event}</span>
+                            {log.message && <span className="text-red-300 ml-1">({log.message})</span>}
+                          </div>
+                          {log.details && Object.keys(log.details).length > 0 && (
+                            <pre className="mt-1 text-[11px] text-slate-400 overflow-x-auto whitespace-pre-wrap pl-6 border-l border-white/5">
+                              {JSON.stringify(log.details, null, 2)}
+                            </pre>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           </motion.section>
 
