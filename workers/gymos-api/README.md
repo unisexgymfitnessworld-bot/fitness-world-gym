@@ -18,12 +18,19 @@ This Worker is the no-card backend deployment path for Fitness World GymOS. It m
    npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
    npx wrangler secret put FAST2SMS_API_KEY
    npx wrangler secret put FRONTEND_URLS
+   npx wrangler secret put TRAINER_EMAILS
    ```
 
    `FRONTEND_URLS` should be comma-separated:
 
    ```text
    http://localhost:5173,http://127.0.0.1:5173,https://your-vercel-app.vercel.app
+   ```
+
+   `TRAINER_EMAILS` should be the exact comma-separated trainer email allowlist:
+
+   ```text
+   trainer@fitnessworld.in,trainer1@fitnessworld.in,trainer2@fitnessworld.in
    ```
 
 3. Deploy:

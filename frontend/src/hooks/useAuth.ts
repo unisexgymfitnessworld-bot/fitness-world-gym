@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { loginSchema, type LoginValues } from "../lib/validations";
+import { api, isApiConfigured } from "../lib/api";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { useAppStore } from "../store/useAppStore";
 
@@ -29,6 +30,16 @@ export function useAuth(): AuthResult {
         const { data, error: authError } = await supabase.auth.signInWithPassword(parsed.data);
         if (authError) {
           throw new Error(authError.message);
+        }
+        if (isApiConfigured) {
+          try {
+            const { trainer } = await api.me();
+            setTrainer(trainer);
+            return;
+          } catch (apiError) {
+            await supabase.auth.signOut();
+            throw apiError;
+          }
         }
         setTrainer({
           id: data.user?.id ?? "trainer",

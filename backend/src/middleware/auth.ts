@@ -1,6 +1,7 @@
 import type { NextFunction, Response } from "express";
 import { HttpError } from "../lib/httpError.js";
 import { getSupabaseAuthClient } from "../lib/supabase.js";
+import { assertTrainerAllowed } from "../lib/trainerAccess.js";
 import type { AuthenticatedRequest } from "../types/index.js";
 
 export async function authMiddleware(req: AuthenticatedRequest, _res: Response, next: NextFunction): Promise<void> {
@@ -17,6 +18,7 @@ export async function authMiddleware(req: AuthenticatedRequest, _res: Response, 
       throw new HttpError(401, "UNAUTHORIZED", "Invalid or expired session");
     }
 
+    assertTrainerAllowed(data.user);
     req.authUser = data.user;
     next();
   } catch (error) {

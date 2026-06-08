@@ -6,6 +6,7 @@ import { validateBody } from "../middleware/validate.js";
 import { loginSchema } from "../services/schemas.js";
 import type { AuthenticatedRequest } from "../types/index.js";
 import { createRateLimiter } from "../middleware/rateLimit.js";
+import { assertTrainerAllowed } from "../lib/trainerAccess.js";
 
 const loginLimiter = createRateLimiter(
   15 * 60 * 1000,
@@ -23,6 +24,8 @@ authRouter.post("/login", loginLimiter, validateBody(loginSchema), async (req, r
     if (error || !data.session?.access_token || !data.user) {
       throw new HttpError(401, "LOGIN_FAILED", error?.message ?? "Unable to sign in");
     }
+
+    assertTrainerAllowed(data.user);
 
     res.json({
       success: true,

@@ -1,15 +1,31 @@
 import { getSupabaseAdmin } from "../lib/supabase.js";
 import { logger } from "../lib/logger.js";
 
-const trainersToSeed = [
-  { email: "trainer@fitnessworld.in", password: "trainer123" },
-  { email: "trainer1@fitnessworld.in", password: "trainer123" },
-  { email: "trainer2@fitnessworld.in", password: "trainer123" },
-];
+interface TrainerSeedAccount {
+  email: string;
+  password: string;
+}
+
+function trainerSeedAccounts(): TrainerSeedAccount[] {
+  const rawAccounts = process.env.TRAINER_SEED_ACCOUNTS;
+  if (!rawAccounts) {
+    throw new Error("TRAINER_SEED_ACCOUNTS is required. Use comma-separated email:strong-password pairs.");
+  }
+
+  return rawAccounts.split(",").map((entry) => {
+    const [email, ...passwordParts] = entry.split(":");
+    const password = passwordParts.join(":");
+    if (!email?.includes("@") || password.length < 12) {
+      throw new Error("Each TRAINER_SEED_ACCOUNTS entry must be email:password with a password of at least 12 characters.");
+    }
+    return { email: email.trim().toLowerCase(), password };
+  });
+}
 
 async function seed() {
   logger.info("Starting trainer accounts seeding...");
   try {
+    const trainersToSeed = trainerSeedAccounts();
     const supabase = getSupabaseAdmin();
 
     for (const trainer of trainersToSeed) {
@@ -18,6 +34,9 @@ async function seed() {
         email: trainer.email,
         password: trainer.password,
         email_confirm: true,
+        app_metadata: {
+          role: "trainer",
+        },
       });
 
       if (error) {
@@ -33,6 +52,7 @@ async function seed() {
     logger.info("Trainer accounts seeding completed!");
   } catch (err) {
     logger.error({ error: err instanceof Error ? err.message : err }, "Failed to initialize seeding");
+    process.exitCode = 1;
   }
 }
 

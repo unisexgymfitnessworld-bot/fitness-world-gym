@@ -24,6 +24,13 @@ Update these placeholders once the production environments are provisioned:
    - `SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY` (Keep secure)
 
+### Phase A.1: Supabase Auth Security Settings
+1. In Supabase Dashboard, open **Authentication** → **Sign In / Providers**.
+2. Disable public signups unless the client explicitly needs self-registration.
+3. Open **Authentication** → **Security** or **Password protection**.
+4. Enable leaked password protection.
+5. Keep trainer account passwords unique and rotate them before handover.
+
 ### Phase B: Backend Setup on Cloudflare Workers (No Card REST API)
 1. **Login to Cloudflare**:
    ```bash
@@ -36,10 +43,15 @@ Update these placeholders once the production environments are provisioned:
    npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
    npx wrangler secret put FAST2SMS_API_KEY
    npx wrangler secret put FRONTEND_URLS
+   npx wrangler secret put TRAINER_EMAILS
    ```
    Set `FRONTEND_URLS` to a comma-separated list, for example:
    ```text
    http://localhost:5173,http://127.0.0.1:5173,https://your-app.vercel.app
+   ```
+   Set `TRAINER_EMAILS` to the exact trainer allowlist:
+   ```text
+   trainer@fitnessworld.in,trainer1@fitnessworld.in,trainer2@fitnessworld.in
    ```
 3. **Deploy Worker**:
    ```bash
@@ -48,14 +60,14 @@ Update these placeholders once the production environments are provisioned:
 4. **Verify Health**:
    Open `https://fitness-world-gymos-api.your-subdomain.workers.dev/health`.
 5. **Seed Trainer Accounts**:
-   Run the seed script locally after adding the Supabase secrets to `backend/.env`:
+   Run the seed script locally after adding the Supabase secrets and strong trainer passwords:
    ```bash
-   SUPABASE_URL="your-url" SUPABASE_SERVICE_ROLE_KEY="your-key" npm run seed:trainers
+   SUPABASE_URL="your-url" \
+   SUPABASE_SERVICE_ROLE_KEY="your-key" \
+   TRAINER_SEED_ACCOUNTS="trainer@fitnessworld.in:strong-password-here,trainer1@fitnessworld.in:strong-password-here,trainer2@fitnessworld.in:strong-password-here" \
+   npm run seed:trainers
    ```
-   *Note: This creates the following accounts in Supabase Auth:*
-   - `trainer@fitnessworld.in` (Password: `trainer123`)
-   - `trainer1@fitnessworld.in` (Password: `trainer123`)
-   - `trainer2@fitnessworld.in` (Password: `trainer123`)
+   Use unique passwords with at least 12 characters. Do not use shared demo passwords in production.
 
 ### Phase C: Frontend Setup on Vercel
 1. **Connect Repo**: Import the repository on [vercel.com](https://vercel.com).

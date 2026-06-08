@@ -8,6 +8,8 @@ const GOALS = new Set(["Weight Loss", "Weight Gain", "Muscle Gain", "General Fit
 const PLAN_TYPES = new Set(["1 Month", "3 Months", "6 Months", "1 Year", "Custom"]);
 const PAYMENT_STATUSES = new Set(["Paid", "Pending"]);
 const STATUS_VALUES = new Set(["Active", "Expired", "Suspended"]);
+const DEFAULT_TRAINER_EMAILS = ["trainer@fitnessworld.in", "trainer1@fitnessworld.in", "trainer2@fitnessworld.in"];
+const rateLimitStore = new Map();
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -53,6 +55,7 @@ async function handleRequest(request, env) {
   const path = normalizeApiPath(url.pathname);
 
   if (path === "/auth/login" && method === "POST") {
+    applyRateLimit(request, "login", 15 * 60 * 1000, 10);
     const body = await parseJsonBody(request);
     return jsonResponse(request, env, { success: true, data: await loginTrainer(env, body) });
   }
@@ -133,6 +136,7 @@ async function handleRequest(request, env) {
   }
 
   if (path === "/sms/send" && method === "POST") {
+    applyRateLimit(request, "sms", 15 * 60 * 1000, 10);
     const body = validateSmsInput(await parseJsonBody(request));
     const member = await getMember(env, body.memberId);
     const requestId = await sendSms(env, member.phone, body.message);
@@ -212,7 +216,9 @@ async function authenticateTrainer(request, env) {
     throw new ApiError(401, "UNAUTHORIZED", "Invalid or expired session");
   }
 
-  return await response.json();
+  const user = await response.json();
+  assertTrainerAllowed(env, user);
+  return user;
 }
 
 async function loginTrainer(env, body) {
@@ -236,6 +242,7 @@ async function loginTrainer(env, body) {
   if (!response.ok || !payload?.access_token || !payload?.user) {
     throw new ApiError(401, "LOGIN_FAILED", payload?.msg ?? payload?.message ?? "Unable to sign in");
   }
+  assertTrainerAllowed(env, payload.user);
 
   return {
     token: payload.access_token,
@@ -249,6 +256,55 @@ function trainerFromUser(user) {
     name: user.email?.split("@")[0] ?? "Fitness World Trainer",
     email: user.email ?? "",
   };
+}
+
+function assertTrainerAllowed(env, user) {
+  const email = normalizeEmail(user?.email);
+  if (!email || !allowedTrainerEmails(env).has(email)) {
+    throw new ApiError(403, "TRAINER_NOT_ALLOWED", "This trainer account is not allowed to access GymOS");
+  }
+}
+
+function allowedTrainerEmails(env) {
+  const configured = String(env.TRAINER_EMAILS ?? "")
+    .split(",")
+    .map(normalizeEmail)
+    .filter(Boolean);
+  return new Set(configured.length > 0 ? configured : DEFAULT_TRAINER_EMAILS);
+}
+
+function normalizeEmail(email) {
+  return typeof email === "string" ? email.trim().toLowerCase() : "";
+}
+
+function applyRateLimit(request, scope, windowMs, maxRequests) {
+  const now = Date.now();
+  const ip = request.headers.get("cf-connecting-ip") ?? request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  const key = `${scope}:${ip}`;
+  const current = rateLimitStore.get(key);
+
+  if (!current || now > current.resetAt) {
+    rateLimitStore.set(key, { count: 1, resetAt: now + windowMs });
+    cleanupRateLimit(now);
+    return;
+  }
+
+  current.count += 1;
+  if (current.count > maxRequests) {
+    throw new ApiError(429, "RATE_LIMIT_EXCEEDED", "Too many requests, please try again later");
+  }
+}
+
+function cleanupRateLimit(now) {
+  if (rateLimitStore.size < 500) {
+    return;
+  }
+
+  for (const [key, value] of rateLimitStore.entries()) {
+    if (now > value.resetAt) {
+      rateLimitStore.delete(key);
+    }
+  }
 }
 
 async function listMembers(env, params) {
@@ -563,7 +619,7 @@ function supabaseServiceKey(env) {
 }
 
 function supabasePublishableKey(env) {
-  const key = env.SUPABASE_ANON_KEY ?? env.SUPABASE_PUBLISHABLE_KEY ?? env.SUPABASE_SERVICE_ROLE_KEY ?? env.SUPABASE_SECRET_KEY;
+  const key = env.SUPABASE_ANON_KEY ?? env.SUPABASE_PUBLISHABLE_KEY;
   if (!key) {
     throw new ApiError(500, "SUPABASE_ANON_KEY_MISSING", "Supabase publishable key is not configured");
   }

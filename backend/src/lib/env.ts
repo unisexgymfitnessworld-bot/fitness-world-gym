@@ -10,6 +10,7 @@ const envSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
   FAST2SMS_API_KEY: z.string().min(1).optional(),
   FRONTEND_URL: z.string().url().optional(),
+  TRAINER_EMAILS: z.string().optional(),
   NODE_ENV: z.string().optional(),
 });
 
