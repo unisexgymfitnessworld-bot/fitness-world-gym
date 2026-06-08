@@ -48,6 +48,19 @@ export const passwordChangeSchema = passwordPairSchema.extend({
   }
 });
 
+export const accountCreateSchema = z.object({
+  email: z.string().trim().email("Enter a valid account email"),
+  name: requiredText,
+  role: z.enum(["developer", "trainer"]),
+  password: z.string().min(12, "Use at least 12 characters"),
+});
+
+export const accountUpdateSchema = z.object({
+  name: requiredText,
+  role: z.enum(["developer", "trainer"]),
+  password: z.string().min(12, "Use at least 12 characters").optional().or(z.literal("")),
+});
+
 export const memberInputSchema = z.object({
   name: requiredText,
   phone: z.string().regex(/^\d{10}$/, "Phone must be exactly 10 digits"),
@@ -87,5 +100,7 @@ export type LoginValues = z.infer<typeof loginSchema>;
 export type EmailOnlyValues = z.infer<typeof emailOnlySchema>;
 export type PasswordResetValues = z.infer<typeof passwordResetSchema>;
 export type PasswordChangeValues = z.infer<typeof passwordChangeSchema>;
+export type AccountCreateValues = z.infer<typeof accountCreateSchema>;
+export type AccountUpdateValues = z.infer<typeof accountUpdateSchema>;
 export type MemberInputValues = z.infer<typeof memberInputSchema>;
 export type SmsValues = z.infer<typeof smsSchema>;

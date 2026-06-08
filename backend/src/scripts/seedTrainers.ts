@@ -16,12 +16,14 @@ function trainerSeedAccounts(): TrainerSeedAccount[] {
 
   return rawAccounts.split(",").map((entry) => {
     const [email, ...passwordParts] = entry.split(":");
-    const password = passwordParts.join(":");
+    const maybeRole = passwordParts.at(-1);
+    const roleFromEntry = maybeRole === "developer" || maybeRole === "trainer" ? maybeRole : undefined;
+    const password = (roleFromEntry ? passwordParts.slice(0, -1) : passwordParts).join(":");
     if (!email?.includes("@") || password.length < 12) {
-      throw new Error("Each TRAINER_SEED_ACCOUNTS entry must be email:password with a password of at least 12 characters.");
+      throw new Error("Each TRAINER_SEED_ACCOUNTS entry must be email:password[:role] with a password of at least 12 characters.");
     }
     const normalizedEmail = email.trim().toLowerCase();
-    const role = normalizedEmail.startsWith("developer@") || normalizedEmail.startsWith("dev@") ? "developer" : "trainer";
+    const role = roleFromEntry ?? (normalizedEmail.startsWith("developer@") || normalizedEmail.startsWith("dev@") ? "developer" : "trainer");
     const name = role === "developer" ? "Developer Console" : "Fitness World Trainer";
     return { email: normalizedEmail, password, role, name };
   });

@@ -1,4 +1,4 @@
-import type { ApiEnvelope, AttendanceEntry, DashboardStats, Member, MemberInput, Trainer } from "../types";
+import type { ApiEnvelope, AttendanceEntry, DashboardStats, DeveloperDiagnostics, Member, MemberInput, Trainer, TrainerAccount } from "../types";
 import { supabase } from "./supabase";
 
 export const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
@@ -46,6 +46,27 @@ export const api = {
       body: JSON.stringify({ email, password }),
     }),
   me: () => request<{ trainer: Trainer }>("/auth/me"),
+  developerDiagnostics: () => request<DeveloperDiagnostics>("/developer/diagnostics"),
+  runDeveloperFix: (action: "expire-members") =>
+    request<{ message: string; changed: number }>("/developer/fix", {
+      method: "POST",
+      body: JSON.stringify({ action }),
+    }),
+  trainerAccounts: () => request<TrainerAccount[]>("/developer/accounts"),
+  createTrainerAccount: (input: { email: string; name: string; role: "developer" | "trainer"; password: string }) =>
+    request<TrainerAccount>("/developer/accounts", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  updateTrainerAccount: (id: string, input: { name: string; role: "developer" | "trainer"; password?: string }) =>
+    request<TrainerAccount>(`/developer/accounts/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }),
+  deleteTrainerAccount: (id: string) =>
+    request<{ message: string }>(`/developer/accounts/${id}`, {
+      method: "DELETE",
+    }),
   members: (options?: {
     search?: string;
     status?: string;

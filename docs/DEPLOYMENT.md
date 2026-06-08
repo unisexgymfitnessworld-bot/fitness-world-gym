@@ -19,6 +19,7 @@ Update these placeholders once the production environments are provisioned:
 ### Phase A: Supabase Setup (Database & Auth)
 1. **Create Project**: Sign in to [supabase.com](https://supabase.com) and create a new project.
 2. **Execute Migrations**: Run the SQL script from `supabase/migrations/202606070001_create_fitness_world_schema.sql` in the Supabase SQL Editor to configure tables, indexes, triggers, and RLS policies.
+   Then run `supabase/migrations/202606080001_add_member_owner_isolation.sql` so each trainer workspace has isolated member ownership.
 3. **Copy Secrets**: Retrieve the following from **Settings** → **API**:
    - `SUPABASE_URL`
    - `SUPABASE_ANON_KEY`
@@ -51,8 +52,9 @@ Update these placeholders once the production environments are provisioned:
    ```
    Set `TRAINER_EMAILS` to the exact trainer allowlist:
    ```text
-   developer@fitnessworld.in,trainer@fitnessworld.in,trainer2@fitnessworld.in
+   vedasaradhiv@gmail.com,fitnessworld@gmail.com,trainer@fitnessworld.in
    ```
+   Accounts created later from the developer console are authorized by Supabase `app_metadata.role`. Developer accounts see the system health console only; trainer accounts see isolated gym member data.
 3. **Deploy Worker**:
    ```bash
    npx wrangler deploy
@@ -64,7 +66,7 @@ Update these placeholders once the production environments are provisioned:
    ```bash
    SUPABASE_URL="your-url" \
    SUPABASE_SERVICE_ROLE_KEY="your-key" \
-   TRAINER_SEED_ACCOUNTS="developer@fitnessworld.in:strong-password-here,trainer@fitnessworld.in:strong-password-here,trainer2@fitnessworld.in:strong-password-here" \
+   TRAINER_SEED_ACCOUNTS="vedasaradhiv@gmail.com:strong-password-here:developer,fitnessworld@gmail.com:strong-password-here:trainer,trainer@fitnessworld.in:strong-password-here:trainer" \
    npm run seed:trainers
    ```
    Use unique passwords with at least 12 characters. Do not use shared demo passwords in production. The developer account is labeled with developer metadata, while the other two are trainer accounts.

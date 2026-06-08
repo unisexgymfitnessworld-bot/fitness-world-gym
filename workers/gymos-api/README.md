@@ -30,8 +30,10 @@ This Worker is the no-card backend deployment path for Fitness World GymOS. It m
    `TRAINER_EMAILS` should be the exact comma-separated trainer email allowlist:
 
    ```text
-   developer@fitnessworld.in,trainer@fitnessworld.in,trainer2@fitnessworld.in
+   vedasaradhiv@gmail.com,fitnessworld@gmail.com,trainer@fitnessworld.in
    ```
+
+   New accounts created from the developer console are authorized by Supabase `app_metadata.role`.
 
 3. Deploy:
 

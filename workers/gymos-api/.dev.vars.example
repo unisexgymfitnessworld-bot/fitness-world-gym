@@ -3,4 +3,4 @@ SUPABASE_ANON_KEY=your-supabase-publishable-or-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-or-secret-key
 FAST2SMS_API_KEY=your-fast2sms-api-key
 FRONTEND_URLS=http://localhost:5173,http://127.0.0.1:5173,https://your-vercel-app.vercel.app
-TRAINER_EMAILS=developer@fitnessworld.in,trainer@fitnessworld.in,trainer2@fitnessworld.in
+TRAINER_EMAILS=vedasaradhiv@gmail.com,fitnessworld@gmail.com,trainer@fitnessworld.in

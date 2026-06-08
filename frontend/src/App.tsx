@@ -1,5 +1,6 @@
 import { ErrorBoundary } from "./components/layout/ErrorBoundary";
 import { Dashboard } from "./pages/Dashboard";
+import { DeveloperDashboard } from "./pages/DeveloperDashboard";
 import { Login } from "./pages/Login";
 import { ResetPassword } from "./pages/ResetPassword";
 import { useAppStore } from "./store/useAppStore";
@@ -8,7 +9,11 @@ function App() {
   const trainer = useAppStore((state) => state.trainer);
   const path = window.location.pathname;
 
-  return <ErrorBoundary>{path === "/reset-password" ? <ResetPassword /> : trainer ? <Dashboard /> : <Login />}</ErrorBoundary>;
+  return (
+    <ErrorBoundary>
+      {path === "/reset-password" ? <ResetPassword /> : trainer?.role === "developer" ? <DeveloperDashboard /> : trainer ? <Dashboard /> : <Login />}
+    </ErrorBoundary>
+  );
 }
 
 export default App;

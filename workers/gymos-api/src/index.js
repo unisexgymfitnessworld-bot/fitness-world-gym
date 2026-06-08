@@ -70,13 +70,49 @@ async function handleRequest(request, env) {
     return jsonResponse(request, env, { success: true, data: { message: "Logged out" } });
   }
 
+  if (path === "/developer/diagnostics" && method === "GET") {
+    assertDeveloper(authUser);
+    return jsonResponse(request, env, { success: true, data: await developerDiagnostics(env) });
+  }
+
+  if (path === "/developer/fix" && method === "POST") {
+    assertDeveloper(authUser);
+    const body = await parseJsonBody(request);
+    return jsonResponse(request, env, { success: true, data: await runDeveloperFix(env, body) });
+  }
+
+  if (path === "/developer/accounts" && method === "GET") {
+    assertDeveloper(authUser);
+    return jsonResponse(request, env, { success: true, data: await listTrainerAccounts(env, authUser) });
+  }
+
+  if (path === "/developer/accounts" && method === "POST") {
+    assertDeveloper(authUser);
+    return jsonResponse(request, env, { success: true, data: await createTrainerAccount(env, await parseJsonBody(request), authUser) }, 201);
+  }
+
+  const accountMatch = path.match(/^\/developer\/accounts\/([^/]+)$/);
+  if (accountMatch) {
+    assertDeveloper(authUser);
+    const accountId = assertUuid(accountMatch[1], "account id");
+    if (method === "PATCH") {
+      return jsonResponse(request, env, { success: true, data: await updateTrainerAccount(env, accountId, await parseJsonBody(request), authUser) });
+    }
+    if (method === "DELETE") {
+      await deleteTrainerAccount(env, accountId, authUser);
+      return jsonResponse(request, env, { success: true, data: { message: "Account deleted" } });
+    }
+  }
+
+  assertTrainerWorkspace(authUser);
+
   if (path === "/members" && method === "GET") {
-    return jsonResponse(request, env, { success: true, data: await listMembers(env, url.searchParams) });
+    return jsonResponse(request, env, { success: true, data: await listMembers(env, authUser, url.searchParams) });
   }
 
   if (path === "/members" && method === "POST") {
     const body = validateMemberInput(await parseJsonBody(request));
-    return jsonResponse(request, env, { success: true, data: await createMember(env, body) }, 201);
+    return jsonResponse(request, env, { success: true, data: await createMember(env, authUser, body) }, 201);
   }
 
   const memberMatch = path.match(/^\/members\/([^/]+)(?:\/([^/]+))?$/);
@@ -85,29 +121,29 @@ async function handleRequest(request, env) {
     const action = memberMatch[2];
 
     if (!action && method === "GET") {
-      return jsonResponse(request, env, { success: true, data: await getMember(env, memberId) });
+      return jsonResponse(request, env, { success: true, data: await getMember(env, authUser, memberId) });
     }
 
     if (!action && method === "PUT") {
       const body = validateMemberInput(await parseJsonBody(request));
-      return jsonResponse(request, env, { success: true, data: await updateMember(env, memberId, body) });
+      return jsonResponse(request, env, { success: true, data: await updateMember(env, authUser, memberId, body) });
     }
 
     if (!action && method === "DELETE") {
-      return jsonResponse(request, env, { success: true, data: await suspendMember(env, memberId) });
+      return jsonResponse(request, env, { success: true, data: await suspendMember(env, authUser, memberId) });
     }
 
     if (action === "payment" && method === "PATCH") {
       const body = await parseJsonBody(request);
       const paymentStatus = assertEnum(body.paymentStatus ?? body.payment_status, PAYMENT_STATUSES, "payment status");
-      return jsonResponse(request, env, { success: true, data: await updatePayment(env, memberId, paymentStatus) });
+      return jsonResponse(request, env, { success: true, data: await updatePayment(env, authUser, memberId, paymentStatus) });
     }
 
     if (action === "renew" && method === "PATCH") {
       const body = validateRenewInput(await parseJsonBody(request));
       return jsonResponse(request, env, {
         success: true,
-        data: await renewMember(env, memberId, body.membershipStart, body.membershipDue, body.feesAmount),
+        data: await renewMember(env, authUser, memberId, body.membershipStart, body.membershipDue, body.feesAmount),
       });
     }
   }
@@ -116,29 +152,29 @@ async function handleRequest(request, env) {
   if (attendanceMemberMatch && method === "GET") {
     const memberId = assertUuid(attendanceMemberMatch[1], "member id");
     const month = url.searchParams.get("month") ?? undefined;
-    return jsonResponse(request, env, { success: true, data: await listAttendance(env, memberId, month) });
+    return jsonResponse(request, env, { success: true, data: await listAttendance(env, authUser, memberId, month) });
   }
 
   if (path === "/attendance" && method === "POST") {
     const body = validateAttendanceInput(await parseJsonBody(request));
-    return jsonResponse(request, env, { success: true, data: await createAttendance(env, body.memberId, body.visitDate, body.weightKg) }, 201);
+    return jsonResponse(request, env, { success: true, data: await createAttendance(env, authUser, body.memberId, body.visitDate, body.weightKg) }, 201);
   }
 
   const attendanceDeleteMatch = path.match(/^\/attendance\/([^/]+)$/);
   if (attendanceDeleteMatch && method === "DELETE") {
     const attendanceId = assertUuid(attendanceDeleteMatch[1], "attendance id");
-    await deleteAttendance(env, attendanceId);
+    await deleteAttendance(env, authUser, attendanceId);
     return jsonResponse(request, env, { success: true, data: { message: "Deleted" } });
   }
 
   if (path === "/dashboard/stats" && method === "GET") {
-    return jsonResponse(request, env, { success: true, data: await getDashboardStats(env) });
+    return jsonResponse(request, env, { success: true, data: await getDashboardStats(env, authUser) });
   }
 
   if (path === "/sms/send" && method === "POST") {
     applyRateLimit(request, "sms", 15 * 60 * 1000, 10);
     const body = validateSmsInput(await parseJsonBody(request));
-    const member = await getMember(env, body.memberId);
+    const member = await getMember(env, authUser, body.memberId);
     const requestId = await sendSms(env, member.phone, body.message);
     await markReminderSent(env, member.id);
     return jsonResponse(request, env, { success: true, data: { requestId } });
@@ -146,7 +182,7 @@ async function handleRequest(request, env) {
 
   if (path === "/sms/whatsapp-link" && method === "POST") {
     const body = validateSmsMemberInput(await parseJsonBody(request));
-    const member = await getMember(env, body.memberId);
+    const member = await getMember(env, authUser, body.memberId);
     const text = encodeURIComponent(`Hi ${member.name}, your Fitness World membership update is ready. - Fitness World`);
     return jsonResponse(request, env, { success: true, data: { url: `https://wa.me/91${member.phone}?text=${text}` } });
   }
@@ -252,19 +288,197 @@ async function loginTrainer(env, body) {
 
 function trainerFromUser(user) {
   const metadata = user.user_metadata ?? {};
+  const role = roleFromUser(user);
   return {
     id: user.id,
     name: typeof metadata.name === "string" && metadata.name.trim() ? metadata.name.trim() : user.email?.split("@")[0] ?? "Fitness World Trainer",
     email: user.email ?? "",
+    role,
     avatar: typeof metadata.avatar === "string" && metadata.avatar.trim() ? metadata.avatar.trim() : undefined,
   };
 }
 
 function assertTrainerAllowed(env, user) {
   const email = normalizeEmail(user?.email);
-  if (!email || !allowedTrainerEmails(env).has(email)) {
+  const role = explicitRoleFromUser(user);
+  if (!email || (!allowedTrainerEmails(env).has(email) && role !== "developer" && role !== "trainer")) {
     throw new ApiError(403, "TRAINER_NOT_ALLOWED", "This trainer account is not allowed to access GymOS");
   }
+}
+
+function roleFromUser(user) {
+  return explicitRoleFromUser(user) ?? "trainer";
+}
+
+function explicitRoleFromUser(user) {
+  const role = user?.app_metadata?.role ?? user?.user_metadata?.role;
+  return role === "developer" || role === "trainer" ? role : undefined;
+}
+
+function assertDeveloper(user) {
+  if (roleFromUser(user) !== "developer") {
+    throw new ApiError(403, "DEVELOPER_ONLY", "Developer console access is required");
+  }
+}
+
+function assertTrainerWorkspace(user) {
+  if (roleFromUser(user) === "developer") {
+    throw new ApiError(403, "TRAINER_WORKSPACE_ONLY", "Developer accounts use the system dashboard, not gym member data");
+  }
+}
+
+function ownerFilter(user) {
+  return `eq.${encodeURIComponent(user.id)}`;
+}
+
+async function developerDiagnostics(env) {
+  let supabase = "ok";
+  let memberOwnershipReady = true;
+  let orphanMembers = 0;
+  let expiredActiveMembers = 0;
+
+  try {
+    await keepSupabaseAlive(env);
+    orphanMembers = await countRows(env, "members", [["owner_user_id", "is.null"]]);
+    expiredActiveMembers = await countRows(env, "members", [
+      ["status", "eq.Active"],
+      ["membership_due", `lt.${isoDateInTimeZone()}`],
+    ]);
+  } catch (error) {
+    supabase = "error";
+    memberOwnershipReady = false;
+    logWarn("developer_diagnostics_partial_failure", { message: error instanceof Error ? error.message : "Unknown error" });
+  }
+
+  const accounts = await listAllTrainerAccounts(env);
+  return {
+    api: "ok",
+    supabase,
+    smsConfigured: Boolean(env.FAST2SMS_API_KEY),
+    memberOwnershipReady,
+    orphanMembers,
+    expiredActiveMembers,
+    accounts: {
+      total: accounts.length,
+      developers: accounts.filter((account) => account.role === "developer").length,
+      trainers: accounts.filter((account) => account.role === "trainer").length,
+    },
+    cron: {
+      expiry: "00:00 IST daily",
+      sms: "09:00 IST daily",
+    },
+    checkedAt: new Date().toISOString(),
+  };
+}
+
+async function runDeveloperFix(env, body) {
+  const action = requiredString(body.action, "fix action");
+  if (action === "expire-members") {
+    const changed = await runExpireStatus(env);
+    return {
+      message: "Expired member status check completed",
+      changed,
+    };
+  }
+  throw new ApiError(400, "UNKNOWN_FIX_ACTION", "Unknown developer fix action");
+}
+
+async function listTrainerAccounts(env, currentUser) {
+  const accounts = await listAllTrainerAccounts(env);
+  return accounts.map((account) => ({
+    ...account,
+    currentUser: account.id === currentUser.id,
+  }));
+}
+
+async function listAllTrainerAccounts(env) {
+  const payload = await supabaseAuthAdminJson(env, "/users?page=1&per_page=1000");
+  const users = Array.isArray(payload?.users) ? payload.users : [];
+  const allowed = allowedTrainerEmails(env);
+  return users
+    .filter((user) => {
+      const role = explicitRoleFromUser(user);
+      return role === "developer" || role === "trainer" || allowed.has(normalizeEmail(user.email));
+    })
+    .map(mapTrainerAccount)
+    .sort((a, b) => a.email.localeCompare(b.email));
+}
+
+async function createTrainerAccount(env, body) {
+  const input = validateAccountInput(body, { requirePassword: true });
+  const payload = await supabaseAuthAdminJson(env, "/users", {
+    method: "POST",
+    body: JSON.stringify({
+      email: input.email,
+      password: input.password,
+      email_confirm: true,
+      app_metadata: { role: input.role },
+      user_metadata: { name: input.name },
+    }),
+  });
+  return mapTrainerAccount(payload?.user ?? payload);
+}
+
+async function updateTrainerAccount(env, accountId, body, currentUser) {
+  const input = validateAccountInput(body, { requirePassword: false });
+  const update = {
+    app_metadata: { role: input.role },
+    user_metadata: { name: input.name },
+  };
+  if (input.password) {
+    update.password = input.password;
+  }
+
+  const payload = await supabaseAuthAdminJson(env, `/users/${encodeURIComponent(accountId)}`, {
+    method: "PUT",
+    body: JSON.stringify(update),
+  });
+  const account = mapTrainerAccount(payload?.user ?? payload);
+  return {
+    ...account,
+    currentUser: account.id === currentUser.id,
+  };
+}
+
+async function deleteTrainerAccount(env, accountId, currentUser) {
+  if (accountId === currentUser.id) {
+    throw new ApiError(400, "CANNOT_DELETE_SELF", "You cannot delete the account you are currently using");
+  }
+  await supabaseAuthAdminJson(env, `/users/${encodeURIComponent(accountId)}`, {
+    method: "DELETE",
+  });
+}
+
+function validateAccountInput(body, options) {
+  const email = options.requirePassword ? requiredString(body.email, "email").toLowerCase() : optionalText(body.email)?.toLowerCase();
+  const name = requiredString(body.name, "display name");
+  const role = assertEnum(body.role, new Set(["developer", "trainer"]), "role");
+  const password = typeof body.password === "string" && body.password.length > 0 ? body.password : undefined;
+
+  if (email && !email.includes("@")) {
+    throw new ApiError(400, "INVALID_EMAIL", "Account email is invalid");
+  }
+  if (options.requirePassword && (!password || password.length < 12)) {
+    throw new ApiError(400, "WEAK_PASSWORD", "Password must be at least 12 characters");
+  }
+  if (!options.requirePassword && password && password.length < 12) {
+    throw new ApiError(400, "WEAK_PASSWORD", "Password must be at least 12 characters");
+  }
+
+  return { email, name, role, password };
+}
+
+function mapTrainerAccount(user) {
+  const metadata = user?.user_metadata ?? {};
+  return {
+    id: user?.id ?? "",
+    email: user?.email ?? "",
+    name: typeof metadata.name === "string" && metadata.name.trim() ? metadata.name.trim() : user?.email?.split("@")[0] ?? "Trainer",
+    role: roleFromUser(user),
+    createdAt: user?.created_at ?? new Date().toISOString(),
+    confirmed: Boolean(user?.email_confirmed_at ?? user?.confirmed_at),
+    currentUser: false,
+  };
 }
 
 function allowedTrainerEmails(env) {
@@ -309,8 +523,8 @@ function cleanupRateLimit(now) {
   }
 }
 
-async function listMembers(env, params) {
-  const restParams = new URLSearchParams({ select: "*" });
+async function listMembers(env, user, params) {
+  const restParams = new URLSearchParams({ select: "*", owner_user_id: ownerFilter(user) });
   const search = params.get("search")?.trim();
   const status = params.get("status");
   const goal = params.get("goal");
@@ -343,25 +557,25 @@ async function listMembers(env, params) {
   return rows.map(mapMember);
 }
 
-async function getMember(env, memberId) {
-  const rows = await supabaseJson(env, `/members?select=*&id=eq.${encodeURIComponent(memberId)}&limit=1`);
+async function getMember(env, user, memberId) {
+  const rows = await supabaseJson(env, `/members?select=*&id=eq.${encodeURIComponent(memberId)}&owner_user_id=${ownerFilter(user)}&limit=1`);
   if (!rows[0]) {
     throw new ApiError(404, "MEMBER_NOT_FOUND", "Member not found");
   }
   return mapMember(rows[0]);
 }
 
-async function createMember(env, input) {
+async function createMember(env, user, input) {
   const rows = await supabaseJson(env, "/members?select=*", {
     method: "POST",
     headers: { Prefer: "return=representation" },
-    body: JSON.stringify(memberInputToDb(input)),
+    body: JSON.stringify({ ...memberInputToDb(input), owner_user_id: user.id }),
   });
   return mapMember(rows[0]);
 }
 
-async function updateMember(env, memberId, input) {
-  const rows = await supabaseJson(env, `/members?id=eq.${encodeURIComponent(memberId)}&select=*`, {
+async function updateMember(env, user, memberId, input) {
+  const rows = await supabaseJson(env, `/members?id=eq.${encodeURIComponent(memberId)}&owner_user_id=${ownerFilter(user)}&select=*`, {
     method: "PATCH",
     headers: { Prefer: "return=representation" },
     body: JSON.stringify(memberInputToDb(input)),
@@ -370,8 +584,8 @@ async function updateMember(env, memberId, input) {
   return mapMember(rows[0]);
 }
 
-async function updatePayment(env, memberId, paymentStatus) {
-  const rows = await supabaseJson(env, `/members?id=eq.${encodeURIComponent(memberId)}&select=*`, {
+async function updatePayment(env, user, memberId, paymentStatus) {
+  const rows = await supabaseJson(env, `/members?id=eq.${encodeURIComponent(memberId)}&owner_user_id=${ownerFilter(user)}&select=*`, {
     method: "PATCH",
     headers: { Prefer: "return=representation" },
     body: JSON.stringify({ payment_status: paymentStatus }),
@@ -380,8 +594,8 @@ async function updatePayment(env, memberId, paymentStatus) {
   return mapMember(rows[0]);
 }
 
-async function renewMember(env, memberId, membershipStart, membershipDue, feesAmount) {
-  const rows = await supabaseJson(env, `/members?id=eq.${encodeURIComponent(memberId)}&select=*`, {
+async function renewMember(env, user, memberId, membershipStart, membershipDue, feesAmount) {
+  const rows = await supabaseJson(env, `/members?id=eq.${encodeURIComponent(memberId)}&owner_user_id=${ownerFilter(user)}&select=*`, {
     method: "PATCH",
     headers: { Prefer: "return=representation" },
     body: JSON.stringify({
@@ -397,8 +611,8 @@ async function renewMember(env, memberId, membershipStart, membershipDue, feesAm
   return mapMember(rows[0]);
 }
 
-async function suspendMember(env, memberId) {
-  const rows = await supabaseJson(env, `/members?id=eq.${encodeURIComponent(memberId)}&select=*`, {
+async function suspendMember(env, user, memberId) {
+  const rows = await supabaseJson(env, `/members?id=eq.${encodeURIComponent(memberId)}&owner_user_id=${ownerFilter(user)}&select=*`, {
     method: "PATCH",
     headers: { Prefer: "return=representation" },
     body: JSON.stringify({ status: "Suspended" }),
@@ -407,7 +621,8 @@ async function suspendMember(env, memberId) {
   return mapMember(rows[0]);
 }
 
-async function listAttendance(env, memberId, month) {
+async function listAttendance(env, user, memberId, month) {
+  await getMember(env, user, memberId);
   const params = new URLSearchParams({
     select: "*",
     member_id: `eq.${memberId}`,
@@ -421,7 +636,8 @@ async function listAttendance(env, memberId, month) {
   return rows.map(mapAttendance);
 }
 
-async function createAttendance(env, memberId, visitDate, weightKg) {
+async function createAttendance(env, user, memberId, visitDate, weightKg) {
+  await getMember(env, user, memberId);
   const rows = await supabaseJson(env, "/attendance?select=*", {
     method: "POST",
     headers: { Prefer: "return=representation" },
@@ -434,28 +650,32 @@ async function createAttendance(env, memberId, visitDate, weightKg) {
   return mapAttendance(rows[0]);
 }
 
-async function deleteAttendance(env, attendanceId) {
+async function deleteAttendance(env, user, attendanceId) {
+  const rows = await supabaseJson(env, `/attendance?select=id,member_id&id=eq.${encodeURIComponent(attendanceId)}&limit=1`);
+  if (!rows[0]) throw new ApiError(404, "ATTENDANCE_NOT_FOUND", "Attendance entry not found");
+  await getMember(env, user, rows[0].member_id);
   await supabaseJson(env, `/attendance?id=eq.${encodeURIComponent(attendanceId)}`, {
     method: "DELETE",
   });
 }
 
-async function getDashboardStats(env) {
+async function getDashboardStats(env, user) {
   const today = isoDateInTimeZone();
   const weekEnd = isoDateInTimeZone(addDays(new Date(), 7));
   const monthStart = `${today.slice(0, 8)}01`;
 
   const [total, active, expired, pending, due, newThisMonth] = await Promise.all([
-    countRows(env, "members"),
-    countRows(env, "members", [["status", "eq.Active"]]),
-    countRows(env, "members", [["status", "eq.Expired"]]),
-    countRows(env, "members", [["payment_status", "eq.Pending"]]),
+    countRows(env, "members", [["owner_user_id", ownerFilter(user)]]),
+    countRows(env, "members", [["owner_user_id", ownerFilter(user)], ["status", "eq.Active"]]),
+    countRows(env, "members", [["owner_user_id", ownerFilter(user)], ["status", "eq.Expired"]]),
+    countRows(env, "members", [["owner_user_id", ownerFilter(user)], ["payment_status", "eq.Pending"]]),
     countRows(env, "members", [
+      ["owner_user_id", ownerFilter(user)],
       ["status", "eq.Active"],
       ["membership_due", `gte.${today}`],
       ["membership_due", `lte.${weekEnd}`],
     ]),
-    countRows(env, "members", [["created_at", `gte.${monthStart}`]]),
+    countRows(env, "members", [["owner_user_id", ownerFilter(user)], ["created_at", `gte.${monthStart}`]]),
   ]);
 
   return {
@@ -573,6 +793,26 @@ async function supabaseJson(env, path, init = {}) {
   const text = await response.text();
   if (!text) return null;
   return JSON.parse(text);
+}
+
+async function supabaseAuthAdminJson(env, path, init = {}) {
+  const serviceKey = supabaseServiceKey(env);
+  const headers = new Headers(init.headers);
+  headers.set("apikey", serviceKey);
+  headers.set("Authorization", `Bearer ${serviceKey}`);
+  if (init.body) headers.set("Content-Type", "application/json");
+
+  const response = await fetch(`${supabaseUrl(env)}/auth/v1/admin${path}`, {
+    ...init,
+    headers,
+  });
+
+  if (response.status === 204) return null;
+  const payload = await safeJson(response);
+  if (!response.ok) {
+    throw new ApiError(response.status, payload?.code ?? "SUPABASE_AUTH_ADMIN_FAILED", payload?.message ?? "Supabase Auth admin request failed");
+  }
+  return payload;
 }
 
 async function supabaseRaw(env, path, init = {}) {
@@ -742,6 +982,7 @@ function mapMember(row) {
     paymentStatus: row.payment_status,
     status: row.status,
     smsSent3days: row.sms_sent_3days,
+    ownerUserId: row.owner_user_id ?? undefined,
     avatar: row.avatar ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

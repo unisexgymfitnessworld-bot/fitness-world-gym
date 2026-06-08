@@ -28,6 +28,7 @@ function trainerFromUser(user: User, fallbackEmail = "") {
     id: user.id,
     name,
     email: user.email ?? fallbackEmail,
+    role: user.app_metadata?.role === "developer" ? "developer" : "trainer",
     avatar,
   };
 }

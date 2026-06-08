@@ -9,3 +9,5 @@ dist
 .vercel
 .koyeb
 coverage
+env.production.tmp
+*.tmp

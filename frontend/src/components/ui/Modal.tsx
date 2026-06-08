@@ -25,7 +25,7 @@ export function Modal({ open, title, children, onClose }: ModalProps) {
             aria-modal="true"
             role="dialog"
             aria-label={title}
-            className="w-full max-w-xl overflow-hidden rounded-[var(--radius-panel)] bg-brand-white shadow-[0_32px_80px_rgba(26,26,46,0.18)]"
+            className="flex max-h-[calc(100vh-48px)] w-full max-w-xl flex-col overflow-hidden rounded-[var(--radius-panel)] bg-brand-white shadow-[0_32px_80px_rgba(26,26,46,0.18)]"
             initial={{ scale: 0.92, opacity: 0, y: 20 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.92, opacity: 0, y: 20 }}
@@ -38,7 +38,7 @@ export function Modal({ open, title, children, onClose }: ModalProps) {
                 <X size={20} />
               </Button>
             </header>
-            <div className="p-6">{children}</div>
+            <div className="overflow-y-auto p-6 scrollbar-soft">{children}</div>
           </motion.section>
         </motion.div>
       ) : null}

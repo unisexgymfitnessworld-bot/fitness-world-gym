@@ -48,6 +48,7 @@ export function useAuth(): AuthResult {
           id: data.user?.id ?? "trainer",
           name: data.user?.user_metadata?.name ?? data.user?.email?.split("@")[0] ?? "Fitness World Trainer",
           email: data.user?.email ?? parsed.data.email,
+          role: data.user?.app_metadata?.role === "developer" ? "developer" : "trainer",
           avatar: data.user?.user_metadata?.avatar ?? undefined,
         });
         return;
@@ -57,6 +58,7 @@ export function useAuth(): AuthResult {
         id: "demo-trainer",
         name: "Fitness World Trainer",
         email: parsed.data.email,
+        role: "trainer",
       });
     } catch (caught) {
       setError(friendlyAuthError(caught));

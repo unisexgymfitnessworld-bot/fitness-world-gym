@@ -14,6 +14,7 @@ export interface Trainer {
   id: string;
   name: string;
   email: string;
+  role: "developer" | "trainer";
   avatar?: string;
 }
 
@@ -42,9 +43,39 @@ export interface Member {
   paymentStatus: PaymentStatus;
   status: MemberStatus;
   smsSent3days: boolean;
+  ownerUserId?: string;
   avatar?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface TrainerAccount {
+  id: string;
+  email: string;
+  name: string;
+  role: "developer" | "trainer";
+  createdAt: string;
+  confirmed: boolean;
+  currentUser: boolean;
+}
+
+export interface DeveloperDiagnostics {
+  api: "ok";
+  supabase: "ok" | "error";
+  smsConfigured: boolean;
+  memberOwnershipReady: boolean;
+  orphanMembers: number;
+  expiredActiveMembers: number;
+  accounts: {
+    total: number;
+    developers: number;
+    trainers: number;
+  };
+  cron: {
+    expiry: string;
+    sms: string;
+  };
+  checkedAt: string;
 }
 
 export interface MemberInput {

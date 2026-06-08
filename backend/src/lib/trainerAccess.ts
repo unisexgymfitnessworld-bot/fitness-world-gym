@@ -2,7 +2,7 @@ import type { User } from "@supabase/supabase-js";
 import { env } from "./env.js";
 import { HttpError } from "./httpError.js";
 
-const defaultTrainerEmails = ["fitnessworld@gmail.com", "trainer@fitnessworld.in", "vedasaradhiv@gmail.com"];
+const defaultTrainerEmails = ["vedasaradhiv@gmail.com", "fitnessworld@gmail.com", "trainer@fitnessworld.in"];
 
 function normalizeEmail(email: string | undefined | null): string {
   return typeof email === "string" ? email.trim().toLowerCase() : "";
@@ -19,7 +19,8 @@ export function allowedTrainerEmails(): Set<string> {
 
 export function assertTrainerAllowed(user: User): void {
   const email = normalizeEmail(user.email);
-  if (!email || !allowedTrainerEmails().has(email)) {
+  const role = user.app_metadata?.role;
+  if (!email || (!allowedTrainerEmails().has(email) && role !== "developer" && role !== "trainer")) {
     throw new HttpError(403, "TRAINER_NOT_ALLOWED", "This trainer account is not allowed to access GymOS");
   }
 }

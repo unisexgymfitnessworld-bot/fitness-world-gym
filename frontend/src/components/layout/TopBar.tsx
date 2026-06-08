@@ -22,17 +22,41 @@ export function TopBar({ trainer, onLogout, onSettings }: TopBarProps) {
       <div className="mx-auto flex min-h-16 max-w-[1500px] items-center justify-between gap-4 px-4 py-3 lg:min-h-20 lg:px-8 lg:py-4">
         <FwMark />
         <div className="flex items-center gap-3">
-          <div className="hidden text-right sm:block leading-tight">
-            <p className="text-[18px] font-black">{trainer.name}</p>
-            <p className="text-[14px] text-white/70 font-semibold">{trainer.email}</p>
-          </div>
-          <div className="h-12 w-12 shrink-0 overflow-hidden rounded-full border border-white/[0.14] bg-gradient-to-br from-brand-primary/30 to-white/[0.08] flex items-center justify-center ring-1 ring-white/10 shadow-sm">
-            {trainer.avatar ? (
-              <img src={trainer.avatar} alt={trainer.name} className="h-full w-full object-cover" />
-            ) : (
-              <span className="text-[15px] font-extrabold text-brand-white">{initials(trainer.name)}</span>
-            )}
-          </div>
+          {onSettings ? (
+            <button
+              type="button"
+              className="focus-ring group flex items-center gap-3 rounded-full px-2 py-1 text-right transition hover:bg-white/10"
+              aria-label="Open profile settings"
+              title="Open profile settings"
+              onClick={onSettings}
+            >
+              <span className="hidden leading-tight sm:block">
+                <span className="block text-[18px] font-black group-hover:text-brand-primary-light">{trainer.name}</span>
+                <span className="block text-[14px] font-semibold text-white/70">{trainer.email}</span>
+              </span>
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/[0.14] bg-gradient-to-br from-brand-primary/30 to-white/[0.08] ring-1 ring-white/10 shadow-sm">
+                {trainer.avatar ? (
+                  <img src={trainer.avatar} alt={trainer.name} className="h-full w-full object-cover" />
+                ) : (
+                  <span className="text-[15px] font-extrabold text-brand-white">{initials(trainer.name)}</span>
+                )}
+              </span>
+            </button>
+          ) : (
+            <>
+              <div className="hidden text-right sm:block leading-tight">
+                <p className="text-[18px] font-black">{trainer.name}</p>
+                <p className="text-[14px] text-white/70 font-semibold">{trainer.email}</p>
+              </div>
+              <div className="h-12 w-12 shrink-0 overflow-hidden rounded-full border border-white/[0.14] bg-gradient-to-br from-brand-primary/30 to-white/[0.08] flex items-center justify-center ring-1 ring-white/10 shadow-sm">
+                {trainer.avatar ? (
+                  <img src={trainer.avatar} alt={trainer.name} className="h-full w-full object-cover" />
+                ) : (
+                  <span className="text-[15px] font-extrabold text-brand-white">{initials(trainer.name)}</span>
+                )}
+              </div>
+            </>
+          )}
           {onSettings && (
             <Button aria-label="Settings" title="Settings" variant="ghost" className="!text-brand-white hover:!bg-white/10 hover:!text-brand-white !h-12 !w-12 !p-0" onClick={onSettings}>
               <Settings size={22} />
