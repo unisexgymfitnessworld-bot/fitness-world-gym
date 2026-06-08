@@ -404,7 +404,10 @@ async function developerDiagnostics(env) {
     api: "ok",
     supabase,
     smsConfigured: Boolean(env.FAST2SMS_API_KEY),
-    whatsAppConfigured: Boolean(env.WHATSAPP_INSTANCE_ID && env.WHATSAPP_TOKEN),
+    whatsAppConfigured: Boolean(
+      (env.WHATSAPP_INSTANCE_ID && env.WHATSAPP_TOKEN) ||
+      (env.WHATSAPP_INSTANCE_ID === "self_hosted" && env.WHATSAPP_GATEWAY_URL)
+    ),
     memberOwnershipReady,
     orphanMembers,
     expiredActiveMembers,
@@ -862,6 +865,35 @@ async function sendSms(env, phone, message) {
 }
 
 async function sendWhatsApp(env, phone, message) {
+  const isSelfHosted = env.WHATSAPP_INSTANCE_ID === "self_hosted";
+
+  if (isSelfHosted) {
+    if (!env.WHATSAPP_GATEWAY_URL || !env.WHATSAPP_GATEWAY_TOKEN) {
+      throw new ApiError(503, "WHATSAPP_NOT_CONFIGURED", "Self-hosted WhatsApp URL or Token is not configured");
+    }
+
+    const response = await fetch(`${env.WHATSAPP_GATEWAY_URL.replace(/\/$/, "")}/send`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${env.WHATSAPP_GATEWAY_TOKEN}`
+      },
+      body: JSON.stringify({
+        to: phone,
+        message: message
+      })
+    });
+
+    const payload = await safeJson(response);
+    if (!response.ok || payload?.success !== true) {
+      const errorMsg = payload?.error ?? "Self-hosted WhatsApp request failed";
+      throw new ApiError(502, "WHATSAPP_SEND_FAILED", errorMsg);
+    }
+
+    return payload.messageId ?? "sent";
+  }
+
+  // Fallback to UltraMsg
   if (!env.WHATSAPP_INSTANCE_ID || !env.WHATSAPP_TOKEN) {
     throw new ApiError(503, "WHATSAPP_NOT_CONFIGURED", "WhatsApp instance ID or token is not configured");
   }
