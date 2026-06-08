@@ -14,7 +14,7 @@ const tones: Record<BadgeTone, string> = {
   active: "bg-green-50 text-status-active border-green-200",
   expired: "bg-red-50 text-status-expired border-red-200",
   due: "bg-amber-50 text-status-due border-amber-200",
-  pending: "bg-purple-50 text-status-pending border-purple-200",
+  pending: "bg-amber-50 text-status-due border-amber-200",
   neutral: "bg-surface-overlay text-text-secondary border-border-default",
   paid: "bg-green-50 text-status-active border-green-200",
 };
@@ -24,7 +24,7 @@ const dotColors: Record<BadgeTone, string> = {
   active: "bg-status-active",
   expired: "bg-status-expired",
   due: "bg-status-due",
-  pending: "bg-status-pending",
+  pending: "bg-status-due",
   neutral: "bg-text-muted",
   paid: "bg-status-active",
 };

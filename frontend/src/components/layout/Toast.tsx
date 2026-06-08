@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import { CheckCircle2, Info, XCircle } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import type { ToastMessage } from "../../types";
+import { useAppStore } from "../../store/useAppStore";
 
 interface ToastProps {
   toast: ToastMessage | null;
@@ -8,6 +10,15 @@ interface ToastProps {
 
 export function Toast({ toast }: ToastProps) {
   const Icon = toast?.tone === "success" ? CheckCircle2 : toast?.tone === "error" ? XCircle : Info;
+  const clearToast = useAppStore((state) => state.clearToast);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => {
+      clearToast();
+    }, 3500);
+    return () => clearTimeout(timer);
+  }, [toast, clearToast]);
 
   return (
     <AnimatePresence>

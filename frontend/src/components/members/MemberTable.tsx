@@ -163,7 +163,7 @@ export function MemberTable({
       columnHelper.accessor("goal", {
         header: "Goal",
         cell: (info) => (
-          <Badge tone="primary">
+          <Badge tone="neutral">
             {info.getValue()}
           </Badge>
         ),
@@ -205,28 +205,49 @@ export function MemberTable({
           const member = info.row.original;
           return (
             <div className="flex items-center gap-1.5">
-              <Button variant="icon" className="!border-border-default !bg-brand-white !text-text-secondary hover:!border-brand-primary hover:!text-brand-primary" title="View full member profile" aria-label={`View full profile for ${member.name}`} onClick={() => onView(member.id)}>
-                <Eye size={17} />
-              </Button>
+              <button
+                className="focus-ring flex h-9 items-center gap-1.5 rounded-lg border border-indigo-100 bg-indigo-50/50 px-2.5 text-[12px] font-bold text-indigo-700 transition hover:bg-indigo-600 hover:text-white"
+                onClick={() => onView(member.id)}
+                title="View full member profile"
+                aria-label={`View full profile for ${member.name}`}
+              >
+                <Eye size={14} />
+                <span>View</span>
+              </button>
               <a
-                className="focus-ring grid h-11 w-11 place-items-center rounded-[var(--radius-card)] border border-green-200 bg-green-50 text-status-active transition-colors hover:border-status-active lg:h-12 lg:w-12"
+                className="focus-ring flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-100 bg-emerald-50/50 text-emerald-700 transition hover:bg-emerald-600 hover:text-white"
                 href={createWhatsAppLink(member)}
                 target="_blank"
                 rel="noreferrer"
                 title="Send WhatsApp renewal reminder"
                 aria-label={`Send WhatsApp renewal reminder to ${member.name}`}
               >
-                <MessageCircle size={17} />
+                <MessageCircle size={15} />
               </a>
-              <Button variant="icon" className="!border-border-default !bg-brand-white !text-text-secondary hover:!border-brand-primary hover:!text-brand-primary" title="Send SMS renewal reminder" aria-label={`Send SMS renewal reminder to ${member.name}`} onClick={() => onSms(member.id)}>
-                <MessageSquare size={17} />
-              </Button>
-              <Button variant="icon" className="!border-border-default !bg-brand-white !text-text-secondary hover:!border-brand-primary hover:!text-brand-primary" title="Edit member details" aria-label={`Edit member details for ${member.name}`} onClick={() => onEdit(member.id)}>
-                <Pencil size={17} />
-              </Button>
-              <Button variant="icon" className="!border-border-default !bg-brand-white !text-text-secondary hover:!border-status-expired hover:!text-status-expired" title="Suspend member access" aria-label={`Suspend member access for ${member.name}`} onClick={() => onSuspend(member.id)}>
-                <UserX size={17} />
-              </Button>
+              <button
+                className="focus-ring flex h-9 w-9 items-center justify-center rounded-lg border border-violet-100 bg-violet-50/50 text-violet-700 transition hover:bg-violet-600 hover:text-white"
+                onClick={() => onSms(member.id)}
+                title="Send SMS renewal reminder"
+                aria-label={`Send SMS renewal reminder to ${member.name}`}
+              >
+                <MessageSquare size={15} />
+              </button>
+              <button
+                className="focus-ring flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-55 text-slate-700 transition hover:bg-slate-600 hover:text-white"
+                onClick={() => onEdit(member.id)}
+                title="Edit member details"
+                aria-label={`Edit member details for ${member.name}`}
+              >
+                <Pencil size={15} />
+              </button>
+              <button
+                className="focus-ring flex h-9 w-9 items-center justify-center rounded-lg border border-rose-100 bg-rose-50/50 text-rose-700 transition hover:bg-rose-600 hover:text-white"
+                onClick={() => onSuspend(member.id)}
+                title="Suspend member access"
+                aria-label={`Suspend member access for ${member.name}`}
+              >
+                <UserX size={15} />
+              </button>
             </div>
           );
         },
@@ -380,29 +401,50 @@ export function MemberTable({
                 </div>
               </div>
 
-              <div className="mt-2 flex items-center gap-1 sm:mt-3 sm:gap-1.5">
-                <Button variant="icon" className="!h-8 !w-8 !min-h-0 !p-0 !border-border-default !bg-brand-white !text-text-secondary hover:!border-brand-primary hover:!text-brand-primary" title="View full member profile" aria-label={`View full profile for ${member.name}`} onClick={() => onView(member.id)}>
-                  <Eye size={15} />
-                </Button>
+              <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                <button
+                  className="focus-ring flex h-8 items-center gap-1 rounded-md border border-indigo-100 bg-indigo-50/50 px-2 text-[11px] font-bold text-indigo-700 transition"
+                  onClick={() => onView(member.id)}
+                  title="View full member profile"
+                  aria-label={`View full profile for ${member.name}`}
+                >
+                  <Eye size={13} />
+                  <span>View</span>
+                </button>
                 <a
-                  className="focus-ring grid h-8 w-8 place-items-center rounded-[var(--radius-card)] border border-green-200 bg-green-50 text-status-active transition-colors hover:border-status-active"
+                  className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-emerald-100 bg-emerald-50/50 text-emerald-700 transition"
                   href={createWhatsAppLink(member)}
                   target="_blank"
                   rel="noreferrer"
                   title="Send WhatsApp renewal reminder"
                   aria-label={`Send WhatsApp renewal reminder to ${member.name}`}
                 >
-                  <MessageCircle size={15} />
+                  <MessageCircle size={14} />
                 </a>
-                <Button variant="icon" className="!h-8 !w-8 !min-h-0 !p-0 !border-border-default !bg-brand-white !text-text-secondary hover:!border-brand-primary hover:!text-brand-primary" title="Send SMS renewal reminder" aria-label={`Send SMS renewal reminder to ${member.name}`} onClick={() => onSms(member.id)}>
-                  <MessageSquare size={15} />
-                </Button>
-                <Button variant="icon" className="!h-8 !w-8 !min-h-0 !p-0 !border-border-default !bg-brand-white !text-text-secondary hover:!border-brand-primary hover:!text-brand-primary" title="Edit member details" aria-label={`Edit member details for ${member.name}`} onClick={() => onEdit(member.id)}>
-                  <Pencil size={15} />
-                </Button>
-                <Button variant="icon" className="!h-8 !w-8 !min-h-0 !p-0 !border-border-default !bg-brand-white !text-text-secondary hover:!border-status-expired hover:!text-status-expired" title="Suspend member access" aria-label={`Suspend member access for ${member.name}`} onClick={() => onSuspend(member.id)}>
-                  <UserX size={15} />
-                </Button>
+                <button
+                  className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-violet-100 bg-violet-50/50 text-violet-700 transition"
+                  onClick={() => onSms(member.id)}
+                  title="Send SMS renewal reminder"
+                  aria-label={`Send SMS renewal reminder to ${member.name}`}
+                >
+                  <MessageSquare size={14} />
+                </button>
+                <button
+                  className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-700 transition"
+                  onClick={() => onEdit(member.id)}
+                  title="Edit member details"
+                  aria-label={`Edit member details for ${member.name}`}
+                >
+                  <Pencil size={14} />
+                </button>
+                <button
+                  className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-rose-100 bg-rose-50/50 text-rose-700 transition"
+                  onClick={() => onSuspend(member.id)}
+                  title="Suspend member access"
+                  aria-label={`Suspend member access for ${member.name}`}
+                >
+                  <UserX size={14} />
+                </button>
               </div>
             </motion.article>
           );

@@ -78,7 +78,7 @@ export function MemberProfile({ member, attendance, onBack, onEdit, onSms, onRen
             <h1 className="mt-1 text-[26px] font-extrabold leading-tight lg:mt-2 lg:text-[34px]">{member.name}</h1>
             <div className="mt-3 flex flex-wrap gap-1.5 lg:mt-4 lg:gap-2">
               <Badge tone={member.status === "Active" ? "active" : member.status === "Expired" ? "expired" : "neutral"}>{member.status}</Badge>
-              <Badge tone="primary">{member.goal}</Badge>
+              <Badge tone="neutral">{member.goal}</Badge>
               <Badge tone={member.paymentStatus === "Paid" ? "paid" : "pending"}>{member.paymentStatus}</Badge>
             </div>
             </div>
