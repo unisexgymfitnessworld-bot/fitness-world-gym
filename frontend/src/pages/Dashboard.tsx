@@ -11,6 +11,7 @@ import { MemberTable } from "../components/members/MemberTable";
 import { SmsModal } from "../components/sms/SmsModal";
 import { ConfirmModal } from "../components/ui/ConfirmModal";
 import { SettingsModal } from "../components/layout/SettingsModal";
+import { ReportExportModal } from "../components/layout/ReportExportModal";
 import { useAuth } from "../hooks/useAuth";
 import { useMembers } from "../hooks/useMembers";
 import { api, isApiConfigured } from "../lib/api";
@@ -34,6 +35,7 @@ export function Dashboard() {
   const pushToast = useAppStore((state) => state.pushToast);
   const [confirmingSuspendId, setConfirmingSuspendId] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isExportOpen, setIsExportOpen] = useState(false);
 
   const baseFilteredMembers = useMemo(() => {
     return members.filter((member) => {
@@ -161,7 +163,7 @@ export function Dashboard() {
   if (selectedMember) {
     return (
       <>
-        <TopBar trainer={trainer} onLogout={() => void signOut()} onSettings={() => setIsSettingsOpen(true)} />
+        <TopBar trainer={trainer} onLogout={() => void signOut()} onSettings={() => setIsSettingsOpen(true)} onReports={() => setIsExportOpen(true)} />
         <MemberProfile
           member={selectedMember}
           attendance={attendance}
@@ -181,7 +183,7 @@ export function Dashboard() {
 
   return (
     <>
-      <TopBar trainer={trainer} onLogout={() => void signOut()} onSettings={() => setIsSettingsOpen(true)} />
+      <TopBar trainer={trainer} onLogout={() => void signOut()} onSettings={() => setIsSettingsOpen(true)} onReports={() => setIsExportOpen(true)} />
       <main className="studio-shell animated-grid relative min-h-screen overflow-hidden">
         <div className="relative mx-auto grid max-w-[1500px] gap-3 px-3 pb-24 pt-3 sm:px-4 lg:gap-5 lg:px-8 lg:pt-6">
           <motion.section
@@ -301,6 +303,7 @@ export function Dashboard() {
         onClose={() => setConfirmingSuspendId(null)}
       />
       <SettingsModal open={isSettingsOpen} trainer={trainer} onClose={() => setIsSettingsOpen(false)} />
+      <ReportExportModal open={isExportOpen} members={members} onClose={() => setIsExportOpen(false)} />
       <Toast toast={toast} />
     </>
   );

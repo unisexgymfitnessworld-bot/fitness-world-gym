@@ -1,4 +1,4 @@
-import { LogOut, Settings } from "lucide-react";
+import { FileSpreadsheet, LogOut, Settings } from "lucide-react";
 import { motion } from "motion/react";
 import { FwMark } from "./FwMark";
 import { Button } from "../ui/Button";
@@ -9,9 +9,10 @@ interface TopBarProps {
   trainer: Trainer;
   onLogout: () => void;
   onSettings?: () => void;
+  onReports?: () => void;
 }
 
-export function TopBar({ trainer, onLogout, onSettings }: TopBarProps) {
+export function TopBar({ trainer, onLogout, onSettings, onReports }: TopBarProps) {
   return (
     <motion.header
       className="gradient-border-top sticky top-0 z-30 border-b border-white/[0.12] bg-[#080A16]/94 text-brand-white shadow-[0_16px_44px_rgba(0,0,0,0.26)] backdrop-blur-xl"
@@ -56,6 +57,11 @@ export function TopBar({ trainer, onLogout, onSettings }: TopBarProps) {
                 )}
               </div>
             </>
+          )}
+          {onReports && (
+            <Button aria-label="Monthly Reports" title="Monthly Reports" variant="ghost" className="!text-brand-white hover:!bg-white/10 hover:!text-brand-white !h-12 !w-12 !p-0" onClick={onReports}>
+              <FileSpreadsheet size={22} />
+            </Button>
           )}
           {onSettings && (
             <Button aria-label="Settings" title="Settings" variant="ghost" className="!text-brand-white hover:!bg-white/10 hover:!text-brand-white !h-12 !w-12 !p-0" onClick={onSettings}>
