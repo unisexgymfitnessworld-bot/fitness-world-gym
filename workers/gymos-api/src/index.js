@@ -768,51 +768,69 @@ async function runExpireStatus(env) {
 }
 
 async function runSmsReminder(env) {
-  const members = await membersDueInThreeDays(env);
   const hasSms = Boolean(env.FAST2SMS_API_KEY);
   const hasWhatsApp = Boolean(
     (env.WHATSAPP_INSTANCE_ID && env.WHATSAPP_TOKEN) ||
     (env.WHATSAPP_INSTANCE_ID === "self_hosted" && env.WHATSAPP_GATEWAY_URL)
   );
 
-  if (!hasSms && !hasWhatsApp) {
-    logWarn("notifications_not_configured", { dueMembers: members.length });
-    return 0;
-  }
-
   let sent = 0;
-  for (const member of members) {
-    try {
-      let sentSMS = false;
-      let sentWA = false;
-      const messageText = createReminderText(member);
 
-      if (hasSms) {
-        try {
-          await sendSms(env, member.phone, messageText);
-          sentSMS = true;
-        } catch (error) {
-          logError("sms_reminder_failed", error, { memberId: member.id });
+  // 1. Process 3-Day Alerts (SMS + WhatsApp)
+  const threeDayMembers = await membersDueInThreeDays(env);
+  if (threeDayMembers.length > 0 && (hasSms || hasWhatsApp)) {
+    for (const member of threeDayMembers) {
+      try {
+        let sentSMS = false;
+        let sentWA = false;
+        const messageText = createReminderText(member);
+
+        if (hasSms) {
+          try {
+            await sendSms(env, member.phone, messageText);
+            sentSMS = true;
+          } catch (error) {
+            logError("sms_3day_reminder_failed", error, { memberId: member.id });
+          }
         }
-      }
 
-      if (hasWhatsApp) {
-        try {
-          await sendWhatsApp(env, member.phone, messageText);
-          sentWA = true;
-        } catch (error) {
-          logError("whatsapp_reminder_failed", error, { memberId: member.id });
+        if (hasWhatsApp) {
+          try {
+            await sendWhatsApp(env, member.phone, messageText);
+            sentWA = true;
+          } catch (error) {
+            logError("whatsapp_3day_reminder_failed", error, { memberId: member.id });
+          }
         }
-      }
 
-      if (sentSMS || sentWA) {
-        await markReminderSent(env, member.id);
-        sent += 1;
+        if (sentSMS || sentWA) {
+          await markReminderSent(env, member.id);
+          sent += 1;
+        }
+      } catch (error) {
+        logError("reminder_3day_general_failed", error, { memberId: member.id });
       }
-    } catch (error) {
-      logError("reminder_general_failed", error, { memberId: member.id });
     }
   }
+
+  // 2. Process Due Day Alerts (WhatsApp ONLY)
+  if (hasWhatsApp) {
+    const todayMembers = await membersDueToday(env);
+    for (const member of todayMembers) {
+      try {
+        const messageText = createDueDayReminderText(member);
+        await sendWhatsApp(env, member.phone, messageText);
+        sent += 1;
+      } catch (error) {
+        logError("whatsapp_dueday_reminder_failed", error, { memberId: member.id });
+      }
+    }
+  }
+
+  if (!hasSms && !hasWhatsApp) {
+    logWarn("notifications_not_configured", { threeDayMembers: threeDayMembers.length });
+  }
+
   return sent;
 }
 
@@ -826,6 +844,21 @@ async function membersDueInThreeDays(env) {
   });
   const rows = await supabaseJson(env, `/members?${params.toString()}`);
   return rows.map(mapMember);
+}
+
+async function membersDueToday(env) {
+  const today = isoDateInTimeZone();
+  const params = new URLSearchParams({
+    select: "*",
+    membership_due: `eq.${today}`,
+    status: "eq.Active",
+  });
+  const rows = await supabaseJson(env, `/members?${params.toString()}`);
+  return rows.map(mapMember);
+}
+
+function createDueDayReminderText(member) {
+  return `Hi ${member.name}, your Fitness World membership expires today (${member.membershipDue}). Please renew to continue. - Fitness World`;
 }
 
 async function markReminderSent(env, memberId) {
