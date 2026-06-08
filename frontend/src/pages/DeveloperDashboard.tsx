@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Loader2, Save, ShieldCheck, Trash2, UserPlus, Wrench, Terminal, Cpu, Database, RefreshCw } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, Save, ShieldCheck, Trash2, UserPlus, Wrench, Terminal, Cpu, Database, RefreshCw, MessageCircle } from "lucide-react";
 import { motion } from "motion/react";
 import { SettingsModal } from "../components/layout/SettingsModal";
 import { Toast } from "../components/layout/Toast";
@@ -27,6 +27,7 @@ export function DeveloperDashboard() {
   const [loading, setLoading] = useState(true);
   const [fixing, setFixing] = useState(false);
   const [pinging, setPinging] = useState(false);
+  const [smsSending, setSmsSending] = useState(false);
   const [dbLatency, setDbLatency] = useState<number | null>(null);
   const [dbSleepStatus, setDbSleepStatus] = useState<string>("unknown");
   const [deleteAccount, setDeleteAccount] = useState<TrainerAccount | null>(null);
@@ -125,6 +126,27 @@ export function DeveloperDashboard() {
       });
     } finally {
       setFixing(false);
+    }
+  }
+
+  async function runSmsReminderFix(): Promise<void> {
+    setSmsSending(true);
+    try {
+      const result = await api.runDeveloperFix("send-sms-reminder");
+      pushToast({
+        title: "SMS check completed",
+        message: `${result.sent ?? 0} SMS reminders sent.`,
+        tone: "success",
+      });
+      await loadDeveloperData();
+    } catch (error) {
+      pushToast({
+        title: "SMS check failed",
+        message: error instanceof Error ? error.message : "Unable to run SMS check.",
+        tone: "error",
+      });
+    } finally {
+      setSmsSending(false);
     }
   }
 
@@ -236,6 +258,15 @@ export function DeveloperDashboard() {
               </Button>
 
               <Button
+                onClick={() => void runSmsReminderFix()}
+                disabled={smsSending}
+                className="bg-white/5 border border-white/10 text-green-400 hover:bg-white/10 hover:border-white/20 shadow-sm font-bold flex items-center gap-2"
+              >
+                {smsSending ? <Loader2 size={17} className="animate-spin" /> : <MessageCircle size={17} />}
+                Run SMS Check
+              </Button>
+
+              <Button
                 onClick={() => void handlePingDb()}
                 disabled={pinging}
                 className="bg-white/5 border border-white/10 text-[#38BDF8] hover:bg-white/10 hover:border-white/20 shadow-sm font-bold flex items-center gap-2"
@@ -322,24 +353,22 @@ export function DeveloperDashboard() {
               <div className="mt-5 grid gap-4">
                 <Input
                   label="Email"
+                  variant="dark"
                   value={createForm.email}
                   onChange={(event) => setCreateForm((form) => ({ ...form, email: event.target.value }))}
                   placeholder="trainer@fitnessworld.in"
-                  className="bg-white/5 border border-white/10 text-white placeholder-white/30 focus:border-brand-primary focus:bg-white/10"
-                  labelClassName="!text-white/85"
                 />
                 <Input
                   label="Display Name"
+                  variant="dark"
                   value={createForm.name}
                   onChange={(event) => setCreateForm((form) => ({ ...form, name: event.target.value }))}
                   placeholder="Trainer name"
-                  className="bg-white/5 border border-white/10 text-white placeholder-white/30 focus:border-brand-primary focus:bg-white/10"
-                  labelClassName="!text-white/85"
                 />
-                <label className="grid gap-2 text-[15px] font-semibold text-white/85">
+                <label className="grid gap-2 text-[15px] font-semibold text-white/80">
                   Role
                   <select
-                    className="focus-ring w-full rounded-card border border-white/10 bg-white/5 px-4 py-3 text-[15px] font-normal text-white focus:border-brand-primary focus:bg-[#101426]"
+                    className="focus-ring w-full rounded-[var(--radius-card)] border border-white/10 bg-white/5 px-4 py-3 text-[15px] font-normal text-white focus:border-brand-primary focus:bg-[#101426]"
                     value={createForm.role}
                     onChange={(event) => setCreateForm((form) => ({ ...form, role: event.target.value as "developer" | "trainer" }))}
                   >
@@ -349,12 +378,11 @@ export function DeveloperDashboard() {
                 </label>
                 <Input
                   label="Temporary Password"
+                  variant="dark"
                   type="password"
                   value={createForm.password}
                   onChange={(event) => setCreateForm((form) => ({ ...form, password: event.target.value }))}
                   placeholder="At least 12 characters"
-                  className="bg-white/5 border border-white/10 text-white placeholder-white/30 focus:border-brand-primary focus:bg-white/10"
-                  labelClassName="!text-white/85"
                 />
                 <Button
                   onClick={() => void createAccount()}
@@ -408,15 +436,14 @@ export function DeveloperDashboard() {
                       <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_140px_minmax(0,1fr)_auto_auto] lg:items-end">
                         <Input
                           label="Name"
+                          variant="dark"
                           value={form.name}
                           onChange={(e) => setEditForms((f) => ({ ...f, [account.id]: { ...form, name: e.target.value } }))}
-                          className="bg-white/5 border border-white/10 text-white placeholder-white/30 focus:border-brand-primary focus:bg-white/10"
-                          labelClassName="!text-white/70"
                         />
-                        <label className="grid gap-2 text-[15px] font-semibold text-white/70">
+                        <label className="grid gap-2 text-[15px] font-semibold text-white/80">
                           Role
                           <select
-                            className="focus-ring w-full rounded-card border border-white/10 bg-white/5 px-4 py-3 text-[15px] font-normal text-white focus:border-brand-primary focus:bg-[#101426]"
+                            className="focus-ring w-full rounded-[var(--radius-card)] border border-white/10 bg-white/5 px-4 py-3 text-[15px] font-normal text-white focus:border-brand-primary focus:bg-[#101426]"
                             value={form.role}
                             onChange={(e) => setEditForms((f) => ({ ...f, [account.id]: { ...form, role: e.target.value as "developer" | "trainer" } }))}
                           >
@@ -426,12 +453,11 @@ export function DeveloperDashboard() {
                         </label>
                         <Input
                           label="New Password"
+                          variant="dark"
                           type="password"
                           value={form.password}
                           onChange={(e) => setEditForms((f) => ({ ...f, [account.id]: { ...form, password: e.target.value } }))}
                           placeholder="Optional"
-                          className="bg-white/5 border border-white/10 text-white placeholder-white/30 focus:border-brand-primary focus:bg-white/10"
-                          labelClassName="!text-white/70"
                         />
                         <Button
                           variant="secondary"

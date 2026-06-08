@@ -413,6 +413,15 @@ async function runDeveloperFix(env, body) {
       changed,
     };
   }
+  if (action === "send-sms-reminder") {
+    const targetDate = isoDateInTimeZone(addDays(new Date(), 3));
+    const sent = await runSmsReminder(env);
+    return {
+      message: "SMS reminder sweep completed",
+      sent,
+      targetDate,
+    };
+  }
   throw new ApiError(400, "UNKNOWN_FIX_ACTION", "Unknown developer fix action");
 }
 
@@ -796,7 +805,12 @@ async function sendSms(env, phone, message) {
 
   const payload = await safeJson(response);
   if (!response.ok || payload?.return !== true) {
-    throw new ApiError(502, "FAST2SMS_FAILED", Array.isArray(payload?.message) ? payload.message.join(", ") : "Fast2SMS request failed");
+    const errorMsg = typeof payload?.message === "string"
+      ? payload.message
+      : Array.isArray(payload?.message)
+        ? payload.message.join(", ")
+        : `Fast2SMS request failed (Status: ${response.status})`;
+    throw new ApiError(502, "FAST2SMS_FAILED", errorMsg);
   }
 
   return payload.request_id ?? "sent";

@@ -49,8 +49,8 @@ export const api = {
   developerDiagnostics: () => request<DeveloperDiagnostics>("/developer/diagnostics"),
   developerLogs: () => request<LogEntry[]>("/developer/logs"),
   pingDb: () => request<{ latency: number; supabase: string; checkedAt: string }>("/developer/ping-db"),
-  runDeveloperFix: (action: "expire-members") =>
-    request<{ message: string; changed: number }>("/developer/fix", {
+  runDeveloperFix: (action: "expire-members" | "send-sms-reminder") =>
+    request<{ message: string; changed?: number; sent?: number }>("/developer/fix", {
       method: "POST",
       body: JSON.stringify({ action }),
     }),

@@ -5,18 +5,29 @@ interface InputProps extends ComponentPropsWithoutRef<"input"> {
   label: string;
   error?: string;
   labelClassName?: string;
+  variant?: "light" | "dark";
 }
 
-export function Input({ label, id, className, error, labelClassName, ...props }: InputProps) {
+export function Input({ label, id, className, error, labelClassName, variant = "light", ...props }: InputProps) {
   const inputId = id ?? label.toLowerCase().replace(/\s+/g, "-");
   return (
-    <label className={cn("grid gap-2 text-[15px] font-semibold text-text-primary", labelClassName)} htmlFor={inputId}>
+    <label
+      className={cn(
+        "grid gap-2 text-[15px] font-semibold",
+        variant === "light" ? "text-text-primary" : "text-white/80",
+        labelClassName
+      )}
+      htmlFor={inputId}
+    >
       {label}
       <input
         id={inputId}
         className={cn(
-          "studio-input w-full px-4 py-3 text-[15px] font-normal text-text-primary placeholder:text-text-muted",
-          error && "border-status-expired bg-red-50",
+          "w-full px-4 py-3 text-[15px] font-normal rounded-[var(--radius-card)] transition-all duration-200 outline-none",
+          variant === "light"
+            ? "studio-input text-text-primary placeholder:text-text-muted"
+            : "border border-white/10 bg-white/5 text-white placeholder:text-white/30 focus:border-brand-primary focus:bg-white/10 focus:ring-2 focus:ring-brand-primary/20",
+          error && (variant === "light" ? "border-status-expired bg-red-50" : "border-status-expired bg-red-950/20"),
           className,
         )}
         {...props}
