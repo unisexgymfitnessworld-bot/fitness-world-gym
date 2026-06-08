@@ -157,6 +157,18 @@ export function Login() {
               <ShieldCheck size={16} className="text-status-active" />
               Secure trainer access for shared gym data.
             </div>
+
+            <div className="mt-2 border-t border-border-default pt-4 flex flex-col gap-2">
+              <p className="text-[12px] font-bold uppercase tracking-wider text-text-muted">Desktop Application</p>
+              <a
+                href="/GymOS_macOS.zip"
+                download
+                className="focus-ring inline-flex min-h-11 items-center justify-center gap-2.5 rounded-[var(--radius-card)] border border-border-default bg-surface-raised px-4 py-2 text-[14px] font-bold text-text-primary transition-all hover:bg-brand-white hover:border-brand-primary/40 shadow-sm"
+              >
+                <img className="h-5 w-5 object-contain rounded-full" src="/brand/fitness-world-logo-tight.png" alt="FW Logo" />
+                Download for macOS (.app)
+              </a>
+            </div>
           </motion.form>
         </motion.div>
       </section>
