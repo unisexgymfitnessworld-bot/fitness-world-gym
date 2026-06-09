@@ -361,7 +361,7 @@ export function MemberSheet({ open, member, onClose, onSave }: MemberSheetProps)
                     </select>
                   </label>
                   <Input label="Start Date" type="date" error={errors.membershipStart?.message} {...register("membershipStart")} />
-                  <Input label="Due Date" type="date" error={errors.membershipDue?.message} {...register("membershipDue")} readOnly={planType !== "Custom"} />
+                  <Input label={planType === "Custom" ? "End Date" : "Due Date"} type="date" error={errors.membershipDue?.message} {...register("membershipDue")} readOnly={planType !== "Custom"} />
                   <Input label="Fees" type="number" step="1" error={errors.feesAmount?.message} {...register("feesAmount", { valueAsNumber: true })} />
                   <label className="grid gap-2 text-[14px] font-semibold lg:text-[15px]">
                     Payment Status

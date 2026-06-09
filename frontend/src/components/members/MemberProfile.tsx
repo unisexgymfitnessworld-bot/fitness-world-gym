@@ -84,7 +84,9 @@ export function MemberProfile({ member, attendance, onBack, onEdit, onSms, onRen
             </div>
           </div>
           <div className="rounded-[var(--radius-card)] border border-white/10 bg-white/10 p-3 lg:p-4">
-            <p className="text-[12px] font-bold uppercase tracking-wider text-white/60">Membership Due</p>
+            <p className="text-[12px] font-bold uppercase tracking-wider text-white/60">
+              {member.planType === "Custom" ? "End Date" : "Membership Due"}
+            </p>
             <p className="mt-1.5 text-[20px] font-black lg:mt-2 lg:text-[22px]">{formatDisplayDate(member.membershipDue)}</p>
             {member.paymentStatus === "Partially Paid" ? (
               <div className="mt-2 space-y-1 text-[13px] text-white/80 border-t border-white/10 pt-2 lg:mt-3">
