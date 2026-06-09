@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { genderOptions, goalOptions, paymentOptions, planOptions } from "../types";
+import { genderOptions, goalOptions, paymentOptions, planOptions, trainingTypeOptions } from "../types";
 
 const requiredText = z.string().trim().min(1, "Required");
 const optionalText = z.string().trim().optional();
@@ -82,6 +82,10 @@ export const memberInputSchema = z.object({
   feesAmount: z.coerce.number().min(0, "Fees cannot be negative"),
   paymentStatus: z.enum(paymentOptions),
   avatar: z.string().optional(),
+  trainingType: z.enum(trainingTypeOptions),
+  address: z.string().trim().default(""),
+  partialPaidAmount: z.coerce.number().min(0).default(0),
+  balanceAmount: z.coerce.number().min(0).default(0),
 }).superRefine((value, ctx) => {
   if (value.goal === "Other" && !value.goalOther) {
     ctx.addIssue({
@@ -89,6 +93,22 @@ export const memberInputSchema = z.object({
       path: ["goalOther"],
       message: "Describe the custom goal",
     });
+  }
+
+  if (value.paymentStatus === "Partially Paid") {
+    if (value.partialPaidAmount < 1) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["partialPaidAmount"],
+        message: "Partial amount must be at least 1",
+      });
+    } else if (value.partialPaidAmount > value.feesAmount) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["partialPaidAmount"],
+        message: "Partial amount cannot exceed fees amount",
+      });
+    }
   }
 });
 

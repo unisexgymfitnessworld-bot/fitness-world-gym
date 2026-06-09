@@ -6,8 +6,9 @@ const TIME_ZONE = "Asia/Kolkata";
 const GENDERS = new Set(["Male", "Female", "Other"]);
 const GOALS = new Set(["Weight Loss", "Weight Gain", "Muscle Gain", "General Fitness", "Other"]);
 const PLAN_TYPES = new Set(["1 Month", "3 Months", "6 Months", "1 Year", "Custom"]);
-const PAYMENT_STATUSES = new Set(["Paid", "Pending"]);
+const PAYMENT_STATUSES = new Set(["Paid", "Pending", "Partially Paid"]);
 const STATUS_VALUES = new Set(["Active", "Expired", "Suspended"]);
+const TRAINING_TYPES = new Set(["Personal", "General", "Couple"]);
 const DEFAULT_TRAINER_EMAILS = ["fitnessworld@gmail.com", "trainer@fitnessworld.in", "digimartrix26@gmail.com"];
 const rateLimitStore = new Map();
 const logBuffer = [];
@@ -1088,11 +1089,29 @@ function validateMemberInput(body) {
     feesAmount: requiredNumber(body.feesAmount ?? body.fees_amount, "fees amount", 0),
     paymentStatus: assertEnum(body.paymentStatus ?? body.payment_status, PAYMENT_STATUSES, "payment status"),
     avatar: typeof body.avatar === "string" ? body.avatar : undefined,
+    trainingType: assertEnum(body.trainingType ?? body.training_type ?? "General", TRAINING_TYPES, "training type"),
+    address: typeof body.address === "string" ? body.address.trim() : "",
+    partialPaidAmount: body.partialPaidAmount !== undefined || body.partial_paid_amount !== undefined
+      ? requiredNumber(body.partialPaidAmount ?? body.partial_paid_amount, "partial paid amount", 0)
+      : 0,
+    balanceAmount: body.balanceAmount !== undefined || body.balance_amount !== undefined
+      ? requiredNumber(body.balanceAmount ?? body.balance_amount, "balance amount", 0)
+      : 0,
   };
 
   if (!/^\d{10}$/.test(input.phone)) {
     throw new ApiError(400, "INVALID_PHONE", "Phone number must be 10 digits");
   }
+
+  if (input.paymentStatus === "Partially Paid") {
+    if (input.partialPaidAmount < 1) {
+      throw new ApiError(400, "INVALID_PARTIAL_AMOUNT", "Partial amount must be at least 1");
+    }
+    if (input.partialPaidAmount > input.feesAmount) {
+      throw new ApiError(400, "INVALID_PARTIAL_AMOUNT", "Partial amount cannot exceed fees amount");
+    }
+  }
+
   return input;
 }
 
@@ -1151,6 +1170,10 @@ function memberInputToDb(input) {
     fees_amount: input.feesAmount,
     payment_status: input.paymentStatus,
     avatar: input.avatar ?? null,
+    training_type: input.trainingType,
+    address: input.address,
+    partial_paid_amount: input.partialPaidAmount,
+    balance_amount: input.balanceAmount,
   };
 }
 
@@ -1182,6 +1205,10 @@ function mapMember(row) {
     smsSent3days: row.sms_sent_3days,
     ownerUserId: row.owner_user_id ?? undefined,
     avatar: row.avatar ?? undefined,
+    trainingType: row.training_type,
+    address: row.address,
+    partialPaidAmount: Number(row.partial_paid_amount || 0),
+    balanceAmount: Number(row.balance_amount || 0),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

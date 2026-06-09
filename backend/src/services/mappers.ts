@@ -27,6 +27,10 @@ export function mapMember(row: DbMember): Member {
     status: row.status,
     smsSent3days: row.sms_sent_3days,
     avatar: row.avatar ?? undefined,
+    trainingType: row.training_type,
+    address: row.address,
+    partialPaidAmount: Number(row.partial_paid_amount),
+    balanceAmount: Number(row.balance_amount),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -54,6 +58,10 @@ export function memberInputToDb(input: MemberInput) {
     fees_amount: input.feesAmount,
     payment_status: input.paymentStatus,
     avatar: input.avatar ?? null,
+    training_type: input.trainingType,
+    address: input.address,
+    partial_paid_amount: input.partialPaidAmount,
+    balance_amount: input.balanceAmount,
   };
 }
 

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { calculateBmi, calculateDueDate, normalizePhone, todayISO } from "../../lib/utils";
 import { memberInputSchema, type MemberInputValues } from "../../lib/validations";
-import { genderOptions, goalOptions, paymentOptions, planOptions, type Member, type MemberInput } from "../../types";
+import { genderOptions, goalOptions, paymentOptions, planOptions, trainingTypeOptions, type Member, type MemberInput } from "../../types";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 
@@ -36,6 +36,10 @@ const fieldNames = [
   "feesAmount",
   "paymentStatus",
   "avatar",
+  "trainingType",
+  "address",
+  "partialPaidAmount",
+  "balanceAmount",
 ] as const satisfies readonly (keyof MemberInputValues)[];
 
 function isMemberInputField(value: PropertyKey): value is keyof MemberInputValues {
@@ -43,6 +47,19 @@ function isMemberInputField(value: PropertyKey): value is keyof MemberInputValue
 }
 
 function defaults(member: Member | null): MemberInputValues {
+  const defaultFees = member?.feesAmount ?? 1800;
+  let defaultPartial = member?.partialPaidAmount ?? 0;
+  let defaultBalance = member?.balanceAmount ?? 0;
+
+  if (member) {
+    defaultPartial = member.partialPaidAmount;
+    defaultBalance = member.balanceAmount;
+  } else {
+    // defaults for new member (which is Pending)
+    defaultPartial = 0;
+    defaultBalance = defaultFees;
+  }
+
   return {
     name: member?.name ?? "",
     phone: member?.phone ?? "",
@@ -61,9 +78,13 @@ function defaults(member: Member | null): MemberInputValues {
     planType: member?.planType ?? "1 Month",
     membershipStart: member?.membershipStart ?? todayISO(),
     membershipDue: member?.membershipDue ?? calculateDueDate(todayISO(), "1 Month"),
-    feesAmount: member?.feesAmount ?? 1800,
+    feesAmount: defaultFees,
     paymentStatus: member?.paymentStatus ?? "Pending",
     avatar: member?.avatar ?? "",
+    trainingType: member?.trainingType ?? "General",
+    address: member?.address ?? "",
+    partialPaidAmount: defaultPartial,
+    balanceAmount: defaultBalance,
   };
 }
 
@@ -109,6 +130,9 @@ export function MemberSheet({ open, member, onClose, onSave }: MemberSheetProps)
   const planType = watch("planType");
   const membershipStart = watch("membershipStart");
   const goal = watch("goal");
+  const feesAmount = watch("feesAmount") || 0;
+  const paymentStatus = watch("paymentStatus");
+  const partialPaidAmount = watch("partialPaidAmount") || 0;
   const bmi = calculateBmi(Number(weight), Number(height));
 
   useEffect(() => {
@@ -116,6 +140,19 @@ export function MemberSheet({ open, member, onClose, onSave }: MemberSheetProps)
       setValue("membershipDue", calculateDueDate(membershipStart, planType), { shouldDirty: true });
     }
   }, [membershipStart, planType, setValue]);
+
+  useEffect(() => {
+    if (paymentStatus === "Paid") {
+      setValue("partialPaidAmount", feesAmount, { shouldDirty: true });
+      setValue("balanceAmount", 0, { shouldDirty: true });
+    } else if (paymentStatus === "Pending") {
+      setValue("partialPaidAmount", 0, { shouldDirty: true });
+      setValue("balanceAmount", feesAmount, { shouldDirty: true });
+    } else if (paymentStatus === "Partially Paid") {
+      const bal = Math.max(0, feesAmount - partialPaidAmount);
+      setValue("balanceAmount", bal, { shouldDirty: true });
+    }
+  }, [paymentStatus, feesAmount, partialPaidAmount, setValue]);
 
   function requestClose(): void {
     if (isDirty) {
@@ -219,6 +256,19 @@ export function MemberSheet({ open, member, onClose, onSave }: MemberSheetProps)
                 )}
               </div>
 
+              <Section title="Training Type" delay={0.05}>
+                <div className="grid gap-3 md:grid-cols-1 lg:gap-4">
+                  <label className="grid gap-2 text-[14px] font-semibold lg:text-[15px]">
+                    Training Type
+                    <select className="studio-input w-full px-3 py-2.5 lg:px-4 lg:py-3" {...register("trainingType")}>
+                      {trainingTypeOptions.map((option) => (
+                        <option key={option}>{option}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              </Section>
+
               <Section title="Personal" delay={0.1}>
                 <div className="grid gap-3 md:grid-cols-2 lg:gap-4">
                   <Input label="Name" error={errors.name?.message} {...register("name")} />
@@ -244,6 +294,17 @@ export function MemberSheet({ open, member, onClose, onSave }: MemberSheetProps)
                   </label>
                   <Input label="Join Date" type="date" error={errors.joinDate?.message} {...register("joinDate")} />
                   <Input label="Reg No" value={member?.regNo ?? "Auto generated"} readOnly />
+                </div>
+                <div className="mt-3 lg:mt-4">
+                  <label className="grid gap-2 text-[14px] font-semibold lg:text-[15px]">
+                    Address
+                    <textarea
+                      className="studio-input min-h-20 w-full px-3 py-2.5 text-[14px] font-normal lg:min-h-24 lg:px-4 lg:py-3 lg:text-[15px]"
+                      placeholder="Enter member's address..."
+                      {...register("address")}
+                    />
+                    {errors.address?.message && <p className="text-[12px] font-medium text-status-expired">{errors.address.message}</p>}
+                  </label>
                 </div>
               </Section>
 
@@ -300,7 +361,7 @@ export function MemberSheet({ open, member, onClose, onSave }: MemberSheetProps)
                     </select>
                   </label>
                   <Input label="Start Date" type="date" error={errors.membershipStart?.message} {...register("membershipStart")} />
-                  <Input label="Due Date" type="date" error={errors.membershipDue?.message} {...register("membershipDue")} />
+                  <Input label="Due Date" type="date" error={errors.membershipDue?.message} {...register("membershipDue")} readOnly={planType !== "Custom"} />
                   <Input label="Fees" type="number" step="1" error={errors.feesAmount?.message} {...register("feesAmount", { valueAsNumber: true })} />
                   <label className="grid gap-2 text-[14px] font-semibold lg:text-[15px]">
                     Payment Status
@@ -310,6 +371,23 @@ export function MemberSheet({ open, member, onClose, onSave }: MemberSheetProps)
                       ))}
                     </select>
                   </label>
+                  {paymentStatus === "Partially Paid" && (
+                    <>
+                      <Input
+                        label="Partial Paid Amount"
+                        type="number"
+                        step="1"
+                        error={errors.partialPaidAmount?.message}
+                        {...register("partialPaidAmount", { valueAsNumber: true })}
+                      />
+                      <div className="rounded-[var(--radius-card)] bg-amber-50/50 border border-amber-200 p-3 lg:p-4">
+                        <p className="text-[12px] font-bold uppercase tracking-wider text-amber-700">Remaining Balance</p>
+                        <p className="mt-1.5 text-[24px] font-black text-amber-900 lg:mt-2 lg:text-[26px]">
+                          ₹{watch("balanceAmount") || 0}
+                        </p>
+                      </div>
+                    </>
+                  )}
                 </div>
               </Section>
 

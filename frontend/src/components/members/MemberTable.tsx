@@ -81,7 +81,11 @@ export function MemberTable({
       "Due Date",
       "Fees",
       "Payment Status",
-      "Status"
+      "Status",
+      "Training Type",
+      "Address",
+      "Partial Paid Amount",
+      "Balance Amount"
     ];
     
     const csvRows = [headers.join(",")];
@@ -103,7 +107,11 @@ export function MemberTable({
         `"${member.membershipDue}"`,
         member.feesAmount,
         `"${member.paymentStatus}"`,
-        `"${member.status}"`
+        `"${member.status}"`,
+        `"${member.trainingType || "General"}"`,
+        `"${(member.address || "").replace(/"/g, '""')}"`,
+        member.partialPaidAmount ?? 0,
+        member.balanceAmount ?? 0
       ];
       csvRows.push(row.join(","));
     }
@@ -181,11 +189,15 @@ export function MemberTable({
       }),
       columnHelper.accessor("paymentStatus", {
         header: "Payment",
-        cell: (info) => (
-          <Badge tone={info.getValue() === "Paid" ? "paid" : "pending"}>
-            {info.getValue()}
-          </Badge>
-        ),
+        cell: (info) => {
+          const status = info.getValue();
+          const tone = status === "Paid" ? "paid" : status === "Partially Paid" ? "due" : "pending";
+          return (
+            <Badge tone={tone}>
+              {status}
+            </Badge>
+          );
+        },
       }),
       columnHelper.accessor("status", {
         header: "Status",
@@ -394,7 +406,7 @@ export function MemberTable({
                 <div className="rounded-md bg-surface-overlay px-2 py-1.5 sm:rounded-lg sm:py-2">
                   <p className="text-[10px] font-bold uppercase text-text-muted">Pay</p>
                   <p className="mt-0.5">
-                    <Badge tone={member.paymentStatus === "Paid" ? "paid" : "pending"}>
+                    <Badge tone={member.paymentStatus === "Paid" ? "paid" : member.paymentStatus === "Partially Paid" ? "due" : "pending"}>
                       {member.paymentStatus}
                     </Badge>
                   </p>

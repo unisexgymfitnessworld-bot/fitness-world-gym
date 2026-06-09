@@ -1,14 +1,16 @@
 export const genderOptions = ["Male", "Female", "Other"] as const;
 export const goalOptions = ["Weight Loss", "Weight Gain", "Muscle Gain", "General Fitness", "Other"] as const;
 export const planOptions = ["1 Month", "3 Months", "6 Months", "1 Year", "Custom"] as const;
-export const paymentOptions = ["Paid", "Pending"] as const;
+export const paymentOptions = ["Paid", "Pending", "Partially Paid"] as const;
 export const statusOptions = ["Active", "Expired", "Suspended"] as const;
+export const trainingTypeOptions = ["Personal", "General", "Couple"] as const;
 
 export type Gender = (typeof genderOptions)[number];
 export type Goal = (typeof goalOptions)[number];
 export type PlanType = (typeof planOptions)[number];
 export type PaymentStatus = (typeof paymentOptions)[number];
 export type MemberStatus = (typeof statusOptions)[number];
+export type TrainingType = (typeof trainingTypeOptions)[number];
 
 export interface Trainer {
   id: string;
@@ -45,6 +47,10 @@ export interface Member {
   smsSent3days: boolean;
   ownerUserId?: string;
   avatar?: string;
+  trainingType: TrainingType;
+  address: string;
+  partialPaidAmount: number;
+  balanceAmount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -110,6 +116,10 @@ export interface MemberInput {
   feesAmount: number;
   paymentStatus: PaymentStatus;
   avatar?: string;
+  trainingType: TrainingType;
+  address: string;
+  partialPaidAmount: number;
+  balanceAmount: number;
 }
 
 export interface AttendanceEntry {

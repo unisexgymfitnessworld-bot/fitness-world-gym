@@ -79,14 +79,31 @@ export function MemberProfile({ member, attendance, onBack, onEdit, onSms, onRen
             <div className="mt-3 flex flex-wrap gap-1.5 lg:mt-4 lg:gap-2">
               <Badge tone={member.status === "Active" ? "active" : member.status === "Expired" ? "expired" : "neutral"}>{member.status}</Badge>
               <Badge tone="neutral">{member.goal}</Badge>
-              <Badge tone={member.paymentStatus === "Paid" ? "paid" : "pending"}>{member.paymentStatus}</Badge>
+              <Badge tone={member.paymentStatus === "Paid" ? "paid" : member.paymentStatus === "Partially Paid" ? "due" : "pending"}>{member.paymentStatus}</Badge>
             </div>
             </div>
           </div>
           <div className="rounded-[var(--radius-card)] border border-white/10 bg-white/10 p-3 lg:p-4">
             <p className="text-[12px] font-bold uppercase tracking-wider text-white/60">Membership Due</p>
             <p className="mt-1.5 text-[20px] font-black lg:mt-2 lg:text-[22px]">{formatDisplayDate(member.membershipDue)}</p>
-            <p className="mt-2 text-[14px] text-white/70 lg:mt-3 lg:text-[15px]">{formatCurrency(member.feesAmount)}</p>
+            {member.paymentStatus === "Partially Paid" ? (
+              <div className="mt-2 space-y-1 text-[13px] text-white/80 border-t border-white/10 pt-2 lg:mt-3">
+                <div className="flex justify-between">
+                  <span>Total Fees:</span>
+                  <span className="font-bold">{formatCurrency(member.feesAmount)}</span>
+                </div>
+                <div className="flex justify-between text-green-300">
+                  <span>Paid:</span>
+                  <span className="font-bold">{formatCurrency(member.partialPaidAmount)}</span>
+                </div>
+                <div className="flex justify-between text-amber-300">
+                  <span>Balance:</span>
+                  <span className="font-bold">{formatCurrency(member.balanceAmount)}</span>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-2 text-[14px] text-white/70 lg:mt-3 lg:text-[15px]">{formatCurrency(member.feesAmount)}</p>
+            )}
           </div>
         </div>
 
@@ -102,6 +119,8 @@ export function MemberProfile({ member, attendance, onBack, onEdit, onSms, onRen
               <ProfileRow label="Phone" value={formatPhone(member.phone)} mono />
               <ProfileRow label="Age" value={`${member.age}`} />
               <ProfileRow label="Gender" value={member.gender} />
+              <ProfileRow label="Training Type" value={member.trainingType} />
+              <ProfileRow label="Address" value={member.address || "None recorded"} />
               <ProfileRow label="Join Date" value={formatDisplayDate(member.joinDate)} />
               <ProfileRow label="BMI" value={`${member.bmi}`} />
               <ProfileRow label="Weight" value={`${member.weightKg} kg`} />

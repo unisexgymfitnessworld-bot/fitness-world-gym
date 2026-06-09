@@ -8,8 +8,9 @@ export interface AuthenticatedRequest extends Request {
 export type Gender = "Male" | "Female" | "Other";
 export type Goal = "Weight Loss" | "Weight Gain" | "Muscle Gain" | "General Fitness" | "Other";
 export type PlanType = "1 Month" | "3 Months" | "6 Months" | "1 Year" | "Custom";
-export type PaymentStatus = "Paid" | "Pending";
+export type PaymentStatus = "Paid" | "Pending" | "Partially Paid";
 export type MemberStatus = "Active" | "Expired" | "Suspended";
+export type TrainingType = "Personal" | "General" | "Couple";
 
 export interface DbMember {
   id: string;
@@ -37,6 +38,10 @@ export interface DbMember {
   status: MemberStatus;
   sms_sent_3days: boolean;
   avatar: string | null;
+  training_type: TrainingType;
+  address: string;
+  partial_paid_amount: number;
+  balance_amount: number;
   created_at: string;
   updated_at: string;
 }
@@ -67,6 +72,10 @@ export interface Member {
   status: MemberStatus;
   smsSent3days: boolean;
   avatar?: string;
+  trainingType: TrainingType;
+  address: string;
+  partialPaidAmount: number;
+  balanceAmount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -92,6 +101,10 @@ export interface MemberInput {
   feesAmount: number;
   paymentStatus: PaymentStatus;
   avatar?: string;
+  trainingType: TrainingType;
+  address: string;
+  partialPaidAmount: number;
+  balanceAmount: number;
 }
 
 export interface DbAttendanceEntry {

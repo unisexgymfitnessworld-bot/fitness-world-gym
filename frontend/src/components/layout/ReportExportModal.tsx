@@ -108,6 +108,10 @@ export function ReportExportModal({ open, members, onClose }: ReportExportModalP
       "Fees Amount",
       "Payment Status",
       "Status",
+      "Training Type",
+      "Address",
+      "Partial Paid Amount",
+      "Balance Amount",
       "Created At",
       "Updated At"
     ];
@@ -135,6 +139,10 @@ export function ReportExportModal({ open, members, onClose }: ReportExportModalP
         member.feesAmount,
         member.paymentStatus,
         member.status,
+        member.trainingType || "General",
+        member.address || "",
+        member.partialPaidAmount ?? 0,
+        member.balanceAmount ?? 0,
         member.createdAt,
         member.updatedAt
       ];
