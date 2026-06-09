@@ -418,8 +418,8 @@ export function Dashboard() {
         title={confirmingMember?.status === "Suspended" ? "Unsuspend Member" : "Suspend Member"}
         message={
           confirmingMember?.status === "Suspended"
-            ? `Are you sure you want to unsuspend ${confirmingMember?.name}? Their plan status will be restored to Active.`
-            : `Are you sure you want to suspend ${confirmingMember?.name}? Their active plan status will be updated to Suspended.`
+            ? `Are you sure you want to unsuspend ${confirmingMember?.name ?? "this member"}? Their plan status will be restored to Active.`
+            : `Are you sure you want to suspend ${confirmingMember?.name ?? "this member"}? Their active plan status will be updated to Suspended.`
         }
         confirmText={confirmingMember?.status === "Suspended" ? "Unsuspend" : "Suspend"}
         variant={confirmingMember?.status === "Suspended" ? "success" : "danger"}
