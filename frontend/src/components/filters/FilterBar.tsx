@@ -1,20 +1,50 @@
 import { Search, SlidersHorizontal } from "lucide-react";
 import { motion } from "motion/react";
+import { useMemo } from "react";
 import { cn } from "../../lib/utils";
-import { goalOptions, type MemberFilters, paymentOptions } from "../../types";
+import { goalOptions, type MemberFilters, paymentOptions, type Member } from "../../types";
 
 interface FilterBarProps {
   filters: MemberFilters;
   resultCount: number;
   onChange: <K extends keyof MemberFilters>(key: K, value: MemberFilters[K]) => void;
+  members: Member[];
 }
 
-export function FilterBar({ filters, resultCount, onChange }: FilterBarProps) {
+export function FilterBar({ filters, resultCount, onChange, members }: FilterBarProps) {
   const statusHelp: Record<"All" | "Active" | "Expired", string> = {
     All: "Show all members in this trainer workspace",
     Active: "Show members whose membership is currently active",
     Expired: "Show members whose membership due date has passed",
   };
+
+  const monthOptions = useMemo(() => {
+    const months = new Set<string>();
+    
+    // Add current month by default
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    months.add(currentMonth);
+
+    // Collect months from members
+    members.forEach((m) => {
+      if (m.membershipStart) {
+        months.add(m.membershipStart.slice(0, 7));
+      }
+      if (m.joinDate) {
+        months.add(m.joinDate.slice(0, 7));
+      }
+    });
+
+    // Sort descending
+    return Array.from(months)
+      .sort((a, b) => b.localeCompare(a))
+      .map((m) => {
+        const [year, monthStr] = m.split("-");
+        const dateObj = new Date(Number(year), Number(monthStr) - 1, 1);
+        const label = dateObj.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+        return { value: m, label };
+      });
+  }, [members]);
 
   return (
     <motion.section
@@ -82,6 +112,20 @@ export function FilterBar({ filters, resultCount, onChange }: FilterBarProps) {
           <option>All Payments</option>
           {paymentOptions.map((payment) => (
             <option key={payment}>{payment}</option>
+          ))}
+        </select>
+
+        <select
+          aria-label="Month filter"
+          value={filters.month}
+          onChange={(event) => onChange("month", event.target.value)}
+          className="focus-ring min-h-10 shrink-0 rounded-[var(--radius-card)] border border-border-default bg-brand-white px-3 text-[14px] font-semibold text-text-primary lg:min-h-12 lg:text-[15px]"
+        >
+          <option value="All">All Months</option>
+          {monthOptions.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
           ))}
         </select>
 

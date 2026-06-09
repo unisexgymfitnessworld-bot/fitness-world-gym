@@ -43,9 +43,54 @@ export function Dashboard() {
       const goalMatch = filters.goal === "All Goals" || member.goal === filters.goal;
       const paymentMatch = filters.payment === "All Payments" || member.paymentStatus === filters.payment;
       const dueMatch = !filters.dueSoon || (member.status === "Active" && daysUntil(member.membershipDue) >= 0 && daysUntil(member.membershipDue) <= 3);
-      return statusMatch && goalMatch && paymentMatch && dueMatch;
+      const monthMatch = filters.month === "All" || 
+        (member.membershipStart && member.membershipStart.startsWith(filters.month)) ||
+        (member.joinDate && member.joinDate.startsWith(filters.month));
+      return statusMatch && goalMatch && paymentMatch && dueMatch && monthMatch;
     });
-  }, [filters.dueSoon, filters.goal, filters.payment, filters.status, members]);
+  }, [filters.dueSoon, filters.goal, filters.payment, filters.status, filters.month, members]);
+
+  const monthlyStats = useMemo(() => {
+    if (filters.month === "All") return null;
+
+    const monthMembers = members.filter((member) => 
+      (member.membershipStart && member.membershipStart.startsWith(filters.month)) ||
+      (member.joinDate && member.joinDate.startsWith(filters.month))
+    );
+
+    let expected = 0;
+    let collected = 0;
+    let pending = 0;
+
+    monthMembers.forEach((m) => {
+      expected += m.feesAmount;
+      if (m.paymentStatus === "Paid") {
+        collected += m.feesAmount;
+      } else if (m.paymentStatus === "Partially Paid") {
+        collected += m.partialPaidAmount || 0;
+        pending += m.balanceAmount || 0;
+      } else {
+        pending += m.feesAmount;
+      }
+    });
+
+    const collectionRate = expected > 0 ? Math.round((collected / expected) * 100) : 0;
+
+    const [year, monthStr] = filters.month.split("-");
+    const dateObj = new Date(Number(year), Number(monthStr) - 1, 1);
+    const monthLabel = dateObj.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+    return {
+      monthLabel,
+      expected,
+      collected,
+      pending,
+      collectionRate,
+      count: monthMembers.length
+    };
+  }, [members, filters.month]);
+
+  const confirmingMember = members.find((member) => member.id === confirmingSuspendId) ?? null;
 
   const selectedMember = members.find((member) => member.id === selectedMemberId) ?? null;
   const editingMember = members.find((member) => member.id === editingMemberId) ?? null;
@@ -86,17 +131,19 @@ export function Dashboard() {
   }
 
   async function handleSuspend(memberId: string): Promise<void> {
+    const member = members.find((m) => m.id === memberId);
+    const wasSuspended = member?.status === "Suspended";
     try {
       await suspendMember(memberId);
       pushToast({
-        title: "Member suspended",
-        message: "Status changed successfully.",
+        title: wasSuspended ? "Member restored" : "Member suspended",
+        message: wasSuspended ? "Member is now Active." : "Status changed successfully.",
         tone: "info",
       });
     } catch (error) {
       pushToast({
-        title: "Suspend failed",
-        message: error instanceof Error ? error.message : "Unable to suspend member",
+        title: wasSuspended ? "Unsuspend failed" : "Suspend failed",
+        message: error instanceof Error ? error.message : "Unable to change status",
         tone: "error",
       });
     }
@@ -265,7 +312,83 @@ export function Dashboard() {
             </aside>
           </motion.section>
 
-          <FilterBar filters={filters} resultCount={baseFilteredMembers.length} onChange={setFilter} />
+          <FilterBar filters={filters} resultCount={baseFilteredMembers.length} onChange={setFilter} members={members} />
+          
+          {monthlyStats && (
+            <motion.section
+              className="studio-card overflow-hidden rounded-[var(--radius-panel)] bg-gradient-to-br from-brand-white/85 to-brand-white/60 border border-border-default shadow-[0_12px_40px_rgba(26,26,46,0.04)] backdrop-blur-md p-4 lg:p-6"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.4 }}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-default pb-3 lg:pb-4">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-brand-primary">Financial Analysis</p>
+                  <h3 className="text-[18px] font-black text-text-primary sm:text-[20px]">
+                    Revenue & Profit Report: <span className="gradient-text">{monthlyStats.monthLabel}</span>
+                  </h3>
+                </div>
+                <div className="rounded-full bg-brand-primary-light px-3 py-1 text-[13px] font-bold text-brand-primary shadow-sm">
+                  {monthlyStats.count} memberships
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-3 lg:gap-4">
+                {/* Total Expected Card */}
+                <div className="rounded-[var(--radius-card)] border border-slate-100 bg-brand-white p-3 lg:p-4 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Total Invoiced (Expected)</span>
+                    <p className="mt-1 text-[20px] font-black text-text-primary lg:text-[24px]">
+                      {formatCurrency(monthlyStats.expected)}
+                    </p>
+                  </div>
+                  <p className="mt-2 text-[11px] font-semibold text-text-secondary">Expected total revenue generated</p>
+                </div>
+
+                {/* Received / Profit Card */}
+                <div className="rounded-[var(--radius-card)] border border-emerald-100 bg-emerald-50/20 p-3 lg:p-4 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">Received Income (Collected)</span>
+                    <p className="mt-1 text-[20px] font-black text-status-active lg:text-[24px]">
+                      {formatCurrency(monthlyStats.collected)}
+                    </p>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-emerald-700">Actual profit collected</span>
+                    <span className="text-[11px] font-extrabold text-status-active bg-green-50 px-1.5 py-0.5 rounded">
+                      {monthlyStats.collectionRate}%
+                    </span>
+                  </div>
+                </div>
+
+                {/* Pending Collection Card */}
+                <div className="rounded-[var(--radius-card)] border border-amber-100 bg-amber-50/20 p-3 lg:p-4 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800">Pending Collection (Receivable)</span>
+                    <p className="mt-1 text-[20px] font-black text-status-due lg:text-[24px]">
+                      {formatCurrency(monthlyStats.pending)}
+                    </p>
+                  </div>
+                  <p className="mt-2 text-[11px] font-semibold text-amber-700">Outstanding gym fees balance</p>
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div className="mt-4 lg:mt-5">
+                <div className="flex items-center justify-between text-[12px] font-bold text-text-secondary">
+                  <span>Collection Progress</span>
+                  <span>{monthlyStats.collectionRate}% Completed</span>
+                </div>
+                <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-brand-primary to-status-active transition-all duration-500"
+                    style={{ width: `${monthlyStats.collectionRate}%` }}
+                  />
+                </div>
+              </div>
+            </motion.section>
+          )}
+
           <MemberTable
             members={baseFilteredMembers}
             query={filters.query}
@@ -281,6 +404,7 @@ export function Dashboard() {
               setFilter("status", "All");
               setFilter("goal", "All Goals");
               setFilter("payment", "All Payments");
+              setFilter("month", "All");
               setFilter("dueSoon", false);
             }}
           />
@@ -291,9 +415,14 @@ export function Dashboard() {
       <SmsModal member={smsMember} open={smsMember !== null} onClose={() => setSmsMemberId(null)} onSend={handleSms} />
       <ConfirmModal
         open={confirmingSuspendId !== null}
-        title="Suspend Member"
-        message="Are you sure you want to suspend this member? Their active plan status will be updated to Suspended."
-        confirmText="Suspend"
+        title={confirmingMember?.status === "Suspended" ? "Unsuspend Member" : "Suspend Member"}
+        message={
+          confirmingMember?.status === "Suspended"
+            ? `Are you sure you want to unsuspend ${confirmingMember?.name}? Their plan status will be restored to Active.`
+            : `Are you sure you want to suspend ${confirmingMember?.name}? Their active plan status will be updated to Suspended.`
+        }
+        confirmText={confirmingMember?.status === "Suspended" ? "Unsuspend" : "Suspend"}
+        variant={confirmingMember?.status === "Suspended" ? "success" : "danger"}
         onConfirm={async () => {
           if (confirmingSuspendId) {
             await handleSuspend(confirmingSuspendId);

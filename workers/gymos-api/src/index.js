@@ -682,10 +682,12 @@ async function renewMember(env, user, memberId, membershipStart, membershipDue, 
 }
 
 async function suspendMember(env, user, memberId) {
+  const member = await getMember(env, user, memberId);
+  const nextStatus = member.status === "Suspended" ? "Active" : "Suspended";
   const rows = await supabaseJson(env, `/members?id=eq.${encodeURIComponent(memberId)}&owner_user_id=${ownerFilter(user)}&select=*`, {
     method: "PATCH",
     headers: { Prefer: "return=representation" },
-    body: JSON.stringify({ status: "Suspended" }),
+    body: JSON.stringify({ status: nextStatus }),
   });
   if (!rows[0]) throw new ApiError(404, "MEMBER_NOT_FOUND", "Member not found");
   return mapMember(rows[0]);

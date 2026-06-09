@@ -25,6 +25,7 @@ export const useAppStore = create<AppState>((set) => ({
     goal: "All Goals",
     payment: "All Payments",
     dueSoon: false,
+    month: "All",
   },
   selectedMemberId: null,
   editingMemberId: null,

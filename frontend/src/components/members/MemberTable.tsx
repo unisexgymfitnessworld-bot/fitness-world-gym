@@ -8,7 +8,7 @@ import {
   type FilterFn,
   type SortingState,
 } from "@tanstack/react-table";
-import { Eye, MessageCircle, MessageSquare, Pencil, UserX, SearchX, Plus, Download } from "lucide-react";
+import { Eye, MessageCircle, MessageSquare, Pencil, UserX, SearchX, Plus, Download, UserCheck } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { createWhatsAppLink, formatDisplayDate, formatPhone, getDueTone } from "../../lib/utils";
@@ -149,7 +149,14 @@ export function MemberTable({
                   <span className="text-[12px] font-bold text-text-muted">{member.name.slice(0, 2).toUpperCase()}</span>
                 )}
               </div>
-              <span className="font-semibold text-text-primary">{info.getValue()}</span>
+              <div className="flex flex-col">
+                <span className="font-semibold text-text-primary">{info.getValue()}</span>
+                {member.trainingType && (
+                  <span className="text-[11px] font-medium text-text-muted">
+                    {member.trainingType} Training
+                  </span>
+                )}
+              </div>
             </div>
           );
         },
@@ -191,11 +198,19 @@ export function MemberTable({
         header: "Payment",
         cell: (info) => {
           const status = info.getValue();
+          const member = info.row.original;
           const tone = status === "Paid" ? "paid" : status === "Partially Paid" ? "due" : "pending";
           return (
-            <Badge tone={tone}>
-              {status}
-            </Badge>
+            <div className="flex flex-col gap-1">
+              <Badge tone={tone}>
+                {status}
+              </Badge>
+              {status === "Partially Paid" && member.balanceAmount > 0 && (
+                <span className="text-[11px] font-bold text-status-due">
+                  Due: ₹{member.balanceAmount}
+                </span>
+              )}
+            </div>
           );
         },
       }),
@@ -252,14 +267,25 @@ export function MemberTable({
               >
                 <Pencil size={15} />
               </button>
-              <button
-                className="focus-ring flex h-9 w-9 items-center justify-center rounded-lg border border-rose-100 bg-rose-50/50 text-rose-700 transition hover:bg-rose-600 hover:text-white"
-                onClick={() => onSuspend(member.id)}
-                title="Suspend member access"
-                aria-label={`Suspend member access for ${member.name}`}
-              >
-                <UserX size={15} />
-              </button>
+              {member.status === "Suspended" ? (
+                <button
+                  className="focus-ring flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-100 bg-emerald-50/50 text-emerald-700 transition hover:bg-emerald-600 hover:text-white"
+                  onClick={() => onSuspend(member.id)}
+                  title="Unsuspend member access"
+                  aria-label={`Unsuspend member access for ${member.name}`}
+                >
+                  <UserCheck size={15} />
+                </button>
+              ) : (
+                <button
+                  className="focus-ring flex h-9 w-9 items-center justify-center rounded-lg border border-rose-100 bg-rose-50/50 text-rose-700 transition hover:bg-rose-600 hover:text-white"
+                  onClick={() => onSuspend(member.id)}
+                  title="Suspend member access"
+                  aria-label={`Suspend member access for ${member.name}`}
+                >
+                  <UserX size={15} />
+                </button>
+              )}
             </div>
           );
         },
@@ -388,7 +414,10 @@ export function MemberTable({
                     )}
                   </div>
                   <h3 className="mt-0.5 truncate text-[15px] font-bold text-text-primary">{member.name}</h3>
-                  <p className="font-mono text-[11px] text-text-secondary">{formatPhone(member.phone)}</p>
+                  {member.trainingType && (
+                    <p className="text-[11px] font-medium text-text-muted mt-0.5">{member.trainingType} Training</p>
+                  )}
+                  <p className="font-mono text-[11px] text-text-secondary mt-0.5">{formatPhone(member.phone)}</p>
                 </div>
               </div>
 
@@ -405,11 +434,16 @@ export function MemberTable({
                 </div>
                 <div className="rounded-md bg-surface-overlay px-2 py-1.5 sm:rounded-lg sm:py-2">
                   <p className="text-[10px] font-bold uppercase text-text-muted">Pay</p>
-                  <p className="mt-0.5">
+                  <div className="mt-0.5 flex flex-col gap-0.5">
                     <Badge tone={member.paymentStatus === "Paid" ? "paid" : member.paymentStatus === "Partially Paid" ? "due" : "pending"}>
                       {member.paymentStatus}
                     </Badge>
-                  </p>
+                    {member.paymentStatus === "Partially Paid" && member.balanceAmount > 0 && (
+                      <span className="text-[10px] font-bold text-status-due">
+                        Due: ₹{member.balanceAmount}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -449,14 +483,25 @@ export function MemberTable({
                 >
                   <Pencil size={14} />
                 </button>
-                <button
-                  className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-rose-100 bg-rose-50/50 text-rose-700 transition"
-                  onClick={() => onSuspend(member.id)}
-                  title="Suspend member access"
-                  aria-label={`Suspend member access for ${member.name}`}
-                >
-                  <UserX size={14} />
-                </button>
+                {member.status === "Suspended" ? (
+                  <button
+                    className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-emerald-100 bg-emerald-50/50 text-emerald-700 transition"
+                    onClick={() => onSuspend(member.id)}
+                    title="Unsuspend member access"
+                    aria-label={`Unsuspend member access for ${member.name}`}
+                  >
+                    <UserCheck size={14} />
+                  </button>
+                ) : (
+                  <button
+                    className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-rose-100 bg-rose-50/50 text-rose-700 transition"
+                    onClick={() => onSuspend(member.id)}
+                    title="Suspend member access"
+                    aria-label={`Suspend member access for ${member.name}`}
+                  >
+                    <UserX size={14} />
+                  </button>
+                )}
               </div>
             </motion.article>
           );

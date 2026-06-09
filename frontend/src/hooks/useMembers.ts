@@ -115,7 +115,7 @@ export function useMembers(): MembersState {
         member.id === memberId
           ? {
               ...member,
-              status: "Suspended",
+              status: member.status === "Suspended" ? "Active" : "Suspended",
               updatedAt: new Date().toISOString(),
             }
           : member,

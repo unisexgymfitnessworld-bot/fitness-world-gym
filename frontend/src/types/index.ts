@@ -143,6 +143,7 @@ export interface MemberFilters {
   goal: "All Goals" | Goal;
   payment: "All Payments" | PaymentStatus;
   dueSoon: boolean;
+  month: string;
 }
 
 export interface ApiEnvelope<T> {
