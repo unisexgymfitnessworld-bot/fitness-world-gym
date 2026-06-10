@@ -1,6 +1,6 @@
 # GymOS — Free Self-Hosted WhatsApp Gateway
 
-This is a lightweight, free-tier compatible WhatsApp gateway built using `@whiskeysockets/baileys`. It connects directly to WhatsApp Web's WebSocket protocol without spawning a heavy Chromium instance (meaning it uses less than 50MB RAM and never crashes on free plans).
+This is a lightweight, free-tier compatible WhatsApp gateway built using `@whiskeysockets/baileys` v7. It connects directly to WhatsApp Web's WebSocket protocol without spawning a heavy Chromium instance (meaning it uses less than 50MB RAM and never crashes on free plans).
 
 ---
 
@@ -32,6 +32,14 @@ This is a lightweight, free-tier compatible WhatsApp gateway built using `@whisk
 4. Scan the QR code shown in the browser.
 5. The page will reload and show: **🟢 Connected & Active**. You are now ready!
 
+### 🔄 Troubleshooting Connection Failures
+
+If scanning the QR code says "Connection failed":
+- **Wait 10 seconds** — the page auto-refreshes with a new QR code.
+- If it keeps failing after 5 attempts, the gateway will **automatically reset** and generate a fresh QR.
+- You can also manually force a reset by sending a POST request to `/reset` with your gateway token.
+- Make sure you are scanning from the **same WhatsApp account** that was previously linked. If you changed phones, the old session is invalid and the gateway will auto-clear it.
+
 ---
 
 ## ⚡ How to Connect it to GymOS Cloudflare Worker
@@ -54,3 +62,14 @@ npx wrangler secret put WHATSAPP_GATEWAY_TOKEN
 npx wrangler secret put WHATSAPP_INSTANCE_ID
 # (Enter: self_hosted)
 ```
+
+---
+
+## 📡 API Endpoints
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/` | GET | No | Shows QR code or connection status page |
+| `/status` | GET | No | Returns JSON with current connection status |
+| `/send` | POST | Bearer Token | Sends a WhatsApp message |
+| `/reset` | POST | Bearer Token | Force-clears session and generates new QR |
