@@ -20,12 +20,15 @@ const itemVariants = {
 };
 
 export function Login() {
-  const { signIn, sendPasswordReset, clearError, loading, error } = useAuth();
+  const { signIn, sendPasswordReset, verifyRecoveryCode, clearError, loading, error } = useAuth();
   const { canInstall, install, isIos, isStandalone } = usePwaInstall();
-  const [mode, setMode] = useState<"signin" | "forgot">("signin");
+  const [mode, setMode] = useState<"signin" | "forgot" | "verify_reset">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [resetEmail, setResetEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
   const [resetNotice, setResetNotice] = useState<string | null>(null);
@@ -35,6 +38,10 @@ export function Login() {
     event.preventDefault();
     if (mode === "forgot") {
       void submitPasswordReset();
+      return;
+    }
+    if (mode === "verify_reset") {
+      void submitVerifyReset();
       return;
     }
     void signIn({ email, password });
@@ -47,7 +54,8 @@ export function Login() {
     setResetNotice(null);
     try {
       await sendPasswordReset(targetEmail);
-      setResetNotice(`Password reset link sent to ${targetEmail}. Open the email, set a new password, then sign in again.`);
+      setMode("verify_reset");
+      setResetNotice(`Security code sent to ${targetEmail}. Enter the 6-digit code and your new password below.`);
     } catch (caught) {
       setResetError(friendlyAuthError(caught));
     } finally {
@@ -55,7 +63,31 @@ export function Login() {
     }
   }
 
-  function switchMode(nextMode: "signin" | "forgot"): void {
+  async function submitVerifyReset(): Promise<void> {
+    const targetEmail = (resetEmail || email).trim();
+    if (newPassword !== confirmPassword) {
+      setResetError("Passwords do not match");
+      return;
+    }
+    setResetLoading(true);
+    setResetError(null);
+    setResetNotice(null);
+    try {
+      await verifyRecoveryCode(targetEmail, code, newPassword);
+      setResetNotice("Password reset successfully! Please sign in with your new password.");
+      setMode("signin");
+      setCode("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setPassword("");
+    } catch (caught) {
+      setResetError(friendlyAuthError(caught));
+    } finally {
+      setResetLoading(false);
+    }
+  }
+
+  function switchMode(nextMode: "signin" | "forgot" | "verify_reset"): void {
     setMode(nextMode);
     clearError();
     setResetError(null);
@@ -139,30 +171,85 @@ export function Login() {
               </div>
               <div>
                 <h2 className="text-[28px] font-black leading-tight text-text-primary lg:text-[32px]">
-                  {mode === "signin" ? "Sign in" : "Reset password"}
+                  {mode === "signin" ? "Sign in" : mode === "forgot" ? "Reset password" : "Enter code"}
                 </h2>
                 <p className="mt-1.5 text-[14px] font-semibold text-text-secondary lg:mt-2 lg:text-[15px]">
-                  {mode === "signin" ? "Open the Fitness World trainer workspace." : "Send a secure reset link to a trainer email."}
+                  {mode === "signin" 
+                    ? "Open the Fitness World trainer workspace." 
+                    : mode === "forgot" 
+                    ? "Send a secure 6-digit reset code to a trainer email." 
+                    : "Enter the 6-digit code and choose a new password."}
                 </p>
               </div>
             </div>
 
-            <label className="grid gap-1.5 lg:gap-2">
-              <span className="text-[12px] font-bold uppercase tracking-wider text-text-muted">Email</span>
-              <input
-                className="studio-input min-h-12 rounded-[var(--radius-card)] px-4 text-[16px] font-semibold lg:min-h-14"
-                value={mode === "signin" ? email : resetEmail}
-                onChange={(event) => {
-                  if (mode === "signin") {
-                    setEmail(event.target.value);
-                  } else {
-                    setResetEmail(event.target.value);
-                  }
-                }}
-                autoComplete="email"
-                placeholder="trainer@fitnessworld.in"
-              />
-            </label>
+            {mode !== "verify_reset" ? (
+              <label className="grid gap-1.5 lg:gap-2">
+                <span className="text-[12px] font-bold uppercase tracking-wider text-text-muted">Email</span>
+                <input
+                  className="studio-input min-h-12 rounded-[var(--radius-card)] px-4 text-[16px] font-semibold lg:min-h-14"
+                  value={mode === "signin" ? email : resetEmail}
+                  onChange={(event) => {
+                    if (mode === "signin") {
+                      setEmail(event.target.value);
+                    } else {
+                      setResetEmail(event.target.value);
+                    }
+                  }}
+                  autoComplete="email"
+                  placeholder="trainer@fitnessworld.in"
+                />
+              </label>
+            ) : (
+              <div className="flex items-center justify-between rounded-[var(--radius-card)] border border-border-default bg-surface-raised px-4 py-2 text-[14px] font-semibold text-text-secondary">
+                <span>Sending to: <strong>{resetEmail || email}</strong></span>
+                <button
+                  type="button"
+                  className="text-brand-primary font-bold hover:underline"
+                  onClick={() => switchMode("forgot")}
+                >
+                  Change
+                </button>
+              </div>
+            )}
+
+            {mode === "verify_reset" ? (
+              <>
+                <label className="grid gap-1.5 lg:gap-2">
+                  <span className="text-[12px] font-bold uppercase tracking-wider text-text-muted">Security Code (6-digits)</span>
+                  <input
+                    className="studio-input min-h-12 rounded-[var(--radius-card)] px-4 text-[16px] font-semibold lg:min-h-14"
+                    value={code}
+                    onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="123456"
+                    maxLength={6}
+                    autoFocus
+                  />
+                </label>
+
+                <label className="grid gap-1.5 lg:gap-2">
+                  <span className="text-[12px] font-bold uppercase tracking-wider text-text-muted">New Password</span>
+                  <input
+                    className="studio-input min-h-12 rounded-[var(--radius-card)] px-4 text-[16px] font-semibold lg:min-h-14"
+                    type="password"
+                    value={newPassword}
+                    onChange={(event) => setNewPassword(event.target.value)}
+                    placeholder="At least 12 characters"
+                  />
+                </label>
+
+                <label className="grid gap-1.5 lg:gap-2">
+                  <span className="text-[12px] font-bold uppercase tracking-wider text-text-muted">Confirm Password</span>
+                  <input
+                    className="studio-input min-h-12 rounded-[var(--radius-card)] px-4 text-[16px] font-semibold lg:min-h-14"
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    placeholder="Re-enter new password"
+                  />
+                </label>
+              </>
+            ) : null}
 
             {mode === "signin" ? (
               <label className="grid gap-1.5 lg:gap-2">
@@ -200,7 +287,7 @@ export function Login() {
               </motion.p>
             ) : null}
 
-            {mode === "forgot" && resetNotice ? (
+            {resetNotice ? (
               <motion.p
                 className="rounded-[var(--radius-card)] border border-green-100 bg-green-50 px-4 py-3 text-[14px] font-semibold text-status-active"
                 initial={{ opacity: 0, y: -8 }}
@@ -220,11 +307,16 @@ export function Login() {
               {(mode === "signin" ? loading : resetLoading) ? (
                 <>
                   <Loader2 size={20} className="animate-spin" />
-                  {mode === "signin" ? "Signing In" : "Sending Link"}
+                  {mode === "signin" ? "Signing In" : mode === "forgot" ? "Sending Code" : "Saving Password"}
                 </>
               ) : mode === "forgot" ? (
                 <>
-                  Send Reset Link
+                  Send Code
+                  <ArrowRight size={20} />
+                </>
+              ) : mode === "verify_reset" ? (
+                <>
+                  Save New Password
                   <ArrowRight size={20} />
                 </>
               ) : (
@@ -243,6 +335,25 @@ export function Login() {
               >
                 Back to sign in
               </button>
+            ) : null}
+
+            {mode === "verify_reset" ? (
+              <div className="flex justify-between items-center text-[13px] font-black">
+                <button
+                  type="button"
+                  className="text-text-secondary transition hover:text-brand-primary"
+                  onClick={() => switchMode("forgot")}
+                >
+                  Resend Code
+                </button>
+                <button
+                  type="button"
+                  className="text-text-secondary transition hover:text-brand-primary"
+                  onClick={() => switchMode("signin")}
+                >
+                  Back to sign in
+                </button>
+              </div>
             ) : null}
 
             <div className="flex items-center gap-2 text-[12px] font-semibold text-text-muted lg:text-[13px]">

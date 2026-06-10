@@ -2,7 +2,7 @@ import { ArrowLeft, Banknote, CalendarCheck, MessageCircle, MessageSquare, Penci
 import { motion } from "motion/react";
 import { useMemo, useState, type FormEvent } from "react";
 import { buildAttendanceInsights, buildProgressPoints, summarizeRenewalHistory } from "../../lib/memberInsights";
-import { calculateDueDate, createWhatsAppLink, formatCurrency, formatDisplayDate, formatPhone, getMemberActionDueDate, getMemberDueKind, todayISO, isPlanLessThanOneMonth } from "../../lib/utils";
+import { calculateDueDate, createWhatsAppLink, formatCurrency, formatDisplayDate, formatPhone, getMemberActionDueDate, getMemberDueKind, todayISO, isPlanLessThanOneMonth, calculateNextRenewalStart } from "../../lib/utils";
 import { paymentMethodOptions, type AttendanceEntry, type Member, type PaymentMethod, type PaymentReceipt, type PaymentReceiptInput, type RenewalHistoryEntry } from "../../types";
 import { AttendanceTable } from "../attendance/AttendanceTable";
 import { Badge } from "../ui/Badge";
@@ -23,7 +23,7 @@ interface MemberProfileProps {
 }
 
 export function MemberProfile({ member, attendance, paymentReceipts, renewalHistory, onBack, onEdit, onSms, onRenew, onAddVisit, onAddPaymentReceipt }: MemberProfileProps) {
-  const nextStart = todayISO();
+  const nextStart = calculateNextRenewalStart(member);
   const nextDue = calculateDueDate(nextStart, member.planType === "Custom" ? "1 Month" : member.planType);
   const actionDueDate = getMemberActionDueDate(member);
   const actionDueKind = getMemberDueKind(member);
@@ -344,33 +344,27 @@ function PaymentReceiptPanel({
   const [receiptNo, setReceiptNo] = useState("");
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const canRecordPayment = balanceAmount > 0;
+  const numericAmount = Number(amount);
+  const isAdvancePayment = balanceAmount === 0 || numericAmount > balanceAmount;
 
   async function submitReceipt(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     setError("");
-    const numericAmount = Number(amount);
-
-    if (!canRecordPayment) {
-      setError("This member has no pending balance.");
-      return;
-    }
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
       setError("Enter a valid payment amount.");
-      return;
-    }
-    if (numericAmount > balanceAmount) {
-      setError(`Amount cannot exceed ${formatCurrency(balanceAmount)}.`);
       return;
     }
 
     setIsSaving(true);
     try {
+      const autoNote = isAdvancePayment && !note.trim()
+        ? "Advance payment towards next renewal"
+        : note;
       await onAddPaymentReceipt(member.id, {
         paidOn,
         amount: numericAmount,
         method,
-        note,
+        note: autoNote,
         receiptNo: receiptNo.trim() || undefined,
       });
       setAmount("");
@@ -414,22 +408,36 @@ function PaymentReceiptPanel({
               <Banknote size={16} className="text-brand-primary" />
               Record Payment
             </p>
-            <span className="rounded-full bg-brand-white px-3 py-1 text-[12px] font-black text-text-secondary">
-              Due {formatCurrency(balanceAmount)}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className={`rounded-full px-3 py-1 text-[12px] font-black ${
+                balanceAmount > 0 ? "bg-amber-50 text-amber-700" : "bg-green-50 text-green-700"
+              }`}>
+                {balanceAmount > 0 ? `Due ${formatCurrency(balanceAmount)}` : "Fully Paid ✓"}
+              </span>
+              {balanceAmount === 0 && (
+                <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-[11px] font-black text-sky-700">
+                  Advance Recording
+                </span>
+              )}
+            </div>
           </div>
+          {balanceAmount === 0 && (
+            <p className="rounded-[var(--radius-card)] border border-sky-100 bg-sky-50 px-3 py-2 text-[12px] font-bold text-sky-700">
+              💡 Member is fully paid. You can still record an advance payment for the next month below.
+            </p>
+          )}
           <div className="grid gap-3 sm:grid-cols-2">
-            <Input label="Amount" type="number" step="1" min="1" max={balanceAmount || undefined} value={amount} onChange={(event) => setAmount(event.target.value)} disabled={!canRecordPayment || isSaving} />
-            <Input label="Paid Date" type="date" value={paidOn} onChange={(event) => setPaidOn(event.target.value)} disabled={!canRecordPayment || isSaving} />
+            <Input label="Amount" type="number" step="1" min="1" value={amount} onChange={(event) => setAmount(event.target.value)} disabled={isSaving} />
+            <Input label="Paid Date" type="date" value={paidOn} onChange={(event) => setPaidOn(event.target.value)} disabled={isSaving} />
             <label className="grid gap-2 text-[14px] font-semibold lg:text-[15px]">
               Method
-              <select className="studio-input w-full px-3 py-2.5 lg:px-4 lg:py-3" value={method} onChange={(event) => setMethod(event.target.value as PaymentMethod)} disabled={!canRecordPayment || isSaving}>
+              <select className="studio-input w-full px-3 py-2.5 lg:px-4 lg:py-3" value={method} onChange={(event) => setMethod(event.target.value as PaymentMethod)} disabled={isSaving}>
                 {paymentMethodOptions.map((option) => (
                   <option key={option}>{option}</option>
                 ))}
               </select>
             </label>
-            <Input label="Receipt No" placeholder="Auto if empty" value={receiptNo} onChange={(event) => setReceiptNo(event.target.value)} disabled={!canRecordPayment || isSaving} />
+            <Input label="Receipt No" placeholder="Auto if empty" value={receiptNo} onChange={(event) => setReceiptNo(event.target.value)} disabled={isSaving} />
           </div>
           <label className="grid gap-2 text-[14px] font-semibold lg:text-[15px]">
             Note
@@ -438,14 +446,14 @@ function PaymentReceiptPanel({
               value={note}
               maxLength={180}
               onChange={(event) => setNote(event.target.value)}
-              disabled={!canRecordPayment || isSaving}
-              placeholder="Cash counter, UPI ref, or trainer note"
+              disabled={isSaving}
+              placeholder={balanceAmount === 0 ? "Advance for next month (auto-noted if blank)" : "Cash counter, UPI ref, or trainer note"}
             />
           </label>
           {error ? <p className="rounded-[var(--radius-card)] bg-red-50 px-3 py-2 text-[12px] font-bold text-status-expired">{error}</p> : null}
-          <Button type="submit" disabled={!canRecordPayment || isSaving}>
+          <Button type="submit" disabled={isSaving}>
             <ReceiptText size={18} />
-            {isSaving ? "Saving..." : "Save Receipt"}
+            {isSaving ? "Saving..." : isAdvancePayment ? "Save Advance Receipt" : "Save Receipt"}
           </Button>
         </form>
       </div>

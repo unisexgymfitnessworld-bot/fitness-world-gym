@@ -15,6 +15,17 @@ export async function listAttendance(memberId: string, month?: string): Promise<
   return ((data ?? []) as DbAttendanceEntry[]).map(mapAttendance);
 }
 
+export async function listAllAttendance(): Promise<AttendanceEntry[]> {
+  const { data, error } = await getSupabaseAdmin()
+    .from("attendance")
+    .select("*")
+    .order("visit_date", { ascending: false });
+  if (error) {
+    throw new HttpError(500, "ATTENDANCE_LIST_FAILED", error.message);
+  }
+  return ((data ?? []) as DbAttendanceEntry[]).map(mapAttendance);
+}
+
 export async function createAttendance(memberId: string, visitDate: string, weightKg?: number): Promise<AttendanceEntry> {
   const { data, error } = await getSupabaseAdmin()
     .from("attendance")

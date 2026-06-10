@@ -210,3 +210,16 @@ export function toMember(input: MemberInput, members: Array<Pick<Member, "regNo"
     updatedAt: now,
   };
 }
+
+export function calculateNextRenewalStart(member: DueAwareMember): string {
+  const today = todayISO();
+  if (member.status === "Active" && member.membershipDue >= today) {
+    try {
+      const nextDay = addDays(parseISO(member.membershipDue), 1);
+      return format(nextDay, "yyyy-MM-dd");
+    } catch (err) {
+      console.error(err);
+    }
+  }
+  return today;
+}

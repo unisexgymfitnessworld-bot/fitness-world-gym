@@ -68,9 +68,17 @@ export function Dashboard() {
       const monthMatch = filters.month === "All" ||
         (member.membershipStart && member.membershipStart.startsWith(filters.month)) ||
         (member.joinDate && member.joinDate.startsWith(filters.month));
-      return statusMatch && goalMatch && paymentMatch && dueMatch && monthMatch;
+      const trainingTypeMatch =
+        !filters.trainingType ||
+        filters.trainingType === "All Training" ||
+        member.trainingType === filters.trainingType;
+      const planTypeMatch =
+        !filters.planType ||
+        filters.planType === "All Plans" ||
+        member.planType === filters.planType;
+      return statusMatch && goalMatch && paymentMatch && dueMatch && monthMatch && trainingTypeMatch && planTypeMatch;
     });
-  }, [filters.dueSoon, filters.goal, filters.payment, filters.status, filters.month, members]);
+  }, [filters.dueSoon, filters.goal, filters.payment, filters.status, filters.month, filters.trainingType, filters.planType, members]);
 
   const monthlyStats = useMemo(() => {
     if (filters.month === "All") return null;
@@ -610,6 +618,8 @@ export function Dashboard() {
               setFilter("payment", "All Payments");
               setFilter("month", "All");
               setFilter("dueSoon", false);
+              setFilter("trainingType", "All Training");
+              setFilter("planType", "All Plans");
             }}
           />
         </div>

@@ -109,7 +109,9 @@ export const api = {
       body: JSON.stringify({ membershipStart, membershipDue, feesAmount }),
     }),
   paymentReceipts: (memberId: string) => request<PaymentReceipt[]>(`/members/${memberId}/payments`),
+  allPaymentReceipts: () => request<PaymentReceipt[]>("/members/payments/all"),
   renewalHistory: (memberId: string) => request<RenewalHistoryEntry[]>(`/members/${memberId}/renewals`),
+  allRenewalHistory: () => request<RenewalHistoryEntry[]>("/members/renewals/all"),
   createPaymentReceipt: (memberId: string, input: PaymentReceiptInput) =>
     request<{ receipt: PaymentReceipt; member: Member }>(`/members/${memberId}/payments`, {
       method: "POST",
@@ -121,6 +123,7 @@ export const api = {
     }),
   dashboardStats: () => request<DashboardStats>("/dashboard/stats"),
   attendance: (memberId: string) => request<AttendanceEntry[]>(`/attendance/${memberId}`),
+  allAttendance: () => request<AttendanceEntry[]>("/attendance"),
   createAttendance: (memberId: string, visitDate: string, weightKg?: number) =>
     request<AttendanceEntry>("/attendance", {
       method: "POST",

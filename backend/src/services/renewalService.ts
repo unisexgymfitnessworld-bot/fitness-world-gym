@@ -28,6 +28,20 @@ export async function listRenewalHistory(memberId: string): Promise<RenewalHisto
   return ((data ?? []) as DbRenewalHistoryEntry[]).map(mapRenewalHistory);
 }
 
+export async function listAllRenewalHistory(): Promise<RenewalHistoryEntry[]> {
+  const { data, error } = await getSupabaseAdmin()
+    .from("renewal_history")
+    .select("*")
+    .order("renewed_on", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new HttpError(500, "RENEWAL_HISTORY_LIST_FAILED", error.message);
+  }
+
+  return ((data ?? []) as DbRenewalHistoryEntry[]).map(mapRenewalHistory);
+}
+
 export async function recordRenewalHistory(input: RecordRenewalHistoryInput): Promise<RenewalHistoryEntry> {
   const { oldMember, newStartDate, newDueDate, amount, paymentStatus, ownerUserId = null } = input;
   const { data, error } = await getSupabaseAdmin()

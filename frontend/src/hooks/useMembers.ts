@@ -46,15 +46,17 @@ export function useMembers(): MembersState {
       async function loadLiveData(): Promise<void> {
         setLoading(true);
         try {
-          const liveMembers = await api.members();
-          const liveAttendance = await Promise.all(liveMembers.map((member) => api.attendance(member.id)));
-          const livePaymentReceipts = await Promise.all(liveMembers.map((member) => api.paymentReceipts(member.id)));
-          const liveRenewalHistory = await Promise.all(liveMembers.map((member) => api.renewalHistory(member.id)));
+          const [liveMembers, liveAttendance, livePaymentReceipts, liveRenewalHistory] = await Promise.all([
+            api.members(),
+            api.allAttendance(),
+            api.allPaymentReceipts(),
+            api.allRenewalHistory(),
+          ]);
           if (!cancelled) {
             setMembers(liveMembers);
-            setAttendance(liveAttendance.flat());
-            setPaymentReceipts(livePaymentReceipts.flat());
-            setRenewalHistory(liveRenewalHistory.flat());
+            setAttendance(liveAttendance);
+            setPaymentReceipts(livePaymentReceipts);
+            setRenewalHistory(liveRenewalHistory);
           }
         } catch (error) {
           console.error("Unable to load live member data", error);

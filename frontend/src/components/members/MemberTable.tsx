@@ -94,8 +94,9 @@ export function MemberTable({
     ];
     
     const csvRows = [headers.join(",")];
+    const visibleMembers = table.getRowModel().rows.map((row) => row.original);
     
-    for (const member of registerOrderedMembers) {
+    for (const member of visibleMembers) {
       const row = [
         `"${member.regNo}"`,
         `"${member.name.replace(/"/g, '""')}"`,
@@ -158,11 +159,9 @@ export function MemberTable({
               </div>
               <div className="flex flex-col">
                 <span className="font-semibold text-text-primary">{info.getValue()}</span>
-                {member.trainingType && (
-                  <span className="text-[11px] font-medium text-text-muted">
-                    {member.trainingType} Training
-                  </span>
-                )}
+                <span className="text-[11px] font-medium text-text-muted mt-0.5">
+                  {member.trainingType || "General"} · {member.planType}
+                </span>
               </div>
             </div>
           );
@@ -189,6 +188,28 @@ export function MemberTable({
             {info.getValue()}
           </Badge>
         ),
+      }),
+      columnHelper.accessor("joinDate", {
+        header: "Join Date",
+        cell: (info) => (
+          <span className="text-[13px] text-text-secondary font-semibold">
+            {info.getValue() ? formatDisplayDate(info.getValue()) : "—"}
+          </span>
+        ),
+      }),
+      columnHelper.accessor("address", {
+        header: "Address",
+        cell: (info) => {
+          const address = info.getValue() || "";
+          return (
+            <span 
+              className="text-[13px] text-text-muted block max-w-[140px] truncate" 
+              title={address}
+            >
+              {address || "—"}
+            </span>
+          );
+        },
       }),
       columnHelper.accessor((member) => getMemberActionDueDate(member), {
         id: "nextDue",
@@ -443,9 +464,9 @@ export function MemberTable({
                     )}
                   </div>
                   <h3 className="mt-0.5 truncate text-[15px] font-bold text-text-primary">{member.name}</h3>
-                  {member.trainingType && (
-                    <p className="text-[11px] font-medium text-text-muted mt-0.5">{member.trainingType} Training</p>
-                  )}
+                  <p className="text-[11px] font-medium text-text-muted mt-0.5">
+                    {member.trainingType || "General"} · {member.planType}
+                  </p>
                   <p className="font-mono text-[11px] text-text-secondary mt-0.5">{formatPhone(member.phone)}</p>
                 </div>
               </div>
@@ -482,6 +503,23 @@ export function MemberTable({
                   </div>
                 </div>
               </div>
+
+              {(member.joinDate || member.address) && (
+                <div className="mt-2 border-t border-border-default/50 pt-2 text-[11px] flex flex-col gap-1 bg-surface-overlay/20 px-2 py-1.5 rounded-lg">
+                  {member.joinDate && (
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-text-muted uppercase text-[9px] tracking-wider">Join Date</span>
+                      <span className="font-semibold text-text-secondary">{formatDisplayDate(member.joinDate)}</span>
+                    </div>
+                  )}
+                  {member.address && (
+                    <div className="flex justify-between items-start gap-3">
+                      <span className="font-bold text-text-muted uppercase text-[9px] tracking-wider shrink-0 mt-0.5">Address</span>
+                      <span className="font-medium text-text-secondary text-right line-clamp-2" title={member.address}>{member.address}</span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
                 <button

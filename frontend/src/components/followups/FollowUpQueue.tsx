@@ -41,9 +41,6 @@ const kindStyles: Record<FollowUpKind, { icon: typeof AlertTriangle; tone: "expi
 };
 
 export function FollowUpQueue({ items, onView, onMessage }: FollowUpQueueProps) {
-  const previewItems = items.slice(0, 6);
-  const hiddenCount = Math.max(items.length - previewItems.length, 0);
-
   return (
     <section className="studio-card grid gap-4 rounded-[var(--radius-panel)] p-3 sm:p-4 lg:grid-cols-[250px_1fr] lg:gap-5 lg:p-5">
       <div className="grid content-start gap-2">
@@ -57,19 +54,18 @@ export function FollowUpQueue({ items, onView, onMessage }: FollowUpQueueProps) 
         </p>
         <div className="mt-1 flex flex-wrap gap-1.5">
           <Badge tone={items.length > 0 ? "due" : "paid"}>{items.length} actions</Badge>
-          {hiddenCount > 0 ? <Badge tone="neutral">+{hiddenCount} more</Badge> : null}
         </div>
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-        {previewItems.length > 0 ? (
-          previewItems.map((item, index) => {
+      <div className="scrollbar-soft flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scroll-smooth min-w-0">
+        {items.length > 0 ? (
+          items.map((item, index) => {
             const style = kindStyles[item.kind];
             const Icon = style.icon;
             return (
               <motion.article
                 key={item.id}
-                className={`grid min-h-[150px] gap-3 rounded-[var(--radius-card)] border p-3 shadow-sm ${style.className}`}
+                className={`grid min-h-[150px] gap-3 rounded-[var(--radius-card)] border p-3 shadow-sm shrink-0 w-[280px] sm:w-[310px] snap-start ${style.className}`}
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, delay: index * 0.04 }}
@@ -107,7 +103,7 @@ export function FollowUpQueue({ items, onView, onMessage }: FollowUpQueueProps) 
             );
           })
         ) : (
-          <div className="rounded-[var(--radius-card)] border border-dashed border-border-default bg-surface-raised px-4 py-8 text-center sm:col-span-2 xl:col-span-3">
+          <div className="w-full shrink-0 rounded-[var(--radius-card)] border border-dashed border-border-default bg-surface-raised px-4 py-8 text-center">
             <p className="text-[15px] font-black text-text-primary">No urgent follow-ups today</p>
             <p className="mt-1 text-[13px] font-semibold text-text-secondary">Payments, renewals, and active member checks are clear.</p>
           </div>

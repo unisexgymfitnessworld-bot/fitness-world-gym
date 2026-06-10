@@ -26,6 +26,8 @@ export const useAppStore = create<AppState>((set) => ({
     payment: "All Payments",
     dueSoon: false,
     month: "All",
+    trainingType: "All Training",
+    planType: "All Plans",
   },
   selectedMemberId: null,
   editingMemberId: null,

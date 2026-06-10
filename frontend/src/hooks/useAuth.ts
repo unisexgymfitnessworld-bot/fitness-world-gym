@@ -8,6 +8,7 @@ import { useAppStore } from "../store/useAppStore";
 interface AuthResult {
   signIn: (values: LoginValues) => Promise<void>;
   sendPasswordReset: (email: string) => Promise<void>;
+  verifyRecoveryCode: (email: string, code: string, newPassword: string) => Promise<void>;
   signOut: () => Promise<void>;
   clearError: () => void;
   loading: boolean;
@@ -88,6 +89,44 @@ export function useAuth(): AuthResult {
     }
   }
 
+  async function verifyRecoveryCode(email: string, code: string, newPassword: string): Promise<void> {
+    const emailParsed = emailOnlySchema.safeParse({ email });
+    if (!emailParsed.success) {
+      throw new Error("Enter a valid trainer email");
+    }
+    const codeClean = code.trim();
+    if (!codeClean || codeClean.length !== 6 || !/^\d+$/.test(codeClean)) {
+      throw new Error("Enter a valid 6-digit security code");
+    }
+    if (!newPassword || newPassword.length < 12) {
+      throw new Error("Password must be at least 12 characters");
+    }
+
+    if (!isSupabaseConfigured || !supabase) {
+      throw new Error("Supabase auth is not configured.");
+    }
+
+    const { error: verifyError } = await supabase.auth.verifyOtp({
+      email: emailParsed.data.email,
+      token: codeClean,
+      type: "recovery",
+    });
+
+    if (verifyError) {
+      throw new Error(friendlyAuthError(verifyError));
+    }
+
+    const { error: updateError } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
+
+    if (updateError) {
+      throw new Error(friendlyAuthError(updateError));
+    }
+
+    await supabase.auth.signOut().catch(() => undefined);
+  }
+
   async function signOut(): Promise<void> {
     setLoading(true);
     try {
@@ -100,5 +139,5 @@ export function useAuth(): AuthResult {
     }
   }
 
-  return { signIn, sendPasswordReset, signOut, clearError: () => setError(null), loading, error };
+  return { signIn, sendPasswordReset, verifyRecoveryCode, signOut, clearError: () => setError(null), loading, error };
 }

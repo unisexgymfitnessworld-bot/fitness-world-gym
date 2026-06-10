@@ -180,6 +180,8 @@ export interface MemberFilters {
   payment: "All Payments" | PaymentStatus;
   dueSoon: boolean;
   month: string;
+  trainingType?: "All Training" | TrainingType;
+  planType?: "All Plans" | PlanType;
 }
 
 export interface ApiEnvelope<T> {

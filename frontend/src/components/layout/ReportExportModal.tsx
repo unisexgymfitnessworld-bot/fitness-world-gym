@@ -99,10 +99,11 @@ function htmlEscape(value: unknown): string {
     .replace(/'/g, "&#039;");
 }
 
-function reportFileName(reportType: ReportType, selectedYear: number, selectedMonth: number, period: ReportPeriod, extension: "csv" | "pdf"): string {
+function reportFileName(reportType: ReportType, selectedYear: number, selectedMonth: number, period: ReportPeriod, extension: "csv" | "pdf", trainingType: string): string {
   const formattedMonth = String(selectedMonth + 1).padStart(2, "0");
   const datePart = period === "month" ? `${selectedYear}_${formattedMonth}` : "all_time";
-  return `GymOS_Report_${reportType}_${datePart}.${extension}`;
+  const trainingPart = trainingType === "All" ? "" : `_${trainingType.toLowerCase()}`;
+  return `GymOS_Report_${reportType}${trainingPart}_${datePart}.${extension}`;
 }
 
 function backupFileName(): string {
@@ -147,6 +148,7 @@ export function ReportExportModal({ open, members, attendance = [], paymentRecei
 
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedTrainingType, setSelectedTrainingType] = useState<"All" | "General" | "Personal" | "Couple">("All");
   const [reportType, setReportType] = useState<ReportType>("payments");
   const selectedDetails = typeDetails[reportType];
   const monthLabel = `${months[selectedMonth]?.label ?? "Month"} ${selectedYear}`;
@@ -154,14 +156,22 @@ export function ReportExportModal({ open, members, attendance = [], paymentRecei
 
   const filteredMembers = useMemo(() => {
     return members
-      .filter((member) => memberMatchesReport(member, reportType, selectedMonth, selectedYear))
+      .filter((member) => {
+        const matchesReport = memberMatchesReport(member, reportType, selectedMonth, selectedYear);
+        const matchesTraining = selectedTrainingType === "All" || member.trainingType === selectedTrainingType;
+        return matchesReport && matchesTraining;
+      })
       .sort((a, b) => compareRegistrationNumbers(a.regNo, b.regNo));
-  }, [members, reportType, selectedMonth, selectedYear]);
+  }, [members, reportType, selectedMonth, selectedYear, selectedTrainingType]);
 
   const reportCounts = useMemo(() => {
     return reportTypeOrder.reduce<Record<ReportType, number>>(
       (counts, type) => {
-        counts[type] = members.filter((member) => memberMatchesReport(member, type, selectedMonth, selectedYear)).length;
+        counts[type] = members.filter((member) => {
+          const matchesReport = memberMatchesReport(member, type, selectedMonth, selectedYear);
+          const matchesTraining = selectedTrainingType === "All" || member.trainingType === selectedTrainingType;
+          return matchesReport && matchesTraining;
+        }).length;
         return counts;
       },
       {
@@ -174,7 +184,7 @@ export function ReportExportModal({ open, members, attendance = [], paymentRecei
         renewals: 0,
       },
     );
-  }, [members, selectedMonth, selectedYear]);
+  }, [members, selectedMonth, selectedYear, selectedTrainingType]);
 
   const reportSummary = useMemo(() => {
     return filteredMembers.reduce(
@@ -263,7 +273,7 @@ export function ReportExportModal({ open, members, attendance = [], paymentRecei
       csvRows.push(values.map(csvCell).join(","));
     }
 
-    downloadBlob(csvRows.join("\n"), "text/csv;charset=utf-8;", reportFileName(reportType, selectedYear, selectedMonth, selectedDetails.period, "csv"));
+    downloadBlob(csvRows.join("\n"), "text/csv;charset=utf-8;", reportFileName(reportType, selectedYear, selectedMonth, selectedDetails.period, "csv", selectedTrainingType));
   }
 
   function handleBackupExport(): void {
@@ -321,7 +331,7 @@ export function ReportExportModal({ open, members, attendance = [], paymentRecei
       <html>
         <head>
           <meta charset="utf-8" />
-          <title>${htmlEscape(reportFileName(reportType, selectedYear, selectedMonth, selectedDetails.period, "pdf"))}</title>
+          <title>${htmlEscape(reportFileName(reportType, selectedYear, selectedMonth, selectedDetails.period, "pdf", selectedTrainingType))}</title>
           <style>
             @page { size: A4 landscape; margin: 10mm; }
             * { box-sizing: border-box; }
@@ -476,7 +486,7 @@ export function ReportExportModal({ open, members, attendance = [], paymentRecei
                 </div>
               </div>
               <div class="report-meta">
-                <strong>${htmlEscape(selectedDetails.title)}</strong>
+                <strong>${htmlEscape(selectedDetails.title)}${selectedTrainingType !== "All" ? ` (${selectedTrainingType})` : ""}</strong>
                 <div class="muted">${htmlEscape(periodLabel)}</div>
                 <div class="muted">Generated ${htmlEscape(new Date().toLocaleString("en-IN"))}</div>
               </div>
@@ -518,7 +528,7 @@ export function ReportExportModal({ open, members, attendance = [], paymentRecei
               </thead>
               <tbody>${reportRows}</tbody>
             </table>
-            <footer>Use browser Save as PDF to keep this report as ${htmlEscape(reportFileName(reportType, selectedYear, selectedMonth, selectedDetails.period, "pdf"))}.</footer>
+            <footer>Use browser Save as PDF to keep this report as ${htmlEscape(reportFileName(reportType, selectedYear, selectedMonth, selectedDetails.period, "pdf", selectedTrainingType))}.</footer>
           </main>
         </body>
       </html>`;
@@ -534,7 +544,7 @@ export function ReportExportModal({ open, members, attendance = [], paymentRecei
   return (
     <Modal open={open} title="Export Trainer Reports" onClose={onClose}>
       <div className="grid gap-4">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <label className="grid gap-1.5 text-[13px] font-bold text-text-secondary">
             Month
             <select
@@ -562,6 +572,20 @@ export function ReportExportModal({ open, members, attendance = [], paymentRecei
                   {year}
                 </option>
               ))}
+            </select>
+          </label>
+
+          <label className="grid gap-1.5 text-[13px] font-bold text-text-secondary">
+            Training Type
+            <select
+              value={selectedTrainingType}
+              onChange={(event) => setSelectedTrainingType(event.target.value as any)}
+              className="studio-select h-12 w-full px-3 text-[15px] font-bold"
+            >
+              <option value="All">All Types</option>
+              <option value="General">General</option>
+              <option value="Personal">Personal</option>
+              <option value="Couple">Couple</option>
             </select>
           </label>
         </div>

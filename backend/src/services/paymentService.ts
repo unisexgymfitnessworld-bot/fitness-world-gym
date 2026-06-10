@@ -67,6 +67,19 @@ export async function listPaymentReceipts(memberId: string): Promise<PaymentRece
   return ((data ?? []) as DbPaymentReceipt[]).map(mapPaymentReceipt);
 }
 
+export async function listAllPaymentReceipts(): Promise<PaymentReceipt[]> {
+  const { data, error } = await getSupabaseAdmin()
+    .from("payment_receipts")
+    .select("*")
+    .order("paid_on", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new HttpError(500, "PAYMENT_RECEIPTS_LIST_FAILED", error.message);
+  }
+  return ((data ?? []) as DbPaymentReceipt[]).map(mapPaymentReceipt);
+}
+
 export async function createPaymentReceipt(memberId: string, input: PaymentReceiptInput, ownerUserId: string | null): Promise<PaymentReceiptResult> {
   const member = await getMember(memberId);
   const existingReceiptTotal = await receiptTotal(memberId);

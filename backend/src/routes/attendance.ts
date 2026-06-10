@@ -1,9 +1,17 @@
 import { Router } from "express";
-import { deleteAttendance, listAttendance, createAttendance } from "../services/attendanceService.js";
+import { deleteAttendance, listAttendance, createAttendance, listAllAttendance } from "../services/attendanceService.js";
 import { attendanceInputSchema } from "../services/schemas.js";
 import { validateBody } from "../middleware/validate.js";
 
 export const attendanceRouter = Router();
+
+attendanceRouter.get("/", async (req, res, next) => {
+  try {
+    res.json({ success: true, data: await listAllAttendance() });
+  } catch (error) {
+    next(error);
+  }
+});
 
 attendanceRouter.get("/:memberId", async (req, res, next) => {
   try {

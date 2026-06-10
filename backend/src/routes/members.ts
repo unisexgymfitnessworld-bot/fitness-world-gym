@@ -3,8 +3,8 @@ import type { Request } from "express";
 import { HttpError } from "../lib/httpError.js";
 import { validateBody } from "../middleware/validate.js";
 import { createMember, getMember, listMembers, renewMember, suspendMember, updateMember, updatePayment } from "../services/memberService.js";
-import { createPaymentReceipt, listPaymentReceipts } from "../services/paymentService.js";
-import { listRenewalHistory } from "../services/renewalService.js";
+import { createPaymentReceipt, listPaymentReceipts, listAllPaymentReceipts } from "../services/paymentService.js";
+import { listRenewalHistory, listAllRenewalHistory } from "../services/renewalService.js";
 import { memberInputSchema, paymentReceiptSchema, paymentSchema, renewSchema } from "../services/schemas.js";
 import type { AuthenticatedRequest, PaymentReceiptInput, PaymentStatus } from "../types/index.js";
 
@@ -40,6 +40,22 @@ membersRouter.get("/", async (req, res, next) => {
       limit,
     });
     res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
+
+membersRouter.get("/payments/all", async (req, res, next) => {
+  try {
+    res.json({ success: true, data: await listAllPaymentReceipts() });
+  } catch (error) {
+    next(error);
+  }
+});
+
+membersRouter.get("/renewals/all", async (req, res, next) => {
+  try {
+    res.json({ success: true, data: await listAllRenewalHistory() });
   } catch (error) {
     next(error);
   }
