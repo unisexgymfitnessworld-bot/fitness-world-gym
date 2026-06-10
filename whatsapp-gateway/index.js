@@ -2,6 +2,7 @@ import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
   fetchLatestWaWebVersion,
+  Browsers,
 } from "@whiskeysockets/baileys";
 import { Boom } from "@hapi/boom";
 import express from "express";
@@ -72,6 +73,7 @@ async function startWhatsApp() {
   const socketConfig = {
     auth: state,
     printQRInTerminal: true,
+    browser: Browsers.macOS("Chrome"),
   };
 
   // Only include version if we successfully fetched it
