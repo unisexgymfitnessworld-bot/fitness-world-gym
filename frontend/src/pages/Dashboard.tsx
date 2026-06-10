@@ -225,6 +225,7 @@ export function Dashboard() {
         message: error instanceof Error ? error.message : "Fast2SMS API failed to send SMS",
         tone: "error",
       });
+      throw error;
     }
   }
 

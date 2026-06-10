@@ -3,6 +3,8 @@ import makeWASocket, {
   DisconnectReason,
   fetchLatestWaWebVersion,
   Browsers,
+  initAuthCreds,
+  BufferJSON,
 } from "@whiskeysockets/baileys";
 import { Boom } from "@hapi/boom";
 import express from "express";
@@ -33,12 +35,163 @@ if (!fs.existsSync(AUTH_DIR)) {
   fs.mkdirSync(AUTH_DIR, { recursive: true });
 }
 
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const useDbSession = Boolean(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY);
+
+if (useDbSession) {
+  console.log("[gateway] 🗄️ Supabase credentials detected. Session will be saved to Supabase.");
+} else {
+  console.log("[gateway] 📂 No Supabase configuration found. Defaulting to local filesystem.");
+}
+
+async function getSessionFromDb(key) {
+  if (!useDbSession) return null;
+  try {
+    const url = `${SUPABASE_URL}/rest/v1/whatsapp_sessions?key=eq.${encodeURIComponent(key)}&select=value`;
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        "Content-Type": "application/json",
+      }
+    });
+    if (!response.ok) {
+      if (response.status === 404) return null;
+      throw new Error(`REST error: ${response.statusText}`);
+    }
+    const rows = await response.json();
+    return rows[0]?.value ?? null;
+  } catch (err) {
+    console.error(`[gateway] Error fetching session key "${key}":`, err.message);
+    return null;
+  }
+}
+
+async function saveSessionToDb(key, value) {
+  if (!useDbSession) return;
+  try {
+    const url = `${SUPABASE_URL}/rest/v1/whatsapp_sessions`;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        "Content-Type": "application/json",
+        "Prefer": "resolution=merge-duplicates"
+      },
+      body: JSON.stringify({ key, value })
+    });
+    if (!response.ok) {
+      throw new Error(`REST error: ${response.statusText}`);
+    }
+  } catch (err) {
+    console.error(`[gateway] Error saving session key "${key}":`, err.message);
+  }
+}
+
+async function deleteSessionFromDb(key) {
+  if (!useDbSession) return;
+  try {
+    const url = `${SUPABASE_URL}/rest/v1/whatsapp_sessions?key=eq.${encodeURIComponent(key)}`;
+    const response = await fetch(url, {
+      method: "DELETE",
+      headers: {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        "Content-Type": "application/json"
+      }
+    });
+    if (!response.ok) {
+      throw new Error(`REST error: ${response.statusText}`);
+    }
+  } catch (err) {
+    console.error(`[gateway] Error deleting session key "${key}":`, err.message);
+  }
+}
+
+async function clearDbSession() {
+  if (!useDbSession) return;
+  try {
+    const url = `${SUPABASE_URL}/rest/v1/whatsapp_sessions`;
+    const response = await fetch(url, {
+      method: "DELETE",
+      headers: {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        "Content-Type": "application/json"
+      }
+    });
+    if (!response.ok) {
+      throw new Error(`REST error: ${response.statusText}`);
+    }
+    console.log("[gateway] Database session cleared.");
+  } catch (err) {
+    console.error("[gateway] Error clearing database session:", err.message);
+  }
+}
+
+async function useSupabaseAuthState() {
+  let creds = await getSessionFromDb("creds");
+  if (creds) {
+    creds = JSON.parse(JSON.stringify(creds), BufferJSON.reviver);
+  } else {
+    creds = initAuthCreds();
+    await saveSessionToDb("creds", JSON.parse(JSON.stringify(creds, BufferJSON.replacer)));
+  }
+
+  return {
+    state: {
+      creds,
+      keys: {
+        get: async (type, ids) => {
+          const data = {};
+          await Promise.all(
+            ids.map(async (id) => {
+              let value = await getSessionFromDb(`${type}-${id}`);
+              if (value) {
+                value = JSON.parse(JSON.stringify(value), BufferJSON.reviver);
+                data[id] = value;
+              }
+            })
+          );
+          return data;
+        },
+        set: async (data) => {
+          const tasks = [];
+          for (const category of Object.keys(data)) {
+            for (const id of Object.keys(data[category])) {
+              const value = data[category][id];
+              const key = `${category}-${id}`;
+              if (value) {
+                const serializedValue = JSON.parse(JSON.stringify(value, BufferJSON.replacer));
+                tasks.push(saveSessionToDb(key, serializedValue));
+              } else {
+                tasks.push(deleteSessionFromDb(key));
+              }
+            }
+          }
+          await Promise.all(tasks);
+        }
+      }
+    },
+    saveCreds: async () => {
+      const serializedCreds = JSON.parse(JSON.stringify(creds, BufferJSON.replacer));
+      await saveSessionToDb("creds", serializedCreds);
+    }
+  };
+}
+
 function clearAuthDir() {
   try {
     if (fs.existsSync(AUTH_DIR)) {
       fs.rmSync(AUTH_DIR, { recursive: true, force: true });
       fs.mkdirSync(AUTH_DIR, { recursive: true });
       console.log("[gateway] Auth directory cleared for fresh login.");
+    }
+    if (useDbSession) {
+      clearDbSession();
     }
   } catch (err) {
     console.error("[gateway] Failed to clear auth directory:", err);
@@ -50,7 +203,9 @@ async function startWhatsApp() {
   qrCodeData = null;
   qrRetries = 0;
 
-  const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+  const { state, saveCreds } = useDbSession
+    ? await useSupabaseAuthState()
+    : await useMultiFileAuthState(AUTH_DIR);
 
   // Always dynamically fetch the latest WhatsApp Web version for compatibility
   let version;

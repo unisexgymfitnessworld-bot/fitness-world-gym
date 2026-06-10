@@ -1026,6 +1026,14 @@ async function sendSms(env, phone, message) {
     throw new ApiError(503, "SMS_NOT_CONFIGURED", "Fast2SMS API key is not configured");
   }
 
+  // Clean phone number: remove all non-digits and keep the last 10 digits
+  const cleanPhone = phone.replace(/\D/g, "");
+  const targetPhone = cleanPhone.slice(-10);
+
+  if (targetPhone.length !== 10) {
+    throw new ApiError(400, "INVALID_PHONE", `Phone number must be a valid 10-digit number (got: ${phone})`);
+  }
+
   const response = await fetch("https://www.fast2sms.com/dev/bulkV2", {
     method: "POST",
     headers: {
@@ -1036,7 +1044,7 @@ async function sendSms(env, phone, message) {
       route: "q",
       message,
       language: "english",
-      numbers: phone,
+      numbers: targetPhone,
       flash: 0,
     }),
   });

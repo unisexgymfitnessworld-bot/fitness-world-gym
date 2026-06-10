@@ -15,6 +15,13 @@ export function createReminderText(member: Pick<Member, "name" | "membershipDue"
 }
 
 export async function sendSms(phone: string, message: string): Promise<string> {
+  const cleanPhone = phone.replace(/\D/g, "");
+  const targetPhone = cleanPhone.slice(-10);
+
+  if (targetPhone.length !== 10) {
+    throw new HttpError(400, "INVALID_PHONE", `Phone number must be a valid 10-digit number (got: ${phone})`);
+  }
+
   const response = await fetch("https://www.fast2sms.com/dev/bulkV2", {
     method: "POST",
     headers: {
@@ -25,7 +32,7 @@ export async function sendSms(phone: string, message: string): Promise<string> {
       route: "q",
       message,
       language: "english",
-      numbers: phone,
+      numbers: targetPhone,
       flash: 0,
     }),
   });
