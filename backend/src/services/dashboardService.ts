@@ -28,11 +28,12 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   const weekEnd = format(addDays(new Date(), 7), "yyyy-MM-dd");
   const monthStart = format(new Date(new Date().getFullYear(), new Date().getMonth(), 1), "yyyy-MM-dd");
 
-  const [total, active, expired, pending] = await Promise.all([
+  const [total, active, expired, pending, partiallyPaid] = await Promise.all([
     countMembers({}),
     countMembers({ status: "Active" }),
     countMembers({ status: "Expired" }),
     countMembers({ payment_status: "Pending" }),
+    countMembers({ payment_status: "Partially Paid" }),
   ]);
 
   const { count: dueCount, error: dueError } = await getSupabaseAdmin()
@@ -56,7 +57,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     active,
     expired,
     due_this_week: dueCount ?? 0,
-    pending_payments: pending,
+    pending_payments: pending + partiallyPaid,
     new_this_month: newCount ?? 0,
   };
 }

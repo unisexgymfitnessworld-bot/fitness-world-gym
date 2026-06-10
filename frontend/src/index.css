@@ -396,6 +396,44 @@ img {
   transform: translateY(-1px);
 }
 
+.studio-select {
+  border: 1px solid var(--border-default);
+  background: var(--brand-white);
+  color: var(--text-primary);
+  border-radius: var(--radius-card);
+  box-shadow: 0 4px 14px rgba(26, 26, 46, 0.03);
+  outline: none;
+  transition: border-color 200ms ease, box-shadow 200ms ease, background 200ms ease;
+}
+
+.studio-select:hover {
+  border-color: #cbd5e1;
+  background: #ffffff;
+}
+
+.studio-select:focus,
+.studio-select:focus-visible {
+  border-color: rgba(232, 23, 93, 0.5);
+  box-shadow: 0 0 0 3px rgba(232, 23, 93, 0.1), 0 8px 22px rgba(26, 26, 46, 0.06);
+}
+
+.studio-input[readonly] {
+  cursor: not-allowed;
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+  color: var(--text-secondary);
+  font-weight: 800;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+.studio-input[readonly]:hover,
+.studio-input[readonly]:focus {
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.05);
+  transform: none;
+}
+
 .brand-photo-frame {
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(255, 255, 255, 0.06);

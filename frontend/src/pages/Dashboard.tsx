@@ -1,7 +1,8 @@
-import { AlertTriangle, CalendarClock, IndianRupee, Sparkles, UsersRound } from "lucide-react";
+import { AlertTriangle, CalendarClock, IndianRupee, Sparkles, TrendingUp, UsersRound, type LucideIcon } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { FilterBar } from "../components/filters/FilterBar";
+import { FollowUpQueue } from "../components/followups/FollowUpQueue";
 import { FloatingActionButton } from "../components/layout/FloatingActionButton";
 import { Toast } from "../components/layout/Toast";
 import { TopBar } from "../components/layout/TopBar";
@@ -14,14 +15,17 @@ import { SettingsModal } from "../components/layout/SettingsModal";
 import { ReportExportModal } from "../components/layout/ReportExportModal";
 import { useAuth } from "../hooks/useAuth";
 import { useMembers } from "../hooks/useMembers";
+import { getMemberCollectedAmount, getMemberPendingAmount, getMembersForAnalyticsRange, summarizeAnalyticsRange, summarizeMemberAnalytics, type AnalyticsRange } from "../lib/analytics";
 import { api, isApiConfigured } from "../lib/api";
-import { daysUntil, formatCurrency, formatDisplayDate } from "../lib/utils";
+import { buildTodayFollowUps } from "../lib/followUps";
+import type { MessageTemplateId } from "../lib/messageTemplates";
+import { daysUntil, formatCurrency, formatDisplayDate, getMemberActionDueDate, getMemberDueKind, isPlanLessThanOneMonth } from "../lib/utils";
 import { useAppStore } from "../store/useAppStore";
-import type { MemberInput } from "../types";
+import type { MemberInput, PaymentReceiptInput } from "../types";
 
 export function Dashboard() {
   const { signOut } = useAuth();
-  const { members, attendance, stats, loading, upsertMember, suspendMember, renewMember, addVisit, markSmsSent } = useMembers();
+  const { members, attendance, paymentReceipts, renewalHistory, stats, loading, upsertMember, upsertMembers, suspendMember, renewMember, addVisit, addPaymentReceipt, markSmsSent } = useMembers();
   const trainer = useAppStore((state) => state.trainer);
   const filters = useAppStore((state) => state.filters);
   const selectedMemberId = useAppStore((state) => state.selectedMemberId);
@@ -36,14 +40,32 @@ export function Dashboard() {
   const [confirmingSuspendId, setConfirmingSuspendId] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
+  const [analysisRange, setAnalysisRange] = useState<AnalyticsRange>("2m");
+  const [smsTemplateId, setSmsTemplateId] = useState<MessageTemplateId | undefined>(undefined);
+
+  const dashboardSummary = useMemo(() => summarizeMemberAnalytics(members), [members]);
+  const analysisMembers = useMemo(() => getMembersForAnalyticsRange(members, analysisRange), [analysisRange, members]);
+  const selectedAnalysis = useMemo(() => summarizeAnalyticsRange(members, analysisRange), [analysisRange, members]);
+  const todayFollowUps = useMemo(() => buildTodayFollowUps(members, attendance), [attendance, members]);
+  const planInsight = useMemo(() => {
+    const counts = new Map<string, number>();
+    analysisMembers.forEach((member) => counts.set(member.planType, (counts.get(member.planType) ?? 0) + 1));
+    const [planType = "No plans", count = 0] = Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0] ?? [];
+    return { planType, count };
+  }, [analysisMembers]);
 
   const baseFilteredMembers = useMemo(() => {
     return members.filter((member) => {
       const statusMatch = filters.status === "All" || member.status === filters.status;
       const goalMatch = filters.goal === "All Goals" || member.goal === filters.goal;
       const paymentMatch = filters.payment === "All Payments" || member.paymentStatus === filters.payment;
-      const dueMatch = !filters.dueSoon || (member.status === "Active" && daysUntil(member.membershipDue) >= 0 && daysUntil(member.membershipDue) <= 3);
-      const monthMatch = filters.month === "All" || 
+      const dueMatch =
+        !filters.dueSoon ||
+        (member.status === "Active" &&
+          !isPlanLessThanOneMonth(member) &&
+          daysUntil(getMemberActionDueDate(member)) >= 0 &&
+          daysUntil(getMemberActionDueDate(member)) <= 3);
+      const monthMatch = filters.month === "All" ||
         (member.membershipStart && member.membershipStart.startsWith(filters.month)) ||
         (member.joinDate && member.joinDate.startsWith(filters.month));
       return statusMatch && goalMatch && paymentMatch && dueMatch && monthMatch;
@@ -64,14 +86,8 @@ export function Dashboard() {
 
     monthMembers.forEach((m) => {
       expected += m.feesAmount;
-      if (m.paymentStatus === "Paid") {
-        collected += m.feesAmount;
-      } else if (m.paymentStatus === "Partially Paid") {
-        collected += m.partialPaidAmount || 0;
-        pending += m.balanceAmount || 0;
-      } else {
-        pending += m.feesAmount;
-      }
+      collected += getMemberCollectedAmount(m);
+      pending += getMemberPendingAmount(m);
     });
 
     const collectionRate = expected > 0 ? Math.round((collected / expected) * 100) : 0;
@@ -95,6 +111,14 @@ export function Dashboard() {
   const selectedMember = members.find((member) => member.id === selectedMemberId) ?? null;
   const editingMember = members.find((member) => member.id === editingMemberId) ?? null;
   const smsMember = members.find((member) => member.id === smsMemberId) ?? null;
+  const selectedMemberPaymentReceipts = useMemo(
+    () => (selectedMember ? paymentReceipts.filter((receipt) => receipt.memberId === selectedMember.id) : []),
+    [paymentReceipts, selectedMember],
+  );
+  const selectedMemberRenewalHistory = useMemo(
+    () => (selectedMember ? renewalHistory.filter((entry) => entry.memberId === selectedMember.id) : []),
+    [renewalHistory, selectedMember],
+  );
 
   useEffect(() => {
     if (selectedMemberId) {
@@ -104,17 +128,51 @@ export function Dashboard() {
 
   const urgentMembers = useMemo(() => {
     return members
-      .filter((member) => member.status === "Active" && daysUntil(member.membershipDue) >= 0 && daysUntil(member.membershipDue) <= 7)
-      .sort((a, b) => daysUntil(a.membershipDue) - daysUntil(b.membershipDue))
+      .filter((member) =>
+        member.status === "Active" &&
+        !isPlanLessThanOneMonth(member) &&
+        daysUntil(getMemberActionDueDate(member)) >= 0 &&
+        daysUntil(getMemberActionDueDate(member)) <= 7
+      )
+      .sort((a, b) => daysUntil(getMemberActionDueDate(a)) - daysUntil(getMemberActionDueDate(b)))
       .slice(0, 3);
   }, [members]);
+  const nextDueMember = urgentMembers[0] ?? null;
 
   const pendingTotal = useMemo(() => {
-    return members.filter((member) => member.paymentStatus === "Pending").reduce((total, member) => total + member.feesAmount, 0);
-  }, [members]);
+    return dashboardSummary.allTime.pendingAmount;
+  }, [dashboardSummary.allTime.pendingAmount]);
+  const inactiveTotal = Math.max(0, stats.total - stats.active);
+  const nextDueDate = nextDueMember ? getMemberActionDueDate(nextDueMember) : null;
+  const nextDueDays = nextDueDate ? daysUntil(nextDueDate) : null;
+  const nextDueKind = nextDueMember ? getMemberDueKind(nextDueMember) : null;
+  const collectionPulse =
+    dashboardSummary.allTime.expectedAmount > 0
+      ? `${dashboardSummary.allTime.collectionRate}% collected`
+      : "No fee target yet";
 
-  async function saveMember(input: MemberInput, memberId?: string): Promise<void> {
+  function openSms(memberId: string, template?: MessageTemplateId): void {
+    setSmsTemplateId(template);
+    setSmsMemberId(memberId);
+  }
+
+  function closeSms(): void {
+    setSmsMemberId(null);
+    setSmsTemplateId(undefined);
+  }
+
+  async function saveMember(input: MemberInput | MemberInput[], memberId?: string): Promise<void> {
     try {
+      if (Array.isArray(input)) {
+        const savedMembers = await upsertMembers(input);
+        pushToast({
+          title: "Couple members added",
+          message: savedMembers.map((saved) => saved.name).join(" + "),
+          tone: "success",
+        });
+        return;
+      }
+
       const saved = await upsertMember(input, memberId);
       pushToast({
         title: memberId ? "Member updated" : "Member added",
@@ -127,6 +185,7 @@ export function Dashboard() {
         message: error instanceof Error ? error.message : "Unable to save member details",
         tone: "error",
       });
+      throw error;
     }
   }
 
@@ -137,7 +196,7 @@ export function Dashboard() {
       await suspendMember(memberId);
       pushToast({
         title: wasSuspended ? "Member restored" : "Member suspended",
-        message: wasSuspended ? "Member is now Active." : "Status changed successfully.",
+        message: wasSuspended ? "Member status was restored based on due date." : "Status changed successfully.",
         tone: "info",
       });
     } catch (error) {
@@ -203,6 +262,24 @@ export function Dashboard() {
     }
   }
 
+  async function handleAddPaymentReceipt(memberId: string, input: PaymentReceiptInput): Promise<void> {
+    try {
+      const receipt = await addPaymentReceipt(memberId, input);
+      pushToast({
+        title: "Payment receipt saved",
+        message: `${receipt.receiptNo} · ${formatCurrency(receipt.amount)}`,
+        tone: "success",
+      });
+    } catch (error) {
+      pushToast({
+        title: "Payment save failed",
+        message: error instanceof Error ? error.message : "Unable to record payment",
+        tone: "error",
+      });
+      throw error;
+    }
+  }
+
   if (!trainer) {
     return null;
   }
@@ -214,15 +291,26 @@ export function Dashboard() {
         <MemberProfile
           member={selectedMember}
           attendance={attendance}
+          paymentReceipts={selectedMemberPaymentReceipts}
+          renewalHistory={selectedMemberRenewalHistory}
           onBack={() => setSelectedMemberId(null)}
           onEdit={setEditingMemberId}
-          onSms={setSmsMemberId}
+          onSms={(memberId) => openSms(memberId)}
           onRenew={(memberId, start, due, feesAmount) => void handleRenew(memberId, start, due, feesAmount)}
           onAddVisit={(memberId, visitDate, weightKg) => void handleAddVisit(memberId, visitDate, weightKg)}
+          onAddPaymentReceipt={(memberId, input) => handleAddPaymentReceipt(memberId, input)}
         />
         <MemberSheet open={editingMemberId !== null} member={editingMember} onClose={() => setEditingMemberId(null)} onSave={saveMember} />
-        <SmsModal member={smsMember} open={smsMember !== null} onClose={() => setSmsMemberId(null)} onSend={handleSms} />
+        <SmsModal member={smsMember} open={smsMember !== null} initialTemplate={smsTemplateId} onClose={closeSms} onSend={handleSms} />
         <SettingsModal open={isSettingsOpen} trainer={trainer} onClose={() => setIsSettingsOpen(false)} />
+        <ReportExportModal
+          open={isExportOpen}
+          members={members}
+          attendance={attendance}
+          paymentReceipts={paymentReceipts}
+          renewalHistory={renewalHistory}
+          onClose={() => setIsExportOpen(false)}
+        />
         <Toast toast={toast} />
       </>
     );
@@ -234,12 +322,12 @@ export function Dashboard() {
       <main className="studio-shell animated-grid relative min-h-screen overflow-hidden">
         <div className="relative mx-auto grid max-w-[1500px] gap-3 px-3 pb-24 pt-3 sm:px-4 lg:gap-5 lg:px-8 lg:pt-6">
           <motion.section
-            className="studio-card grid gap-4 overflow-hidden rounded-[var(--radius-panel)] lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-5"
+            className="studio-card grid gap-0 overflow-hidden rounded-[var(--radius-panel)] xl:grid-cols-[minmax(0,1fr)_360px]"
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
           >
-            <div className="grid content-between gap-4 p-3 sm:p-4 lg:gap-8 lg:p-8">
+            <div className="grid gap-5 p-3 sm:p-4 lg:gap-6 lg:p-8">
               <div className="flex flex-wrap items-start justify-between gap-2 lg:gap-4">
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-wider text-brand-primary sm:text-[12px]">Live Trainer Desk</p>
@@ -267,15 +355,46 @@ export function Dashboard() {
               </div>
 
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:gap-3">
-                <CommandMetric icon={UsersRound} label="Members" value={`${stats.total}`} subtext="Registered" index={0} />
-                <CommandMetric icon={UsersRound} label="Active" value={`${stats.active}`} tone="green" subtext="Active plans" index={1} />
-                <CommandMetric icon={CalendarClock} label="Due Soon" value={`${stats.dueThisWeek}`} tone="amber" subtext="Next 7 days" index={2} />
-                <CommandMetric icon={IndianRupee} label="Pending" value={formatCurrency(pendingTotal)} tone="pink" subtext={`${stats.pendingPayments} members`} index={3} />
+                <CommandMetric
+                  icon={UsersRound}
+                  label="Active Members"
+                  value={`${stats.active}`}
+                  tone="green"
+                  subtext="Can train now"
+                  footer={inactiveTotal > 0 ? `${inactiveTotal} need attention` : `${stats.total} total records`}
+                  index={0}
+                />
+                <CommandMetric
+                  icon={CalendarClock}
+                  label="Renewal Calls"
+                  value={`${stats.dueThisWeek}`}
+                  tone="amber"
+                  subtext={nextDueMember ? `${nextDueKind}: ${nextDueMember.name}` : "No urgent renewals"}
+                  footer={nextDueDate ? `${formatDisplayDate(nextDueDate)} · ${nextDueDays}d` : "Next 7 days clear"}
+                  index={1}
+                />
+                <CommandMetric
+                  icon={IndianRupee}
+                  label="Fees To Collect"
+                  value={formatCurrency(pendingTotal)}
+                  tone="pink"
+                  subtext={`${dashboardSummary.allTime.pendingMembers} payment follow-ups`}
+                  footer={collectionPulse}
+                  index={2}
+                />
+                <CommandMetric
+                  icon={TrendingUp}
+                  label="This Month"
+                  value={`${dashboardSummary.thisMonth.memberCount}`}
+                  subtext={`${dashboardSummary.thisMonth.newMembers} new · ${dashboardSummary.thisMonth.renewals} renewal`}
+                  footer={`${formatCurrency(dashboardSummary.thisMonth.collectedAmount)} collected`}
+                  index={3}
+                />
               </div>
             </div>
 
-            <aside className="grid gap-2 bg-surface-raised p-3 sm:gap-3 sm:p-4 lg:gap-4 lg:border-l lg:border-border-default lg:p-5">
-              <div className="hidden overflow-hidden rounded-[var(--radius-card)] border border-border-default bg-brand-white p-2 lg:block">
+            <aside className="hidden gap-2 border-l border-border-default bg-surface-raised p-4 xl:grid xl:gap-4 xl:p-5">
+              <div className="overflow-hidden rounded-[var(--radius-card)] border border-border-default bg-brand-white p-2">
                 <img className="w-full rounded-lg object-contain" src="/brand/fitness-world-banner.jpeg" alt="Fitness World exterior banner" />
               </div>
               <div className="rounded-[var(--radius-card)] border border-border-default bg-brand-white p-3 lg:p-4">
@@ -299,9 +418,11 @@ export function Dashboard() {
                         <span className="absolute left-0 inset-y-0 w-1 bg-amber-500" />
                         <span>
                           <span className="block text-[14px] font-bold text-text-primary lg:text-[15px]">{member.name}</span>
-                          <span className="block text-[12px] font-semibold text-text-secondary lg:text-[13px]">{formatDisplayDate(member.membershipDue)}</span>
+                          <span className="block text-[12px] font-semibold text-text-secondary lg:text-[13px]">
+                            {getMemberDueKind(member)} · {formatDisplayDate(getMemberActionDueDate(member))}
+                          </span>
                         </span>
-                        <span className="rounded-full bg-amber-50 px-2 py-1 text-[12px] font-bold text-status-due">{daysUntil(member.membershipDue)}d</span>
+                        <span className="rounded-full bg-amber-50 px-2 py-1 text-[12px] font-bold text-status-due">{daysUntil(getMemberActionDueDate(member))}d</span>
                       </motion.button>
                     ))
                   ) : (
@@ -311,6 +432,88 @@ export function Dashboard() {
               </div>
             </aside>
           </motion.section>
+
+          <motion.section
+            className="studio-card grid gap-3 rounded-[var(--radius-panel)] p-3 sm:p-4 lg:grid-cols-[260px_1fr] lg:gap-5 lg:p-5"
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, delay: 0.15 }}
+          >
+            <div className="grid content-center gap-1">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-brand-primary">
+                  <Sparkles size={16} />
+                  <p className="text-[11px] font-bold uppercase tracking-wider">Analysis Snapshot</p>
+                </div>
+                <label className="sr-only" htmlFor="analysis-range">Analysis range</label>
+                <select
+                  id="analysis-range"
+                  aria-label="Analysis range"
+                  value={analysisRange}
+                  onChange={(event) => setAnalysisRange(event.target.value as AnalyticsRange)}
+                  className="studio-select min-h-10 px-3 text-[13px] font-black"
+                >
+                  <option value="1m">1 Month</option>
+                  <option value="2m">2 Months</option>
+                  <option value="all">All Time</option>
+                </select>
+              </div>
+              <h2 className="text-[18px] font-black leading-tight text-text-primary sm:text-[20px]">Gym data at a glance</h2>
+              <p className="text-[12px] font-semibold leading-5 text-text-secondary sm:text-[13px]">
+                {selectedAnalysis.label}: members, collections, pending fees, and renewal follow-ups.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6 lg:gap-3">
+              <InsightMetric
+                label="Members Added"
+                value={`${selectedAnalysis.memberCount}`}
+                subtext={`${selectedAnalysis.newMembers} new · ${selectedAnalysis.renewals} renewal`}
+                footer={selectedAnalysis.label}
+                tone="pink"
+              />
+              <InsightMetric
+                label="Money Collected"
+                value={formatCurrency(selectedAnalysis.collectedAmount)}
+                subtext={`${selectedAnalysis.collectionRate}% collection rate`}
+                footer={formatCurrency(selectedAnalysis.expectedAmount)}
+                tone="green"
+              />
+              <InsightMetric
+                label="Pending Fees"
+                value={formatCurrency(selectedAnalysis.pendingAmount)}
+                subtext={`${selectedAnalysis.pendingMembers} payment follow-ups`}
+                footer="Need collection"
+                tone="amber"
+              />
+              <InsightMetric
+                label="Active Now"
+                value={`${selectedAnalysis.activeCount}`}
+                subtext={`${selectedAnalysis.coupleMembers} couple records`}
+                footer="Running plans"
+                tone="green"
+              />
+              <InsightMetric
+                label="Most Used Plan"
+                value={planInsight.planType}
+                subtext={`${planInsight.count} members using this plan`}
+                footer="Plan demand"
+                tone="sky"
+              />
+              <InsightMetric
+                label="Next Renewal"
+                value={nextDueDate ? `${daysUntil(nextDueDate)}d` : "Clear"}
+                subtext={nextDueMember ? nextDueMember.name : "No renewals this week"}
+                footer={nextDueDate ? `${nextDueKind}: ${formatDisplayDate(nextDueDate)}` : "No follow-up"}
+                tone="amber"
+              />
+            </div>
+          </motion.section>
+
+          <FollowUpQueue
+            items={todayFollowUps}
+            onView={setSelectedMemberId}
+            onMessage={(memberId, template) => openSms(memberId, template)}
+          />
 
           <FilterBar filters={filters} resultCount={baseFilteredMembers.length} onChange={setFilter} members={members} />
           
@@ -395,7 +598,7 @@ export function Dashboard() {
             loading={loading}
             onView={setSelectedMemberId}
             onEdit={setEditingMemberId}
-            onSms={setSmsMemberId}
+            onSms={(memberId) => openSms(memberId)}
             onSuspend={setConfirmingSuspendId}
             isDbEmpty={members.length === 0}
             onAddClick={() => setEditingMemberId("new")}
@@ -412,13 +615,13 @@ export function Dashboard() {
       </main>
       <FloatingActionButton onClick={() => setEditingMemberId("new")} />
       <MemberSheet open={editingMemberId !== null} member={editingMemberId === "new" ? null : editingMember} onClose={() => setEditingMemberId(null)} onSave={saveMember} />
-      <SmsModal member={smsMember} open={smsMember !== null} onClose={() => setSmsMemberId(null)} onSend={handleSms} />
+      <SmsModal member={smsMember} open={smsMember !== null} initialTemplate={smsTemplateId} onClose={closeSms} onSend={handleSms} />
       <ConfirmModal
         open={confirmingSuspendId !== null}
         title={confirmingMember?.status === "Suspended" ? "Unsuspend Member" : "Suspend Member"}
         message={
           confirmingMember?.status === "Suspended"
-            ? `Are you sure you want to unsuspend ${confirmingMember?.name ?? "this member"}? Their plan status will be restored to Active.`
+            ? `Are you sure you want to unsuspend ${confirmingMember?.name ?? "this member"}? Their plan status will be restored based on due date.`
             : `Are you sure you want to suspend ${confirmingMember?.name ?? "this member"}? Their active plan status will be updated to Suspended.`
         }
         confirmText={confirmingMember?.status === "Suspended" ? "Unsuspend" : "Suspend"}
@@ -432,22 +635,58 @@ export function Dashboard() {
         onClose={() => setConfirmingSuspendId(null)}
       />
       <SettingsModal open={isSettingsOpen} trainer={trainer} onClose={() => setIsSettingsOpen(false)} />
-      <ReportExportModal open={isExportOpen} members={members} onClose={() => setIsExportOpen(false)} />
+      <ReportExportModal
+        open={isExportOpen}
+        members={members}
+        attendance={attendance}
+        paymentReceipts={paymentReceipts}
+        renewalHistory={renewalHistory}
+        onClose={() => setIsExportOpen(false)}
+      />
       <Toast toast={toast} />
     </>
   );
 }
 
+interface InsightMetricProps {
+  label: string;
+  value: string;
+  subtext: string;
+  footer: string;
+  tone: "pink" | "sky" | "green" | "amber";
+}
+
+function InsightMetric({ label, value, subtext, footer, tone }: InsightMetricProps) {
+  const toneClass =
+    tone === "green"
+      ? "border-emerald-100 bg-emerald-50/40 text-status-active"
+      : tone === "amber"
+      ? "border-amber-100 bg-amber-50/50 text-status-due"
+      : tone === "sky"
+      ? "border-sky-100 bg-sky-50/50 text-sky-700"
+      : "border-pink-100 bg-brand-primary-light/50 text-brand-primary";
+
+  return (
+    <div className={`rounded-[var(--radius-card)] border p-3 shadow-sm ${toneClass}`}>
+      <p className="text-[10px] font-black uppercase tracking-wider opacity-80">{label}</p>
+      <p className="mt-1 text-[18px] font-black leading-tight text-text-primary sm:text-[20px] lg:text-[22px]">{value}</p>
+      <p className="mt-1 min-h-8 text-[11px] font-bold leading-4 text-text-secondary">{subtext}</p>
+      <p className="mt-2 rounded-full bg-brand-white/70 px-2 py-1 text-[11px] font-black text-text-primary">{footer}</p>
+    </div>
+  );
+}
+
 interface CommandMetricProps {
-  icon: typeof UsersRound;
+  icon: LucideIcon;
   label: string;
   value: string;
   subtext?: string;
+  footer?: string;
   tone?: "neutral" | "amber" | "pink" | "green";
   index: number;
 }
 
-function CommandMetric({ icon: Icon, label, value, subtext, tone = "neutral", index }: CommandMetricProps) {
+function CommandMetric({ icon: Icon, label, value, subtext, footer, tone = "neutral", index }: CommandMetricProps) {
   const toneClass =
     tone === "amber"
       ? "bg-amber-50 text-status-due"
@@ -459,7 +698,7 @@ function CommandMetric({ icon: Icon, label, value, subtext, tone = "neutral", in
 
   return (
     <motion.div
-      className="card-hover rounded-[var(--radius-card)] border border-border-default bg-brand-white p-2.5 sm:p-3 lg:p-4 flex flex-col justify-between"
+      className="card-hover flex min-h-[118px] flex-col justify-between rounded-[var(--radius-card)] border border-border-default bg-brand-white p-2.5 sm:min-h-[126px] sm:p-3 lg:p-4"
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: 0.2 + index * 0.1 }}
@@ -475,7 +714,12 @@ function CommandMetric({ icon: Icon, label, value, subtext, tone = "neutral", in
         <p className="mt-1.5 truncate text-[16px] font-black leading-tight text-text-primary sm:text-[18px] lg:text-[20px]">{value}</p>
       </div>
       {subtext && (
-        <p className="mt-1.5 text-[9px] font-bold text-text-secondary sm:text-[10px] lg:text-[11px] opacity-80">{subtext}</p>
+        <p className="mt-1.5 min-h-[28px] text-[9px] font-bold leading-4 text-text-secondary opacity-80 sm:text-[10px] lg:text-[11px]">{subtext}</p>
+      )}
+      {footer && (
+        <p className="mt-2 truncate rounded-full bg-surface-raised px-2 py-1 text-[9px] font-black text-text-primary sm:text-[10px] lg:text-[11px]">
+          {footer}
+        </p>
       )}
     </motion.div>
   );

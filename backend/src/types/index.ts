@@ -9,6 +9,7 @@ export type Gender = "Male" | "Female" | "Other";
 export type Goal = "Weight Loss" | "Weight Gain" | "Muscle Gain" | "General Fitness" | "Other";
 export type PlanType = "1 Month" | "3 Months" | "6 Months" | "1 Year" | "Custom";
 export type PaymentStatus = "Paid" | "Pending" | "Partially Paid";
+export type PaymentMethod = "Cash" | "UPI" | "Card" | "Bank Transfer" | "Other";
 export type MemberStatus = "Active" | "Expired" | "Suspended";
 export type TrainingType = "Personal" | "General" | "Couple";
 
@@ -120,6 +121,68 @@ export interface AttendanceEntry {
   memberId: string;
   visitDate: string;
   weightKg?: number;
+  createdAt: string;
+}
+
+export interface DbPaymentReceipt {
+  id: string;
+  member_id: string;
+  owner_user_id: string | null;
+  receipt_no: string;
+  paid_on: string;
+  amount: number | string;
+  method: PaymentMethod;
+  note: string;
+  created_at: string;
+}
+
+export interface PaymentReceipt {
+  id: string;
+  memberId: string;
+  receiptNo: string;
+  paidOn: string;
+  amount: number;
+  method: PaymentMethod;
+  note: string;
+  createdAt: string;
+}
+
+export interface PaymentReceiptInput {
+  paidOn: string;
+  amount: number;
+  method: PaymentMethod;
+  note?: string;
+  receiptNo?: string;
+}
+
+export interface DbRenewalHistoryEntry {
+  id: string;
+  member_id: string;
+  owner_user_id: string | null;
+  old_plan_type: PlanType;
+  new_plan_type: PlanType;
+  old_start_date: string;
+  old_due_date: string;
+  new_start_date: string;
+  new_due_date: string;
+  amount: number | string;
+  payment_status: PaymentStatus;
+  renewed_on: string;
+  created_at: string;
+}
+
+export interface RenewalHistoryEntry {
+  id: string;
+  memberId: string;
+  oldPlanType: PlanType;
+  newPlanType: PlanType;
+  oldStartDate: string;
+  oldDueDate: string;
+  newStartDate: string;
+  newDueDate: string;
+  amount: number;
+  paymentStatus: PaymentStatus;
+  renewedOn: string;
   createdAt: string;
 }
 

@@ -7,6 +7,7 @@ const GENDERS = new Set(["Male", "Female", "Other"]);
 const GOALS = new Set(["Weight Loss", "Weight Gain", "Muscle Gain", "General Fitness", "Other"]);
 const PLAN_TYPES = new Set(["1 Month", "3 Months", "6 Months", "1 Year", "Custom"]);
 const PAYMENT_STATUSES = new Set(["Paid", "Pending", "Partially Paid"]);
+const PAYMENT_METHODS = new Set(["Cash", "UPI", "Card", "Bank Transfer", "Other"]);
 const STATUS_VALUES = new Set(["Active", "Expired", "Suspended"]);
 const TRAINING_TYPES = new Set(["Personal", "General", "Couple"]);
 const DEFAULT_TRAINER_EMAILS = ["fitnessworld@gmail.com", "trainer@fitnessworld.in", "digimartrix26@gmail.com"];
@@ -14,6 +15,12 @@ const rateLimitStore = new Map();
 const logBuffer = [];
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const FIXED_PLAN_MONTHS = new Map([
+  ["1 Month", 1],
+  ["3 Months", 3],
+  ["6 Months", 6],
+  ["1 Year", 12],
+]);
 
 class ApiError extends Error {
   constructor(status, code, message) {
@@ -165,6 +172,19 @@ async function handleRequest(request, env) {
       const body = await parseJsonBody(request);
       const paymentStatus = assertEnum(body.paymentStatus ?? body.payment_status, PAYMENT_STATUSES, "payment status");
       return jsonResponse(request, env, { success: true, data: await updatePayment(env, authUser, memberId, paymentStatus) });
+    }
+
+    if (action === "payments" && method === "GET") {
+      return jsonResponse(request, env, { success: true, data: await listPaymentReceipts(env, authUser, memberId) });
+    }
+
+    if (action === "renewals" && method === "GET") {
+      return jsonResponse(request, env, { success: true, data: await listRenewalHistory(env, authUser, memberId) });
+    }
+
+    if (action === "payments" && method === "POST") {
+      const body = validatePaymentReceiptInput(await parseJsonBody(request));
+      return jsonResponse(request, env, { success: true, data: await createPaymentReceipt(env, authUser, memberId, body) }, 201);
     }
 
     if (action === "renew" && method === "PATCH") {
@@ -664,7 +684,107 @@ async function updatePayment(env, user, memberId, paymentStatus) {
   return mapMember(rows[0]);
 }
 
+async function listPaymentReceipts(env, user, memberId) {
+  await getMember(env, user, memberId);
+  const params = new URLSearchParams({
+    select: "*",
+    member_id: `eq.${memberId}`,
+    owner_user_id: ownerFilter(user),
+    order: "paid_on.desc,created_at.desc",
+  });
+  const rows = await supabaseJson(env, `/payment_receipts?${params.toString()}`);
+  return rows.map(mapPaymentReceipt);
+}
+
+async function listRenewalHistory(env, user, memberId) {
+  await getMember(env, user, memberId);
+  const params = new URLSearchParams({
+    select: "*",
+    member_id: `eq.${memberId}`,
+    owner_user_id: ownerFilter(user),
+    order: "renewed_on.desc,created_at.desc",
+  });
+  const rows = await supabaseJson(env, `/renewal_history?${params.toString()}`);
+  return rows.map(mapRenewalHistory);
+}
+
+async function paymentReceiptTotal(env, user, memberId) {
+  const params = new URLSearchParams({
+    select: "amount",
+    member_id: `eq.${memberId}`,
+    owner_user_id: ownerFilter(user),
+  });
+  const rows = await supabaseJson(env, `/payment_receipts?${params.toString()}`);
+  return rows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+}
+
+async function createPaymentReceipt(env, user, memberId, input) {
+  const member = await getMember(env, user, memberId);
+  const existingReceiptTotal = await paymentReceiptTotal(env, user, memberId);
+  const legacyCollectedAmount = Math.max(0, Math.min(member.partialPaidAmount - existingReceiptTotal, member.feesAmount));
+  const collectedBeforeReceipt = legacyCollectedAmount + existingReceiptTotal;
+  const currentBalance = Math.max(member.feesAmount - collectedBeforeReceipt, 0);
+
+  if (member.feesAmount <= 0) {
+    throw new ApiError(400, "PAYMENT_NOT_REQUIRED", "This member has no fees to collect");
+  }
+  if (currentBalance <= 0) {
+    throw new ApiError(400, "PAYMENT_ALREADY_SETTLED", "This member has no pending balance");
+  }
+  if (input.amount > currentBalance) {
+    throw new ApiError(400, "PAYMENT_EXCEEDS_BALANCE", `Payment cannot exceed the pending balance of ₹${currentBalance}`);
+  }
+
+  const receiptNo = input.receiptNo || generateReceiptNo();
+  const rows = await supabaseJson(env, "/payment_receipts?select=*", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(paymentReceiptInputToDb(memberId, user.id, input, receiptNo)),
+  });
+  const receipt = rows[0];
+  if (!receipt) throw new ApiError(500, "PAYMENT_RECEIPT_CREATE_FAILED", "Unable to create payment receipt");
+
+  const collectedAmount = collectedBeforeReceipt + input.amount;
+  const safeCollected = Math.min(Math.max(collectedAmount, 0), member.feesAmount);
+  const balanceAmount = Math.max(member.feesAmount - safeCollected, 0);
+  const paymentStatus = paymentStatusFromAmounts(member.feesAmount, safeCollected);
+  const memberRows = await supabaseJson(env, `/members?id=eq.${encodeURIComponent(memberId)}&owner_user_id=${ownerFilter(user)}&select=*`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({
+      partial_paid_amount: safeCollected,
+      balance_amount: balanceAmount,
+      payment_status: paymentStatus,
+    }),
+  });
+  if (!memberRows[0]) throw new ApiError(404, "MEMBER_NOT_FOUND", "Member not found");
+
+  return {
+    receipt: mapPaymentReceipt(receipt),
+    member: mapMember(memberRows[0]),
+  };
+}
+
 async function renewMember(env, user, memberId, membershipStart, membershipDue, feesAmount) {
+  const member = await getMember(env, user, memberId);
+  await supabaseJson(env, "/renewal_history?select=*", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({
+      member_id: memberId,
+      owner_user_id: user.id,
+      old_plan_type: member.planType,
+      new_plan_type: member.planType,
+      old_start_date: member.membershipStart,
+      old_due_date: member.membershipDue,
+      new_start_date: membershipStart,
+      new_due_date: membershipDue,
+      amount: feesAmount,
+      payment_status: "Paid",
+      renewed_on: isoDateInTimeZone(),
+    }),
+  });
+
   const rows = await supabaseJson(env, `/members?id=eq.${encodeURIComponent(memberId)}&owner_user_id=${ownerFilter(user)}&select=*`, {
     method: "PATCH",
     headers: { Prefer: "return=representation" },
@@ -673,6 +793,8 @@ async function renewMember(env, user, memberId, membershipStart, membershipDue, 
       membership_due: membershipDue,
       fees_amount: feesAmount,
       payment_status: "Paid",
+      partial_paid_amount: feesAmount,
+      balance_amount: 0,
       status: "Active",
       sms_sent_3days: false,
     }),
@@ -683,7 +805,7 @@ async function renewMember(env, user, memberId, membershipStart, membershipDue, 
 
 async function suspendMember(env, user, memberId) {
   const member = await getMember(env, user, memberId);
-  const nextStatus = member.status === "Suspended" ? "Active" : "Suspended";
+  const nextStatus = member.status === "Suspended" ? (member.membershipDue < isoDateInTimeZone() ? "Expired" : "Active") : "Suspended";
   const rows = await supabaseJson(env, `/members?id=eq.${encodeURIComponent(memberId)}&owner_user_id=${ownerFilter(user)}&select=*`, {
     method: "PATCH",
     headers: { Prefer: "return=representation" },
@@ -736,11 +858,12 @@ async function getDashboardStats(env, user) {
   const weekEnd = isoDateInTimeZone(addDays(new Date(), 7));
   const monthStart = `${today.slice(0, 8)}01`;
 
-  const [total, active, expired, pending, due, newThisMonth] = await Promise.all([
+  const [total, active, expired, pending, partiallyPaid, due, newThisMonth] = await Promise.all([
     countRows(env, "members", [["owner_user_id", ownerFilter(user)]]),
     countRows(env, "members", [["owner_user_id", ownerFilter(user)], ["status", "eq.Active"]]),
     countRows(env, "members", [["owner_user_id", ownerFilter(user)], ["status", "eq.Expired"]]),
     countRows(env, "members", [["owner_user_id", ownerFilter(user)], ["payment_status", "eq.Pending"]]),
+    countRows(env, "members", [["owner_user_id", ownerFilter(user)], ["payment_status", "eq.Partially Paid"]]),
     countRows(env, "members", [
       ["owner_user_id", ownerFilter(user)],
       ["status", "eq.Active"],
@@ -755,7 +878,7 @@ async function getDashboardStats(env, user) {
     active,
     expired,
     due_this_week: due,
-    pending_payments: pending,
+    pending_payments: pending + partiallyPaid,
     new_this_month: newThisMonth,
   };
 }
@@ -768,6 +891,16 @@ async function runExpireStatus(env) {
     body: JSON.stringify({ status: "Expired" }),
   });
   return rows.length;
+}
+
+function isMemberPlanLessThanOneMonth(member) {
+  if (member.planType !== "Custom") return false;
+  if (!member.membershipStart || !member.membershipDue) return false;
+  const start = new Date(member.membershipStart);
+  const due = new Date(member.membershipDue);
+  const diffTime = due.getTime() - start.getTime();
+  const diffDays = Math.round(diffTime / ONE_DAY_MS);
+  return diffDays < 30;
 }
 
 async function runSmsReminder(env) {
@@ -783,6 +916,9 @@ async function runSmsReminder(env) {
   const threeDayMembers = await membersDueInThreeDays(env);
   if (threeDayMembers.length > 0 && (hasSms || hasWhatsApp)) {
     for (const member of threeDayMembers) {
+      if (isMemberPlanLessThanOneMonth(member)) {
+        continue;
+      }
       try {
         let sentSMS = false;
         let sentWA = false;
@@ -820,6 +956,9 @@ async function runSmsReminder(env) {
   if (hasWhatsApp) {
     const todayMembers = await membersDueToday(env);
     for (const member of todayMembers) {
+      if (isMemberPlanLessThanOneMonth(member)) {
+        continue;
+      }
       try {
         const messageText = createDueDayReminderText(member);
         await sendWhatsApp(env, member.phone, messageText);
@@ -1105,6 +1244,12 @@ function validateMemberInput(body) {
     throw new ApiError(400, "INVALID_PHONE", "Phone number must be 10 digits");
   }
 
+  if (input.planType === "Custom") {
+    assertDueDateOrder(input.membershipStart, input.membershipDue);
+  } else {
+    input.membershipDue = calculatePlanDueDate(input.membershipStart, input.planType);
+  }
+
   if (input.paymentStatus === "Partially Paid") {
     if (input.partialPaidAmount < 1) {
       throw new ApiError(400, "INVALID_PARTIAL_AMOUNT", "Partial amount must be at least 1");
@@ -1118,11 +1263,60 @@ function validateMemberInput(body) {
 }
 
 function validateRenewInput(body) {
-  return {
+  const input = {
     membershipStart: requiredDate(body.membershipStart ?? body.membership_start, "membership start"),
     membershipDue: requiredDate(body.membershipDue ?? body.membership_due, "membership due"),
     feesAmount: requiredNumber(body.feesAmount ?? body.fees_amount, "fees amount", 0),
   };
+  assertDueDateOrder(input.membershipStart, input.membershipDue);
+  return input;
+}
+
+function validatePaymentReceiptInput(body) {
+  const receiptNo = optionalText(body.receiptNo ?? body.receipt_no);
+  if (receiptNo && !/^[A-Za-z0-9/_-]{3,40}$/.test(receiptNo)) {
+    throw new ApiError(400, "INVALID_RECEIPT_NO", "Receipt number can use letters, numbers, slash, underscore, or dash");
+  }
+
+  const note = optionalText(body.note);
+  if (note && note.length > 180) {
+    throw new ApiError(400, "INVALID_PAYMENT_NOTE", "Payment note must be 180 characters or less");
+  }
+
+  return {
+    paidOn: requiredDate(body.paidOn ?? body.paid_on, "payment date"),
+    amount: requiredNumber(body.amount, "payment amount", 1, 1_000_000),
+    method: assertEnum(body.method, PAYMENT_METHODS, "payment method"),
+    note: note ?? "",
+    receiptNo,
+  };
+}
+
+function assertDueDateOrder(startDate, dueDate) {
+  if (dueDate < startDate) {
+    throw new ApiError(400, "INVALID_MEMBERSHIP_DATES", "Due date must be on or after the start date");
+  }
+}
+
+function calculatePlanDueDate(startDate, planType) {
+  const months = FIXED_PLAN_MONTHS.get(planType);
+  if (!months) {
+    return startDate;
+  }
+  return addCalendarMonthsIso(startDate, months);
+}
+
+function addCalendarMonthsIso(startDate, months) {
+  const [year, month, day] = startDate.split("-").map(Number);
+  const targetMonth = month - 1 + months;
+  const targetYear = year + Math.floor(targetMonth / 12);
+  const targetMonthIndex = targetMonth % 12;
+  const targetDay = Math.min(day, daysInUtcMonth(targetYear, targetMonthIndex));
+  return `${targetYear}-${String(targetMonthIndex + 1).padStart(2, "0")}-${String(targetDay).padStart(2, "0")}`;
+}
+
+function daysInUtcMonth(year, monthIndex) {
+  return new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
 }
 
 function validateAttendanceInput(body) {
@@ -1148,6 +1342,19 @@ function validateSmsMemberInput(body) {
   return {
     memberId: assertUuid(body.memberId ?? body.member_id, "member id"),
   };
+}
+
+function generateReceiptNo(date = new Date()) {
+  const stamp = date.toISOString().replace(/[-:T.Z]/g, "").slice(0, 14);
+  const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `FW-R-${stamp}-${suffix}`;
+}
+
+function paymentStatusFromAmounts(feesAmount, collectedAmount) {
+  if (feesAmount <= 0 || collectedAmount >= feesAmount) {
+    return "Paid";
+  }
+  return collectedAmount > 0 ? "Partially Paid" : "Pending";
 }
 
 function memberInputToDb(input) {
@@ -1176,6 +1383,18 @@ function memberInputToDb(input) {
     address: input.address,
     partial_paid_amount: input.partialPaidAmount,
     balance_amount: input.balanceAmount,
+  };
+}
+
+function paymentReceiptInputToDb(memberId, ownerUserId, input, receiptNo) {
+  return {
+    member_id: memberId,
+    owner_user_id: ownerUserId,
+    receipt_no: receiptNo,
+    paid_on: input.paidOn,
+    amount: input.amount,
+    method: input.method,
+    note: input.note ?? "",
   };
 }
 
@@ -1216,6 +1435,36 @@ function mapMember(row) {
   };
 }
 
+function mapPaymentReceipt(row) {
+  return {
+    id: row.id,
+    memberId: row.member_id,
+    receiptNo: row.receipt_no,
+    paidOn: row.paid_on,
+    amount: Number(row.amount || 0),
+    method: row.method,
+    note: row.note || "",
+    createdAt: row.created_at,
+  };
+}
+
+function mapRenewalHistory(row) {
+  return {
+    id: row.id,
+    memberId: row.member_id,
+    oldPlanType: row.old_plan_type,
+    newPlanType: row.new_plan_type,
+    oldStartDate: row.old_start_date,
+    oldDueDate: row.old_due_date,
+    newStartDate: row.new_start_date,
+    newDueDate: row.new_due_date,
+    amount: Number(row.amount || 0),
+    paymentStatus: row.payment_status,
+    renewedOn: row.renewed_on,
+    createdAt: row.created_at,
+  };
+}
+
 function mapAttendance(row) {
   return {
     id: row.id,
@@ -1246,10 +1495,18 @@ function requiredNumber(value, label, min, max = Number.POSITIVE_INFINITY) {
 }
 
 function requiredDate(value, label) {
-  if (typeof value !== "string" || !ISO_DATE_RE.test(value)) {
+  if (typeof value !== "string" || !isRealIsoDate(value)) {
     throw new ApiError(400, "INVALID_DATE", `${label} must use yyyy-mm-dd`);
   }
   return value;
+}
+
+function isRealIsoDate(value) {
+  if (!ISO_DATE_RE.test(value)) {
+    return false;
+  }
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
 function assertEnum(value, allowed, label) {

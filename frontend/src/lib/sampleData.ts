@@ -1,5 +1,5 @@
 import { addDays, addMonths, format } from "date-fns";
-import type { AttendanceEntry, Member } from "../types";
+import type { AttendanceEntry, Member, PaymentReceipt, RenewalHistoryEntry } from "../types";
 import { calculateBmi } from "./utils";
 
 const today = new Date();
@@ -149,5 +149,59 @@ export const sampleAttendance: AttendanceEntry[] = [
     visitDate: format(addDays(today, -2), "yyyy-MM-dd"),
     weightKg: 74,
     createdAt: addDays(today, -2).toISOString(),
+  },
+];
+
+export const samplePaymentReceipts: PaymentReceipt[] = [
+  {
+    id: "receipt-001",
+    memberId: "member-001",
+    receiptNo: "FW-R-SAMPLE-001",
+    paidOn: format(addMonths(today, -2), "yyyy-MM-dd"),
+    amount: 4500,
+    method: "UPI",
+    note: "3 month plan paid at renewal",
+    createdAt: addMonths(today, -2).toISOString(),
+  },
+  {
+    id: "receipt-002",
+    memberId: "member-003",
+    receiptNo: "FW-R-SAMPLE-002",
+    paidOn: format(addMonths(today, -1), "yyyy-MM-dd"),
+    amount: 7800,
+    method: "Cash",
+    note: "6 month plan paid upfront",
+    createdAt: addMonths(today, -1).toISOString(),
+  },
+];
+
+export const sampleRenewalHistory: RenewalHistoryEntry[] = [
+  {
+    id: "renewal-001",
+    memberId: "member-001",
+    oldPlanType: "1 Month",
+    newPlanType: "3 Months",
+    oldStartDate: format(addMonths(today, -3), "yyyy-MM-dd"),
+    oldDueDate: format(addMonths(today, -2), "yyyy-MM-dd"),
+    newStartDate: format(addMonths(today, -2), "yyyy-MM-dd"),
+    newDueDate: format(addDays(today, 3), "yyyy-MM-dd"),
+    amount: 4500,
+    paymentStatus: "Paid",
+    renewedOn: format(addMonths(today, -2), "yyyy-MM-dd"),
+    createdAt: addMonths(today, -2).toISOString(),
+  },
+  {
+    id: "renewal-002",
+    memberId: "member-003",
+    oldPlanType: "3 Months",
+    newPlanType: "6 Months",
+    oldStartDate: format(addMonths(today, -4), "yyyy-MM-dd"),
+    oldDueDate: format(addMonths(today, -1), "yyyy-MM-dd"),
+    newStartDate: format(addMonths(today, -1), "yyyy-MM-dd"),
+    newDueDate: format(addMonths(today, 5), "yyyy-MM-dd"),
+    amount: 7800,
+    paymentStatus: "Paid",
+    renewedOn: format(addMonths(today, -1), "yyyy-MM-dd"),
+    createdAt: addMonths(today, -1).toISOString(),
   },
 ];

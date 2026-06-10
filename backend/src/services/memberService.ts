@@ -1,8 +1,9 @@
-import { format } from "date-fns";
+import { addMonths, format, parseISO } from "date-fns";
 import { HttpError } from "../lib/httpError.js";
 import { getSupabaseAdmin } from "../lib/supabase.js";
 import type { DbMember, Member, MemberInput, PaymentStatus } from "../types/index.js";
 import { mapMember, memberInputToDb } from "./mappers.js";
+import { memberOwnerUserId, recordRenewalHistory } from "./renewalService.js";
 
 interface ListMembersOptions {
   search?: string;
@@ -13,6 +14,31 @@ interface ListMembersOptions {
   sort?: string;
   page?: number;
   limit?: number;
+}
+
+function calculatePlanDueDate(startDate: string, planType: MemberInput["planType"]): string {
+  switch (planType) {
+    case "1 Month":
+      return format(addMonths(parseISO(startDate), 1), "yyyy-MM-dd");
+    case "3 Months":
+      return format(addMonths(parseISO(startDate), 3), "yyyy-MM-dd");
+    case "6 Months":
+      return format(addMonths(parseISO(startDate), 6), "yyyy-MM-dd");
+    case "1 Year":
+      return format(addMonths(parseISO(startDate), 12), "yyyy-MM-dd");
+    case "Custom":
+      return format(addMonths(parseISO(startDate), 1), "yyyy-MM-dd");
+  }
+}
+
+function normalizeMembershipDates(input: MemberInput): MemberInput {
+  if (input.planType === "Custom") {
+    return input;
+  }
+  return {
+    ...input,
+    membershipDue: calculatePlanDueDate(input.membershipStart, input.planType),
+  };
 }
 
 export async function listMembers(options: ListMembersOptions = {}): Promise<Member[]> {
@@ -39,7 +65,7 @@ export async function listMembers(options: ListMembersOptions = {}): Promise<Mem
     query = query.eq("payment_status", options.payment);
   }
 
-  // Due soon filter (membership due in next 3 days)
+  // Due soon filter (package renewal or custom plan end date in next 3 days)
   if (options.dueSoon) {
     const today = format(new Date(), "yyyy-MM-dd");
     const targetDate = format(new Date(Date.now() + 3 * 86_400_000), "yyyy-MM-dd");
@@ -97,7 +123,7 @@ export async function getMember(memberId: string): Promise<Member> {
 }
 
 export async function createMember(input: MemberInput): Promise<Member> {
-  const { data, error } = await getSupabaseAdmin().from("members").insert(memberInputToDb(input)).select("*").single();
+  const { data, error } = await getSupabaseAdmin().from("members").insert(memberInputToDb(normalizeMembershipDates(input))).select("*").single();
   if (error || !data) {
     throw new HttpError(500, "MEMBER_CREATE_FAILED", error?.message ?? "Unable to create member");
   }
@@ -105,7 +131,7 @@ export async function createMember(input: MemberInput): Promise<Member> {
 }
 
 export async function updateMember(memberId: string, input: MemberInput): Promise<Member> {
-  const { data, error } = await getSupabaseAdmin().from("members").update(memberInputToDb(input)).eq("id", memberId).select("*").single();
+  const { data, error } = await getSupabaseAdmin().from("members").update(memberInputToDb(normalizeMembershipDates(input))).eq("id", memberId).select("*").single();
   if (error || !data) {
     throw new HttpError(500, "MEMBER_UPDATE_FAILED", error?.message ?? "Unable to update member");
   }
@@ -121,6 +147,21 @@ export async function updatePayment(memberId: string, paymentStatus: PaymentStat
 }
 
 export async function renewMember(memberId: string, membershipStart: string, membershipDue: string, feesAmount: number): Promise<Member> {
+  const { data: currentRow, error: currentError } = await getSupabaseAdmin().from("members").select("*").eq("id", memberId).single();
+  if (currentError || !currentRow) {
+    throw new HttpError(404, "MEMBER_NOT_FOUND", "Member not found");
+  }
+
+  const currentMember = mapMember(currentRow as DbMember);
+  await recordRenewalHistory({
+    oldMember: currentMember,
+    newStartDate: membershipStart,
+    newDueDate: membershipDue,
+    amount: feesAmount,
+    paymentStatus: "Paid",
+    ownerUserId: memberOwnerUserId(currentRow as DbMember),
+  });
+
   const { data, error } = await getSupabaseAdmin()
     .from("members")
     .update({
@@ -128,6 +169,8 @@ export async function renewMember(memberId: string, membershipStart: string, mem
       membership_due: membershipDue,
       fees_amount: feesAmount,
       payment_status: "Paid",
+      partial_paid_amount: feesAmount,
+      balance_amount: 0,
       status: "Active",
       sms_sent_3days: false,
     })
@@ -142,7 +185,10 @@ export async function renewMember(memberId: string, membershipStart: string, mem
 }
 
 export async function suspendMember(memberId: string): Promise<Member> {
-  const { data, error } = await getSupabaseAdmin().from("members").update({ status: "Suspended" }).eq("id", memberId).select("*").single();
+  const member = await getMember(memberId);
+  const today = format(new Date(), "yyyy-MM-dd");
+  const nextStatus = member.status === "Suspended" ? (member.membershipDue < today ? "Expired" : "Active") : "Suspended";
+  const { data, error } = await getSupabaseAdmin().from("members").update({ status: nextStatus }).eq("id", memberId).select("*").single();
   if (error || !data) {
     throw new HttpError(500, "MEMBER_SUSPEND_FAILED", error?.message ?? "Unable to suspend member");
   }

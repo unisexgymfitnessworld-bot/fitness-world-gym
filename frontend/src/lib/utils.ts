@@ -1,4 +1,4 @@
-import { addDays, addMonths, differenceInCalendarDays, format, isAfter, parseISO } from "date-fns";
+import { addDays, addMonths, differenceInCalendarDays, format, isAfter, isWithinInterval, parseISO } from "date-fns";
 import type { Member, MemberInput, MemberStatus, PlanType } from "../types";
 
 export function cn(...classes: Array<string | false | null | undefined>): string {
@@ -45,7 +45,51 @@ export function getMembershipStatus(dueDate: string): MemberStatus {
   return isAfter(parseISO(dueDate), addDays(new Date(), -1)) ? "Active" : "Expired";
 }
 
-export function getDueTone(member: Pick<Member, "membershipDue" | "status">): "expired" | "due" | "healthy" | "suspended" {
+type DueAwareMember = Pick<Member, "membershipStart" | "membershipDue" | "paymentStatus" | "planType" | "status">;
+
+export function isPlanLongTerm(planType: PlanType, membershipStart?: string, membershipDue?: string): boolean {
+  if (planType !== "Custom") {
+    return getPlanDurationMonths(planType) > 1;
+  }
+  if (membershipStart && membershipDue) {
+    const days = differenceInCalendarDays(parseISO(membershipDue), parseISO(membershipStart));
+    return days > 31;
+  }
+  return false;
+}
+
+export function isPlanLessThanOneMonth(member: DueAwareMember): boolean {
+  if (member.planType !== "Custom") {
+    return false;
+  }
+  if (member.membershipStart && member.membershipDue) {
+    const days = differenceInCalendarDays(parseISO(member.membershipDue), parseISO(member.membershipStart));
+    return days < 30;
+  }
+  return false;
+}
+
+export function getMemberActionDueDate(member: DueAwareMember, now = new Date()): string {
+  void now;
+  return member.membershipDue;
+}
+
+export function getMemberDueKind(member: DueAwareMember, now = new Date()): "Renewal" | "Plan End" {
+  void now;
+  return member.planType === "Custom" ? "Plan End" : "Renewal";
+}
+
+export function getMemberDueDatesForMonth(member: DueAwareMember, selectedYear: number, selectedMonth: number): string[] {
+  if (isPlanLessThanOneMonth(member)) {
+    return [];
+  }
+  const monthStart = new Date(selectedYear, selectedMonth, 1);
+  const monthEnd = new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59);
+  const due = parseISO(member.membershipDue);
+  return isWithinInterval(due, { start: monthStart, end: monthEnd }) ? [member.membershipDue] : [];
+}
+
+export function getDueTone(member: DueAwareMember): "expired" | "due" | "healthy" | "suspended" {
   if (member.status === "Suspended") {
     return "suspended";
   }
@@ -57,6 +101,44 @@ export function getDueTone(member: Pick<Member, "membershipDue" | "status">): "e
     return "due";
   }
   return "healthy";
+}
+
+export function getPlanDurationMonths(planType: PlanType): number {
+  switch (planType) {
+    case "1 Month":
+      return 1;
+    case "3 Months":
+      return 3;
+    case "6 Months":
+      return 6;
+    case "1 Year":
+      return 12;
+    case "Custom":
+      return 0; // Needs to be calculated from dates
+  }
+}
+
+export function getPlanDurationLabel(planType: PlanType): string {
+  switch (planType) {
+    case "1 Month":
+      return "1 calendar month";
+    case "3 Months":
+      return "3 calendar months";
+    case "6 Months":
+      return "6 calendar months";
+    case "1 Year":
+      return "12 calendar months";
+    case "Custom":
+      return "manual end date";
+  }
+}
+
+export function createPlanDueSummary(startDate: string, planType: PlanType, customDueDate?: string): string {
+  const dueDate = planType === "Custom" && customDueDate ? customDueDate : calculateDueDate(startDate, planType);
+  if (planType === "Custom") {
+    return `Custom plan uses the manual end date: ${formatDisplayDate(dueDate)}.`;
+  }
+  return `${planType} plan runs for ${getPlanDurationLabel(planType)} and ends on ${formatDisplayDate(dueDate)}. Payment status tracks the plan fee balance separately.`;
 }
 
 export function formatCurrency(value: number): string {
@@ -75,13 +157,27 @@ export function normalizePhone(value: string): string {
   return value.replace(/\D/g, "").slice(0, 10);
 }
 
-export function createWhatsAppLink(member: Pick<Member, "name" | "phone" | "membershipDue">): string {
-  const text = `Hi ${member.name}, your Fitness World membership update is ready. Due date: ${formatDisplayDate(member.membershipDue)}. - Fitness World`;
+export function registrationNumberValue(regNo: string): number {
+  const parsed = Number(regNo.replace(/\D/g, ""));
+  return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
+}
+
+export function compareRegistrationNumbers(a: string, b: string): number {
+  const numeric = registrationNumberValue(a) - registrationNumberValue(b);
+  return numeric === 0 ? a.localeCompare(b) : numeric;
+}
+
+export function createWhatsAppLink(member: Pick<Member, "name" | "phone"> & DueAwareMember): string {
+  const dueDate = getMemberActionDueDate(member);
+  const dueKind = getMemberDueKind(member);
+  const text = `Hi ${member.name}, your Fitness World ${dueKind.toLowerCase()} date is ${formatDisplayDate(dueDate)}. Payment status: ${member.paymentStatus}. - Fitness World`;
   return `https://wa.me/91${member.phone}?text=${encodeURIComponent(text)}`;
 }
 
-export function createReminderMessage(member: Pick<Member, "name" | "membershipDue">): string {
-  return `Hi ${member.name}, your Fitness World membership expires in 3 days on ${formatDisplayDate(member.membershipDue)}. Please renew to continue. - Fitness World`;
+export function createReminderMessage(member: Pick<Member, "name"> & DueAwareMember): string {
+  const dueDate = getMemberActionDueDate(member);
+  const dueKind = getMemberDueKind(member);
+  return `Hi ${member.name}, your Fitness World ${dueKind.toLowerCase()} is on ${formatDisplayDate(dueDate)}. Please renew to continue smoothly. - Fitness World`;
 }
 
 export function initials(name: string): string {

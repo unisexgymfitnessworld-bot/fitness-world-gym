@@ -1,7 +1,7 @@
-import { Search, SlidersHorizontal } from "lucide-react";
+import { CalendarClock, IndianRupee, Search, SlidersHorizontal, X } from "lucide-react";
 import { motion } from "motion/react";
 import { useMemo } from "react";
-import { cn } from "../../lib/utils";
+import { cn, daysUntil, getMemberActionDueDate } from "../../lib/utils";
 import { goalOptions, type MemberFilters, paymentOptions, type Member } from "../../types";
 
 interface FilterBarProps {
@@ -12,15 +12,46 @@ interface FilterBarProps {
 }
 
 export function FilterBar({ filters, resultCount, onChange, members }: FilterBarProps) {
-  const statusHelp: Record<"All" | "Active" | "Expired", string> = {
-    All: "Show all members in this trainer workspace",
-    Active: "Show members whose membership is currently active",
-    Expired: "Show members whose membership due date has passed",
-  };
+  const selectClassName = "studio-select min-h-10 shrink-0 px-3 text-[14px] font-semibold lg:min-h-12 lg:text-[15px]";
+  const statusHelp: Record<"All" | "Active" | "Expired", string> = useMemo(
+    () => ({
+      All: `Show all ${members.length} members in this trainer workspace`,
+      Active: `Show ${members.filter((member) => member.status === "Active").length} active members`,
+      Expired: `Show ${members.filter((member) => member.status === "Expired").length} expired members`,
+    }),
+    [members],
+  );
+
+  const quickCounts = useMemo(() => {
+    const pending = members.filter((member) => member.paymentStatus === "Pending").length;
+    const partial = members.filter((member) => member.paymentStatus === "Partially Paid").length;
+    const dueSoon = members.filter((member) => {
+      const remaining = daysUntil(getMemberActionDueDate(member));
+      return member.status === "Active" && remaining >= 0 && remaining <= 3;
+    }).length;
+    return { pending, partial, dueSoon };
+  }, [members]);
+
+  const hasActiveFilters =
+    filters.query.trim().length > 0 ||
+    filters.status !== "All" ||
+    filters.goal !== "All Goals" ||
+    filters.payment !== "All Payments" ||
+    filters.month !== "All" ||
+    filters.dueSoon;
+
+  function clearFilters(): void {
+    onChange("query", "");
+    onChange("status", "All");
+    onChange("goal", "All Goals");
+    onChange("payment", "All Payments");
+    onChange("month", "All");
+    onChange("dueSoon", false);
+  }
 
   const monthOptions = useMemo(() => {
     const months = new Set<string>();
-    
+
     // Add current month by default
     const currentMonth = new Date().toISOString().slice(0, 7);
     months.add(currentMonth);
@@ -48,12 +79,12 @@ export function FilterBar({ filters, resultCount, onChange, members }: FilterBar
 
   return (
     <motion.section
-      className="studio-card grid gap-3 rounded-[var(--radius-card)] p-3 lg:grid-cols-[minmax(260px,1fr)_auto] lg:gap-4 lg:p-4"
+      className="studio-card grid min-w-0 gap-3 overflow-hidden rounded-[var(--radius-card)] p-3 lg:grid-cols-[minmax(260px,1fr)_auto] lg:gap-4 lg:p-4"
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: 0.35 }}
     >
-      <div className="relative flex items-center">
+      <div className="relative flex min-w-0 items-center">
         <label className="relative block w-full">
           <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted lg:left-4" size={18} />
           <input
@@ -70,9 +101,9 @@ export function FilterBar({ filters, resultCount, onChange, members }: FilterBar
         </label>
       </div>
 
-      <div className="scrollbar-hide flex items-center gap-2 overflow-x-auto pb-1">
+      <div className="scrollbar-hide flex min-w-0 max-w-full items-center gap-2 overflow-x-auto pb-1">
         {(["All", "Active", "Expired"] as const).map((status) => (
-          <motion.button
+          <button
             key={status}
             type="button"
             aria-label={`${status} members filter. ${statusHelp[status]}`}
@@ -84,18 +115,65 @@ export function FilterBar({ filters, resultCount, onChange, members }: FilterBar
                 : "border-border-default bg-brand-white text-text-secondary hover:border-brand-primary/40 hover:text-brand-primary",
             )}
             onClick={() => onChange("status", status)}
-            whileTap={{ scale: 0.95 }}
-            transition={{ type: "spring", stiffness: 400, damping: 17 }}
           >
             {status}
-          </motion.button>
+          </button>
         ))}
+
+        <button
+          type="button"
+          aria-pressed={filters.payment === "Pending"}
+          title="Show members whose full fee is pending"
+          onClick={() => onChange("payment", filters.payment === "Pending" ? "All Payments" : "Pending")}
+          className={cn(
+            "focus-ring flex min-h-10 shrink-0 items-center gap-1.5 rounded-[var(--radius-card)] border px-3 text-[14px] font-bold transition-colors lg:min-h-12 lg:text-[15px]",
+            filters.payment === "Pending"
+              ? "border-status-due bg-amber-50 text-status-due shadow-[0_4px_12px_rgba(217,119,6,0.12)]"
+              : "border-border-default bg-brand-white text-text-secondary hover:border-brand-primary/40 hover:text-brand-primary",
+          )}
+        >
+          <IndianRupee size={15} />
+          Pending
+          <span className="rounded-full bg-surface-overlay px-1.5 py-0.5 text-[11px] font-black">{quickCounts.pending}</span>
+        </button>
+
+        <button
+          type="button"
+          aria-pressed={filters.payment === "Partially Paid"}
+          title="Show members who paid partly and still have balance"
+          onClick={() => onChange("payment", filters.payment === "Partially Paid" ? "All Payments" : "Partially Paid")}
+          className={cn(
+            "focus-ring flex min-h-10 shrink-0 items-center gap-1.5 rounded-[var(--radius-card)] border px-3 text-[14px] font-bold transition-colors lg:min-h-12 lg:text-[15px]",
+            filters.payment === "Partially Paid"
+              ? "border-brand-primary bg-brand-primary-light text-brand-primary shadow-[0_4px_12px_rgba(232,23,93,0.12)]"
+              : "border-border-default bg-brand-white text-text-secondary hover:border-brand-primary/40 hover:text-brand-primary",
+          )}
+        >
+          <IndianRupee size={15} />
+          Partial
+          <span className="rounded-full bg-surface-overlay px-1.5 py-0.5 text-[11px] font-black">{quickCounts.partial}</span>
+        </button>
+
+        <button
+          type="button"
+          aria-pressed={filters.dueSoon}
+          title="Show active members whose plan renewal date is coming soon"
+          onClick={() => onChange("dueSoon", !filters.dueSoon)}
+          className={cn(
+            "focus-ring flex min-h-10 shrink-0 items-center gap-1.5 rounded-[var(--radius-card)] border px-3 text-[14px] font-bold transition-colors lg:min-h-12 lg:text-[15px]",
+            filters.dueSoon ? "border-sky-300 bg-sky-50 text-sky-700 shadow-[0_4px_12px_rgba(2,132,199,0.12)]" : "border-border-default bg-brand-white text-text-secondary hover:border-brand-primary/40 hover:text-brand-primary",
+          )}
+        >
+          <CalendarClock size={15} />
+          Due Soon
+          <span className="rounded-full bg-surface-overlay px-1.5 py-0.5 text-[11px] font-black">{quickCounts.dueSoon}</span>
+        </button>
 
         <select
           aria-label="Goal filter"
           value={filters.goal}
           onChange={(event) => onChange("goal", event.target.value as MemberFilters["goal"])}
-          className="focus-ring min-h-10 shrink-0 rounded-[var(--radius-card)] border border-border-default bg-brand-white px-3 text-[14px] font-semibold text-text-primary lg:min-h-12 lg:text-[15px]"
+          className={selectClassName}
         >
           <option>All Goals</option>
           {goalOptions.map((goal) => (
@@ -107,7 +185,7 @@ export function FilterBar({ filters, resultCount, onChange, members }: FilterBar
           aria-label="Payment filter"
           value={filters.payment}
           onChange={(event) => onChange("payment", event.target.value as MemberFilters["payment"])}
-          className="focus-ring min-h-10 shrink-0 rounded-[var(--radius-card)] border border-border-default bg-brand-white px-3 text-[14px] font-semibold text-text-primary lg:min-h-12 lg:text-[15px]"
+          className={selectClassName}
         >
           <option>All Payments</option>
           {paymentOptions.map((payment) => (
@@ -119,7 +197,7 @@ export function FilterBar({ filters, resultCount, onChange, members }: FilterBar
           aria-label="Month filter"
           value={filters.month}
           onChange={(event) => onChange("month", event.target.value)}
-          className="focus-ring min-h-10 shrink-0 rounded-[var(--radius-card)] border border-border-default bg-brand-white px-3 text-[14px] font-semibold text-text-primary lg:min-h-12 lg:text-[15px]"
+          className={selectClassName}
         >
           <option value="All">All Months</option>
           {monthOptions.map((opt) => (
@@ -129,20 +207,17 @@ export function FilterBar({ filters, resultCount, onChange, members }: FilterBar
           ))}
         </select>
 
-        <motion.button
-          type="button"
-          aria-pressed={filters.dueSoon}
-          title="Show active members whose renewal date is coming soon"
-          onClick={() => onChange("dueSoon", !filters.dueSoon)}
-          className={cn(
-            "focus-ring min-h-10 shrink-0 rounded-[var(--radius-card)] border px-3 text-[14px] font-bold transition-colors lg:min-h-12 lg:text-[15px]",
-            filters.dueSoon ? "border-status-due bg-amber-50 text-status-due shadow-[0_4px_12px_rgba(217,119,6,0.12)]" : "border-border-default bg-brand-white text-text-secondary hover:border-brand-primary/40 hover:text-brand-primary",
-          )}
-          whileTap={{ scale: 0.95 }}
-          transition={{ type: "spring", stiffness: 400, damping: 17 }}
-        >
-          Due Soon
-        </motion.button>
+        {hasActiveFilters && (
+          <button
+            type="button"
+            title="Clear all search and filter choices"
+            onClick={clearFilters}
+            className="focus-ring flex min-h-10 shrink-0 items-center gap-1.5 rounded-[var(--radius-card)] border border-slate-200 bg-slate-50 px-3 text-[14px] font-bold text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-100 lg:min-h-12 lg:text-[15px]"
+          >
+            <X size={15} />
+            Clear
+          </button>
+        )}
       </div>
     </motion.section>
   );

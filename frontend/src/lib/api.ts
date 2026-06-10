@@ -1,4 +1,4 @@
-import type { ApiEnvelope, AttendanceEntry, DashboardStats, DeveloperDiagnostics, LogEntry, Member, MemberInput, Trainer, TrainerAccount } from "../types";
+import type { ApiEnvelope, AttendanceEntry, DashboardStats, DeveloperDiagnostics, LogEntry, Member, MemberInput, PaymentReceipt, PaymentReceiptInput, RenewalHistoryEntry, Trainer, TrainerAccount } from "../types";
 import { supabase } from "./supabase";
 
 export const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
@@ -107,6 +107,13 @@ export const api = {
     request<Member>(`/members/${id}/renew`, {
       method: "PATCH",
       body: JSON.stringify({ membershipStart, membershipDue, feesAmount }),
+    }),
+  paymentReceipts: (memberId: string) => request<PaymentReceipt[]>(`/members/${memberId}/payments`),
+  renewalHistory: (memberId: string) => request<RenewalHistoryEntry[]>(`/members/${memberId}/renewals`),
+  createPaymentReceipt: (memberId: string, input: PaymentReceiptInput) =>
+    request<{ receipt: PaymentReceipt; member: Member }>(`/members/${memberId}/payments`, {
+      method: "POST",
+      body: JSON.stringify(input),
     }),
   suspendMember: (id: string) =>
     request<Member>(`/members/${id}`, {

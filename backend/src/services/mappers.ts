@@ -1,4 +1,4 @@
-import type { AttendanceEntry, DbAttendanceEntry, DbMember, Member, MemberInput } from "../types/index.js";
+import type { AttendanceEntry, DbAttendanceEntry, DbMember, DbPaymentReceipt, DbRenewalHistoryEntry, Member, MemberInput, PaymentReceipt, PaymentReceiptInput, RenewalHistoryEntry } from "../types/index.js";
 
 export function mapMember(row: DbMember): Member {
   return {
@@ -71,6 +71,48 @@ export function mapAttendance(row: DbAttendanceEntry): AttendanceEntry {
     memberId: row.member_id,
     visitDate: row.visit_date,
     weightKg: row.weight_kg ?? undefined,
+    createdAt: row.created_at,
+  };
+}
+
+export function paymentReceiptInputToDb(memberId: string, ownerUserId: string | null, input: PaymentReceiptInput, receiptNo: string) {
+  return {
+    member_id: memberId,
+    owner_user_id: ownerUserId,
+    receipt_no: receiptNo,
+    paid_on: input.paidOn,
+    amount: input.amount,
+    method: input.method,
+    note: input.note ?? "",
+  };
+}
+
+export function mapPaymentReceipt(row: DbPaymentReceipt): PaymentReceipt {
+  return {
+    id: row.id,
+    memberId: row.member_id,
+    receiptNo: row.receipt_no,
+    paidOn: row.paid_on,
+    amount: Number(row.amount),
+    method: row.method,
+    note: row.note,
+    createdAt: row.created_at,
+  };
+}
+
+export function mapRenewalHistory(row: DbRenewalHistoryEntry): RenewalHistoryEntry {
+  return {
+    id: row.id,
+    memberId: row.member_id,
+    oldPlanType: row.old_plan_type,
+    newPlanType: row.new_plan_type,
+    oldStartDate: row.old_start_date,
+    oldDueDate: row.old_due_date,
+    newStartDate: row.new_start_date,
+    newDueDate: row.new_due_date,
+    amount: Number(row.amount),
+    paymentStatus: row.payment_status,
+    renewedOn: row.renewed_on,
     createdAt: row.created_at,
   };
 }

@@ -20,13 +20,18 @@ export function TopBar({ trainer, onLogout, onSettings, onReports }: TopBarProps
       animate={{ y: 0, opacity: 1 }}
       transition={{ type: "spring", stiffness: 260, damping: 28, delay: 0.1 }}
     >
-      <div className="mx-auto flex min-h-16 max-w-[1500px] items-center justify-between gap-4 px-4 py-3 lg:min-h-20 lg:px-8 lg:py-4">
-        <FwMark />
-        <div className="flex items-center gap-3">
+      <div className="mx-auto flex min-h-16 max-w-[1500px] items-center justify-between gap-2 px-3 py-3 sm:gap-4 sm:px-4 lg:min-h-20 lg:px-8 lg:py-4">
+        <div className="sm:hidden">
+          <FwMark compact />
+        </div>
+        <div className="hidden sm:block">
+          <FwMark />
+        </div>
+        <div className="flex min-w-0 items-center gap-1.5 sm:gap-3">
           {onSettings ? (
             <button
               type="button"
-              className="focus-ring group flex items-center gap-3 rounded-full px-2 py-1 text-right transition hover:bg-white/10"
+              className="focus-ring group flex shrink-0 items-center gap-2 rounded-full px-1 py-1 text-right transition hover:bg-white/10 sm:gap-3 sm:px-2"
               aria-label="Open profile settings"
               title="Open profile settings"
               onClick={onSettings}
@@ -35,7 +40,7 @@ export function TopBar({ trainer, onLogout, onSettings, onReports }: TopBarProps
                 <span className="block text-[18px] font-black group-hover:text-brand-primary-light">{trainer.name}</span>
                 <span className="block text-[14px] font-semibold text-white/70">{trainer.email}</span>
               </span>
-              <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/[0.14] bg-gradient-to-br from-brand-primary/30 to-white/[0.08] ring-1 ring-white/10 shadow-sm">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/[0.14] bg-gradient-to-br from-brand-primary/30 to-white/[0.08] ring-1 ring-white/10 shadow-sm sm:h-12 sm:w-12">
                 {trainer.avatar ? (
                   <img src={trainer.avatar} alt={trainer.name} className="h-full w-full object-cover" />
                 ) : (
@@ -59,16 +64,16 @@ export function TopBar({ trainer, onLogout, onSettings, onReports }: TopBarProps
             </>
           )}
           {onReports && (
-            <Button aria-label="Monthly Reports" title="Monthly Reports" variant="ghost" className="!text-brand-white hover:!bg-white/10 hover:!text-brand-white !h-12 !w-12 !p-0" onClick={onReports}>
+            <Button aria-label="Monthly Reports" title="Monthly Reports" variant="ghost" className="!h-10 !w-10 !p-0 !text-brand-white hover:!bg-white/10 hover:!text-brand-white sm:!h-12 sm:!w-12" onClick={onReports}>
               <FileSpreadsheet size={22} />
             </Button>
           )}
           {onSettings && (
-            <Button aria-label="Settings" title="Settings" variant="ghost" className="!text-brand-white hover:!bg-white/10 hover:!text-brand-white !h-12 !w-12 !p-0" onClick={onSettings}>
+            <Button aria-label="Settings" title="Settings" variant="ghost" className="!h-10 !w-10 !p-0 !text-brand-white hover:!bg-white/10 hover:!text-brand-white sm:!h-12 sm:!w-12" onClick={onSettings}>
               <Settings size={22} />
             </Button>
           )}
-          <Button aria-label="Logout" title="Logout" variant="ghost" className="!text-brand-white hover:!bg-white/10 hover:!text-brand-white !h-12 !w-12 !p-0" onClick={onLogout}>
+          <Button aria-label="Logout" title="Logout" variant="ghost" className="!h-10 !w-10 !p-0 !text-brand-white hover:!bg-white/10 hover:!text-brand-white sm:!h-12 sm:!w-12" onClick={onLogout}>
             <LogOut size={22} />
           </Button>
         </div>

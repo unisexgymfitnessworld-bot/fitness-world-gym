@@ -2,6 +2,7 @@ export const genderOptions = ["Male", "Female", "Other"] as const;
 export const goalOptions = ["Weight Loss", "Weight Gain", "Muscle Gain", "General Fitness", "Other"] as const;
 export const planOptions = ["1 Month", "3 Months", "6 Months", "1 Year", "Custom"] as const;
 export const paymentOptions = ["Paid", "Pending", "Partially Paid"] as const;
+export const paymentMethodOptions = ["Cash", "UPI", "Card", "Bank Transfer", "Other"] as const;
 export const statusOptions = ["Active", "Expired", "Suspended"] as const;
 export const trainingTypeOptions = ["Personal", "General", "Couple"] as const;
 
@@ -9,6 +10,7 @@ export type Gender = (typeof genderOptions)[number];
 export type Goal = (typeof goalOptions)[number];
 export type PlanType = (typeof planOptions)[number];
 export type PaymentStatus = (typeof paymentOptions)[number];
+export type PaymentMethod = (typeof paymentMethodOptions)[number];
 export type MemberStatus = (typeof statusOptions)[number];
 export type TrainingType = (typeof trainingTypeOptions)[number];
 
@@ -127,6 +129,40 @@ export interface AttendanceEntry {
   memberId: string;
   visitDate: string;
   weightKg?: number;
+  createdAt: string;
+}
+
+export interface PaymentReceipt {
+  id: string;
+  memberId: string;
+  receiptNo: string;
+  paidOn: string;
+  amount: number;
+  method: PaymentMethod;
+  note: string;
+  createdAt: string;
+}
+
+export interface PaymentReceiptInput {
+  paidOn: string;
+  amount: number;
+  method: PaymentMethod;
+  note?: string;
+  receiptNo?: string;
+}
+
+export interface RenewalHistoryEntry {
+  id: string;
+  memberId: string;
+  oldPlanType: PlanType;
+  newPlanType: PlanType;
+  oldStartDate: string;
+  oldDueDate: string;
+  newStartDate: string;
+  newDueDate: string;
+  amount: number;
+  paymentStatus: PaymentStatus;
+  renewedOn: string;
   createdAt: string;
 }
 

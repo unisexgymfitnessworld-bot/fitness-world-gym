@@ -1,6 +1,14 @@
 import { z } from "zod";
 
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+function isRealIsoDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+const isoDate = z.string().refine(isRealIsoDate);
 const optionalText = z.string().trim().optional();
 
 export const loginSchema = z.object({
@@ -34,6 +42,14 @@ export const memberInputSchema = z.object({
   partialPaidAmount: z.coerce.number().min(0).default(0),
   balanceAmount: z.coerce.number().min(0).default(0),
 }).superRefine((value, ctx) => {
+  if (value.membershipDue < value.membershipStart) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["membershipDue"],
+      message: "Due date must be on or after the start date",
+    });
+  }
+
   if (value.paymentStatus === "Partially Paid") {
     if (value.partialPaidAmount < 1) {
       ctx.addIssue({
@@ -55,12 +71,34 @@ export const renewSchema = z.object({
   membershipStart: isoDate,
   membershipDue: isoDate,
   feesAmount: z.coerce.number().min(0),
+}).superRefine((value, ctx) => {
+  if (value.membershipDue < value.membershipStart) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["membershipDue"],
+      message: "Due date must be on or after the start date",
+    });
+  }
 });
 
 export const paymentSchema = z.object({
   paymentStatus: z.enum(["Paid", "Pending", "Partially Paid"]),
   partialPaidAmount: z.coerce.number().min(0).optional(),
   balanceAmount: z.coerce.number().min(0).optional(),
+});
+
+export const paymentReceiptSchema = z.object({
+  paidOn: isoDate,
+  amount: z.coerce.number().min(1).max(1_000_000),
+  method: z.enum(["Cash", "UPI", "Card", "Bank Transfer", "Other"]),
+  note: z.string().trim().max(180).optional().default(""),
+  receiptNo: z
+    .string()
+    .trim()
+    .min(3)
+    .max(40)
+    .regex(/^[A-Za-z0-9/_-]+$/)
+    .optional(),
 });
 
 export const attendanceInputSchema = z.object({

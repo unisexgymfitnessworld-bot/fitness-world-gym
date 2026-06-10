@@ -3,7 +3,10 @@ import type { Request } from "express";
 import { HttpError } from "../lib/httpError.js";
 import { validateBody } from "../middleware/validate.js";
 import { createMember, getMember, listMembers, renewMember, suspendMember, updateMember, updatePayment } from "../services/memberService.js";
-import { memberInputSchema, paymentSchema, renewSchema } from "../services/schemas.js";
+import { createPaymentReceipt, listPaymentReceipts } from "../services/paymentService.js";
+import { listRenewalHistory } from "../services/renewalService.js";
+import { memberInputSchema, paymentReceiptSchema, paymentSchema, renewSchema } from "../services/schemas.js";
+import type { AuthenticatedRequest, PaymentReceiptInput, PaymentStatus } from "../types/index.js";
 
 export const membersRouter = Router();
 
@@ -42,6 +45,22 @@ membersRouter.get("/", async (req, res, next) => {
   }
 });
 
+membersRouter.get("/:id/payments", async (req, res, next) => {
+  try {
+    res.json({ success: true, data: await listPaymentReceipts(memberIdParam(req)) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+membersRouter.get("/:id/renewals", async (req, res, next) => {
+  try {
+    res.json({ success: true, data: await listRenewalHistory(memberIdParam(req)) });
+  } catch (error) {
+    next(error);
+  }
+});
+
 membersRouter.get("/:id", async (req, res, next) => {
   try {
     res.json({ success: true, data: await getMember(memberIdParam(req)) });
@@ -58,6 +77,16 @@ membersRouter.post("/", validateBody(memberInputSchema), async (req, res, next) 
   }
 });
 
+membersRouter.post("/:id/payments", validateBody(paymentReceiptSchema), async (req, res, next) => {
+  try {
+    const body = req.body as PaymentReceiptInput;
+    const ownerUserId = (req as AuthenticatedRequest).authUser?.id ?? null;
+    res.status(201).json({ success: true, data: await createPaymentReceipt(memberIdParam(req), body, ownerUserId) });
+  } catch (error) {
+    next(error);
+  }
+});
+
 membersRouter.put("/:id", validateBody(memberInputSchema), async (req, res, next) => {
   try {
     res.json({ success: true, data: await updateMember(memberIdParam(req), req.body) });
@@ -68,7 +97,7 @@ membersRouter.put("/:id", validateBody(memberInputSchema), async (req, res, next
 
 membersRouter.patch("/:id/payment", validateBody(paymentSchema), async (req, res, next) => {
   try {
-    const body = req.body as { paymentStatus: "Paid" | "Pending" };
+    const body = req.body as { paymentStatus: PaymentStatus };
     res.json({ success: true, data: await updatePayment(memberIdParam(req), body.paymentStatus) });
   } catch (error) {
     next(error);

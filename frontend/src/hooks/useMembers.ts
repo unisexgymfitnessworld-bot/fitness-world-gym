@@ -1,24 +1,43 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, isApiConfigured } from "../lib/api";
-import { sampleAttendance, sampleMembers } from "../lib/sampleData";
-import { toMember } from "../lib/utils";
-import type { AttendanceEntry, DashboardStats, Member, MemberInput } from "../types";
+import { sampleAttendance, sampleMembers, samplePaymentReceipts, sampleRenewalHistory } from "../lib/sampleData";
+import { daysUntil, getMemberActionDueDate, getMembershipStatus, toMember, isPlanLessThanOneMonth } from "../lib/utils";
+import type { AttendanceEntry, DashboardStats, Member, MemberInput, PaymentReceipt, PaymentReceiptInput, PaymentStatus, RenewalHistoryEntry } from "../types";
 
 interface MembersState {
   members: Member[];
   attendance: AttendanceEntry[];
+  paymentReceipts: PaymentReceipt[];
+  renewalHistory: RenewalHistoryEntry[];
   stats: DashboardStats;
   loading: boolean;
   upsertMember: (input: MemberInput, memberId?: string) => Promise<Member>;
+  upsertMembers: (inputs: MemberInput[]) => Promise<Member[]>;
   suspendMember: (memberId: string) => Promise<void>;
   renewMember: (memberId: string, start: string, due: string, feesAmount: number) => Promise<void>;
   addVisit: (memberId: string, visitDate: string, weightKg?: number) => Promise<void>;
+  addPaymentReceipt: (memberId: string, input: PaymentReceiptInput) => Promise<PaymentReceipt>;
   markSmsSent: (memberId: string) => Promise<void>;
+}
+
+function generateLocalReceiptNo(): string {
+  const stamp = new Date().toISOString().replace(/[-:T.Z]/g, "").slice(0, 14);
+  const suffix = crypto.randomUUID().slice(0, 4).toUpperCase();
+  return `FW-R-${stamp}-${suffix}`;
+}
+
+function paymentStatusForAmounts(feesAmount: number, collectedAmount: number): PaymentStatus {
+  if (feesAmount <= 0 || collectedAmount >= feesAmount) {
+    return "Paid";
+  }
+  return collectedAmount > 0 ? "Partially Paid" : "Pending";
 }
 
 export function useMembers(): MembersState {
   const [members, setMembers] = useState<Member[]>(isApiConfigured ? [] : sampleMembers);
   const [attendance, setAttendance] = useState<AttendanceEntry[]>(isApiConfigured ? [] : sampleAttendance);
+  const [paymentReceipts, setPaymentReceipts] = useState<PaymentReceipt[]>(isApiConfigured ? [] : samplePaymentReceipts);
+  const [renewalHistory, setRenewalHistory] = useState<RenewalHistoryEntry[]>(isApiConfigured ? [] : sampleRenewalHistory);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -29,15 +48,21 @@ export function useMembers(): MembersState {
         try {
           const liveMembers = await api.members();
           const liveAttendance = await Promise.all(liveMembers.map((member) => api.attendance(member.id)));
+          const livePaymentReceipts = await Promise.all(liveMembers.map((member) => api.paymentReceipts(member.id)));
+          const liveRenewalHistory = await Promise.all(liveMembers.map((member) => api.renewalHistory(member.id)));
           if (!cancelled) {
             setMembers(liveMembers);
             setAttendance(liveAttendance.flat());
+            setPaymentReceipts(livePaymentReceipts.flat());
+            setRenewalHistory(liveRenewalHistory.flat());
           }
         } catch (error) {
           console.error("Unable to load live member data", error);
           if (!cancelled) {
             setMembers(sampleMembers);
             setAttendance(sampleAttendance);
+            setPaymentReceipts(samplePaymentReceipts);
+            setRenewalHistory(sampleRenewalHistory);
           }
         } finally {
           if (!cancelled) {
@@ -57,19 +82,36 @@ export function useMembers(): MembersState {
 
   const stats = useMemo<DashboardStats>(() => {
     const dueThisWeek = members.filter((member) => {
-      const due = new Date(member.membershipDue);
-      const now = new Date();
-      const diff = Math.ceil((due.getTime() - now.getTime()) / 86_400_000);
-      return member.status === "Active" && diff >= 0 && diff <= 7;
+      const diff = daysUntil(getMemberActionDueDate(member));
+      return member.status === "Active" && !isPlanLessThanOneMonth(member) && diff >= 0 && diff <= 7;
     }).length;
 
     return {
       total: members.length,
       active: members.filter((member) => member.status === "Active").length,
       dueThisWeek,
-      pendingPayments: members.filter((member) => member.paymentStatus === "Pending").length,
+      pendingPayments: members.filter((member) => member.paymentStatus === "Pending" || member.paymentStatus === "Partially Paid").length,
     };
   }, [members]);
+
+  async function upsertMembers(inputs: MemberInput[]): Promise<Member[]> {
+    if (isApiConfigured) {
+      const savedMembers: Member[] = [];
+      for (const input of inputs) {
+        savedMembers.push(await api.createMember(input));
+      }
+      setMembers((current) => [...savedMembers, ...current]);
+      return savedMembers;
+    }
+
+    const savedMembers = inputs.reduce<Member[]>((created, input) => {
+      const saved = toMember(input, [...created, ...members]);
+      created.push(saved);
+      return created;
+    }, []);
+    setMembers((current) => [...savedMembers, ...current]);
+    return savedMembers;
+  }
 
   async function upsertMember(input: MemberInput, memberId?: string): Promise<Member> {
     if (isApiConfigured) {
@@ -78,13 +120,16 @@ export function useMembers(): MembersState {
       return savedMember;
     }
 
+    if (!memberId) {
+      const [savedMember] = await upsertMembers([input]);
+      if (!savedMember) {
+        throw new Error("Unable to create member");
+      }
+      return savedMember;
+    }
+
     let savedMember: Member;
     setMembers((current) => {
-      if (!memberId) {
-        savedMember = toMember(input, current);
-        return [savedMember, ...current];
-      }
-
       const existing = current.find((member) => member.id === memberId);
       if (!existing) {
         savedMember = toMember(input, current);
@@ -115,7 +160,7 @@ export function useMembers(): MembersState {
         member.id === memberId
           ? {
               ...member,
-              status: member.status === "Suspended" ? "Active" : "Suspended",
+              status: member.status === "Suspended" ? getMembershipStatus(member.membershipDue) : "Suspended",
               updatedAt: new Date().toISOString(),
             }
           : member,
@@ -127,8 +172,34 @@ export function useMembers(): MembersState {
     if (isApiConfigured) {
       const renewed = await api.renewMember(memberId, start, due, feesAmount);
       setMembers((current) => current.map((member) => (member.id === memberId ? renewed : member)));
+      try {
+        const updatedHistory = await api.renewalHistory(memberId);
+        setRenewalHistory((current) => [...updatedHistory, ...current.filter((entry) => entry.memberId !== memberId)]);
+      } catch (error) {
+        console.warn("Unable to refresh renewal history", error);
+      }
       return;
     }
+
+    const oldMember = members.find((member) => member.id === memberId);
+    if (!oldMember) {
+      throw new Error("Member not found");
+    }
+
+    const renewalEntry: RenewalHistoryEntry = {
+      id: crypto.randomUUID(),
+      memberId,
+      oldPlanType: oldMember.planType,
+      newPlanType: oldMember.planType,
+      oldStartDate: oldMember.membershipStart,
+      oldDueDate: oldMember.membershipDue,
+      newStartDate: start,
+      newDueDate: due,
+      amount: feesAmount,
+      paymentStatus: "Paid",
+      renewedOn: start,
+      createdAt: new Date().toISOString(),
+    };
 
     setMembers((current) =>
       current.map((member) =>
@@ -139,6 +210,8 @@ export function useMembers(): MembersState {
               membershipDue: due,
               feesAmount,
               paymentStatus: "Paid",
+              partialPaidAmount: feesAmount,
+              balanceAmount: 0,
               status: "Active",
               smsSent3days: false,
               updatedAt: new Date().toISOString(),
@@ -146,6 +219,7 @@ export function useMembers(): MembersState {
           : member,
       ),
     );
+    setRenewalHistory((current) => [renewalEntry, ...current]);
   }
 
   async function addVisit(memberId: string, visitDate: string, weightKg?: number): Promise<void> {
@@ -161,6 +235,65 @@ export function useMembers(): MembersState {
     setAttendance((current) => [visit, ...current]);
   }
 
+  async function addPaymentReceipt(memberId: string, input: PaymentReceiptInput): Promise<PaymentReceipt> {
+    if (isApiConfigured) {
+      const result = await api.createPaymentReceipt(memberId, input);
+      setPaymentReceipts((current) => [result.receipt, ...current.filter((receipt) => receipt.id !== result.receipt.id)]);
+      setMembers((current) => current.map((member) => (member.id === memberId ? result.member : member)));
+      return result.receipt;
+    }
+
+    const member = members.find((candidate) => candidate.id === memberId);
+    if (!member) {
+      throw new Error("Member not found");
+    }
+
+    const existingReceiptTotal = paymentReceipts
+      .filter((receipt) => receipt.memberId === memberId)
+      .reduce((sum, receipt) => sum + receipt.amount, 0);
+    const legacyCollectedAmount = Math.max(0, Math.min(member.partialPaidAmount - existingReceiptTotal, member.feesAmount));
+    const collectedBeforeReceipt = legacyCollectedAmount + existingReceiptTotal;
+    const currentBalance = Math.max(member.feesAmount - collectedBeforeReceipt, 0);
+
+    if (member.feesAmount <= 0) {
+      throw new Error("This member has no fees to collect");
+    }
+    if (currentBalance <= 0) {
+      throw new Error("This member has no pending balance");
+    }
+    if (input.amount > currentBalance) {
+      throw new Error(`Payment cannot exceed the pending balance of ₹${currentBalance}`);
+    }
+
+    const collectedAmount = collectedBeforeReceipt + input.amount;
+    const receipt: PaymentReceipt = {
+      id: crypto.randomUUID(),
+      memberId,
+      receiptNo: input.receiptNo?.trim() || generateLocalReceiptNo(),
+      paidOn: input.paidOn,
+      amount: input.amount,
+      method: input.method,
+      note: input.note?.trim() ?? "",
+      createdAt: new Date().toISOString(),
+    };
+
+    setPaymentReceipts((current) => [receipt, ...current]);
+    setMembers((current) =>
+      current.map((candidate) =>
+        candidate.id === memberId
+          ? {
+              ...candidate,
+              partialPaidAmount: Math.min(collectedAmount, candidate.feesAmount),
+              balanceAmount: Math.max(candidate.feesAmount - collectedAmount, 0),
+              paymentStatus: paymentStatusForAmounts(candidate.feesAmount, collectedAmount),
+              updatedAt: new Date().toISOString(),
+            }
+          : candidate,
+      ),
+    );
+    return receipt;
+  }
+
   async function markSmsSent(memberId: string): Promise<void> {
     setMembers((current) =>
       current.map((member) => (member.id === memberId ? { ...member, smsSent3days: true, updatedAt: new Date().toISOString() } : member)),
@@ -170,12 +303,16 @@ export function useMembers(): MembersState {
   return {
     members,
     attendance,
+    paymentReceipts,
+    renewalHistory,
     stats,
     loading,
     upsertMember,
+    upsertMembers,
     suspendMember,
     renewMember,
     addVisit,
+    addPaymentReceipt,
     markSmsSent,
   };
 }

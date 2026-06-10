@@ -1,10 +1,13 @@
-import { ArrowLeft, MessageCircle, MessageSquare, Pencil, RefreshCcw } from "lucide-react";
+import { ArrowLeft, Banknote, CalendarCheck, MessageCircle, MessageSquare, Pencil, ReceiptText, RefreshCcw, Scale, TrendingUp } from "lucide-react";
 import { motion } from "motion/react";
-import { calculateDueDate, createWhatsAppLink, formatCurrency, formatDisplayDate, formatPhone, todayISO } from "../../lib/utils";
-import type { AttendanceEntry, Member } from "../../types";
+import { useMemo, useState, type FormEvent } from "react";
+import { buildAttendanceInsights, buildProgressPoints, summarizeRenewalHistory } from "../../lib/memberInsights";
+import { calculateDueDate, createWhatsAppLink, formatCurrency, formatDisplayDate, formatPhone, getMemberActionDueDate, getMemberDueKind, todayISO, isPlanLessThanOneMonth } from "../../lib/utils";
+import { paymentMethodOptions, type AttendanceEntry, type Member, type PaymentMethod, type PaymentReceipt, type PaymentReceiptInput, type RenewalHistoryEntry } from "../../types";
 import { AttendanceTable } from "../attendance/AttendanceTable";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
+import { Input } from "../ui/Input";
 
 interface MemberProfileProps {
   member: Member;
@@ -14,11 +17,19 @@ interface MemberProfileProps {
   onSms: (memberId: string) => void;
   onRenew: (memberId: string, start: string, due: string, feesAmount: number) => void;
   onAddVisit: (memberId: string, visitDate: string, weightKg?: number) => void;
+  paymentReceipts: PaymentReceipt[];
+  renewalHistory: RenewalHistoryEntry[];
+  onAddPaymentReceipt: (memberId: string, input: PaymentReceiptInput) => Promise<void>;
 }
 
-export function MemberProfile({ member, attendance, onBack, onEdit, onSms, onRenew, onAddVisit }: MemberProfileProps) {
+export function MemberProfile({ member, attendance, paymentReceipts, renewalHistory, onBack, onEdit, onSms, onRenew, onAddVisit, onAddPaymentReceipt }: MemberProfileProps) {
   const nextStart = todayISO();
   const nextDue = calculateDueDate(nextStart, member.planType === "Custom" ? "1 Month" : member.planType);
+  const actionDueDate = getMemberActionDueDate(member);
+  const actionDueKind = getMemberDueKind(member);
+  const memberAttendance = useMemo(() => attendance.filter((entry) => entry.memberId === member.id), [attendance, member.id]);
+  const memberRenewals = useMemo(() => renewalHistory.filter((entry) => entry.memberId === member.id), [member.id, renewalHistory]);
+  const isShortTerm = isPlanLessThanOneMonth(member);
 
   return (
     <main className="studio-shell animated-grid relative min-h-screen overflow-hidden">
@@ -38,19 +49,23 @@ export function MemberProfile({ member, attendance, onBack, onEdit, onSms, onRen
             <Pencil size={18} />
             <span className="hidden sm:inline">Edit</span>
           </Button>
-          <Button variant="secondary" onClick={() => onSms(member.id)}>
-            <MessageSquare size={18} />
-            <span className="hidden sm:inline">SMS</span>
-          </Button>
-          <a
-            className="focus-ring inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-[var(--radius-card)] border border-green-200 bg-green-50 px-3 py-2 text-[15px] font-semibold text-status-active lg:px-4 lg:py-3"
-            href={createWhatsAppLink(member)}
-            target="_blank"
-            rel="noreferrer"
-          >
-            <MessageCircle size={18} />
-            <span className="hidden sm:inline">WhatsApp</span>
-          </a>
+          {!isShortTerm && (
+            <>
+              <Button variant="secondary" onClick={() => onSms(member.id)}>
+                <MessageSquare size={18} />
+                <span className="hidden sm:inline">SMS</span>
+              </Button>
+              <a
+                className="focus-ring inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-[var(--radius-card)] border border-green-200 bg-green-50 px-3 py-2 text-[15px] font-semibold text-status-active lg:px-4 lg:py-3"
+                href={createWhatsAppLink(member)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <MessageCircle size={18} />
+                <span className="hidden sm:inline">WhatsApp</span>
+              </a>
+            </>
+          )}
           <Button onClick={() => onRenew(member.id, nextStart, nextDue, member.feesAmount)}>
             <RefreshCcw size={18} />
             Renew
@@ -84,10 +99,13 @@ export function MemberProfile({ member, attendance, onBack, onEdit, onSms, onRen
             </div>
           </div>
           <div className="rounded-[var(--radius-card)] border border-white/10 bg-white/10 p-3 lg:p-4">
-            <p className="text-[12px] font-bold uppercase tracking-wider text-white/60">
-              {member.planType === "Custom" ? "End Date" : "Membership Due"}
+            <p className="text-[12px] font-bold uppercase tracking-wider text-white/60">Renewal Date</p>
+            <p className="mt-1.5 text-[20px] font-black lg:mt-2 lg:text-[22px]">
+              {isShortTerm ? "N/A" : formatDisplayDate(actionDueDate)}
             </p>
-            <p className="mt-1.5 text-[20px] font-black lg:mt-2 lg:text-[22px]">{formatDisplayDate(member.membershipDue)}</p>
+            <p className="mt-1 text-[12px] font-bold uppercase tracking-wide text-white/60">
+              {isShortTerm ? "" : `${actionDueKind} · `}Payment {member.paymentStatus}
+            </p>
             {member.paymentStatus === "Partially Paid" ? (
               <div className="mt-2 space-y-1 text-[13px] text-white/80 border-t border-white/10 pt-2 lg:mt-3">
                 <div className="flex justify-between">
@@ -153,10 +171,346 @@ export function MemberProfile({ member, attendance, onBack, onEdit, onSms, onRen
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.45 }}
       >
+        <MemberInsightPanel member={member} attendance={memberAttendance} renewalHistory={memberRenewals} />
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.5 }}
+      >
+        <PaymentReceiptPanel member={member} receipts={paymentReceipts} onAddPaymentReceipt={onAddPaymentReceipt} />
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.55 }}
+      >
+        <RenewalHistoryPanel history={memberRenewals} />
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.6 }}
+      >
         <AttendanceTable memberId={member.id} attendance={attendance} onAddVisit={onAddVisit} />
       </motion.div>
       </div>
     </main>
+  );
+}
+
+function MemberInsightPanel({ member, attendance, renewalHistory }: { member: Member; attendance: AttendanceEntry[]; renewalHistory: RenewalHistoryEntry[] }) {
+  const attendanceInsights = useMemo(() => buildAttendanceInsights(attendance), [attendance]);
+  const progress = useMemo(() => buildProgressPoints(attendance, member.weightKg), [attendance, member.weightKg]);
+  const renewalSummary = useMemo(() => summarizeRenewalHistory(renewalHistory), [renewalHistory]);
+  const weightChangeText = progress.weightChangeKg === null ? "No change yet" : `${progress.weightChangeKg > 0 ? "+" : ""}${progress.weightChangeKg} kg`;
+
+  return (
+    <section className="studio-card grid gap-3 rounded-[var(--radius-card)] p-4 lg:grid-cols-3 lg:gap-4 lg:p-5">
+      <InsightCard
+        icon={CalendarCheck}
+        label="Attendance Health"
+        value={attendanceInsights.statusLabel}
+        subtext={attendanceInsights.lastVisitDate ? `Last visit ${formatDisplayDate(attendanceInsights.lastVisitDate)}` : "No check-ins recorded"}
+        footer={`${attendanceInsights.visitsThisMonth} visits this month`}
+      />
+      <InsightCard
+        icon={Scale}
+        label="Progress"
+        value={weightChangeText}
+        subtext={progress.latestWeightKg === null ? "Add visit weight to track progress" : `Latest ${progress.latestWeightKg} kg`}
+        footer={`${progress.points.length} weight entries`}
+      />
+      <InsightCard
+        icon={TrendingUp}
+        label="Renewal History"
+        value={`${renewalSummary.count}`}
+        subtext={renewalSummary.latestRenewedOn ? `${renewalSummary.latestPlan} · ${formatDisplayDate(renewalSummary.latestRenewedOn)}` : "No renewals yet"}
+        footer={`${formatCurrency(renewalSummary.totalAmount)} renewed value`}
+      />
+    </section>
+  );
+}
+
+function InsightCard({
+  icon: Icon,
+  label,
+  value,
+  subtext,
+  footer,
+}: {
+  icon: typeof CalendarCheck;
+  label: string;
+  value: string;
+  subtext: string;
+  footer: string;
+}) {
+  return (
+    <div className="rounded-[var(--radius-card)] border border-border-default bg-brand-white p-3 shadow-sm lg:p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-black uppercase tracking-wider text-text-muted">{label}</p>
+          <p className="mt-2 text-[22px] font-black leading-tight text-text-primary">{value}</p>
+        </div>
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-primary-light text-brand-primary">
+          <Icon size={18} />
+        </span>
+      </div>
+      <p className="mt-2 text-[13px] font-bold text-text-secondary">{subtext}</p>
+      <p className="mt-3 rounded-full bg-surface-raised px-3 py-1 text-[12px] font-black text-text-primary">{footer}</p>
+    </div>
+  );
+}
+
+function RenewalHistoryPanel({ history }: { history: RenewalHistoryEntry[] }) {
+  const sortedHistory = useMemo(
+    () => [...history].sort((a, b) => b.renewedOn.localeCompare(a.renewedOn) || b.createdAt.localeCompare(a.createdAt)),
+    [history],
+  );
+
+  return (
+    <section className="studio-card grid gap-4 rounded-[var(--radius-card)] p-4 lg:grid-cols-[320px_1fr] lg:gap-6 lg:p-6">
+      <div>
+        <p className="flex items-center gap-2 text-[12px] font-black uppercase tracking-wider text-brand-primary">
+          <RefreshCcw size={16} />
+          Renewal Desk
+        </p>
+        <h2 className="mt-1 text-[20px] font-black text-text-primary lg:text-[22px]">Renewal history</h2>
+        <p className="mt-1 text-[13px] font-semibold leading-5 text-text-secondary lg:text-[14px]">
+          Old plan, renewed period, amount, and payment state are kept for reports.
+        </p>
+      </div>
+
+      <div className="grid gap-2">
+        {sortedHistory.length > 0 ? (
+          sortedHistory.map((entry) => <RenewalHistoryRow key={entry.id} entry={entry} />)
+        ) : (
+          <div className="rounded-[var(--radius-card)] border border-dashed border-border-default bg-surface-raised px-3 py-5 text-center text-[13px] font-bold text-text-muted">
+            No renewal history saved yet.
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function RenewalHistoryRow({ entry }: { entry: RenewalHistoryEntry }) {
+  return (
+    <div className="grid gap-2 rounded-[var(--radius-card)] border border-border-default bg-brand-white px-3 py-3 sm:grid-cols-[1fr_auto] sm:items-center lg:px-4">
+      <div>
+        <p className="text-[14px] font-black text-text-primary">
+          {entry.oldPlanType} to {entry.newPlanType}
+        </p>
+        <p className="mt-1 text-[12px] font-bold text-text-secondary">
+          {formatDisplayDate(entry.oldDueDate)} renewed to {formatDisplayDate(entry.newDueDate)}
+        </p>
+        <p className="mt-1 text-[11px] font-black uppercase tracking-wider text-text-muted">Recorded {formatDisplayDate(entry.renewedOn)}</p>
+      </div>
+      <div className="flex items-center gap-2 sm:justify-end">
+        <Badge tone={entry.paymentStatus === "Paid" ? "paid" : entry.paymentStatus === "Partially Paid" ? "due" : "pending"}>{entry.paymentStatus}</Badge>
+        <strong className="text-[15px] font-black text-text-primary">{formatCurrency(entry.amount)}</strong>
+      </div>
+    </div>
+  );
+}
+
+function PaymentReceiptPanel({
+  member,
+  receipts,
+  onAddPaymentReceipt,
+}: {
+  member: Member;
+  receipts: PaymentReceipt[];
+  onAddPaymentReceipt: (memberId: string, input: PaymentReceiptInput) => Promise<void>;
+}) {
+  const sortedReceipts = useMemo(
+    () =>
+      [...receipts].sort((a, b) => {
+        const dateCompare = b.paidOn.localeCompare(a.paidOn);
+        return dateCompare !== 0 ? dateCompare : b.createdAt.localeCompare(a.createdAt);
+      }),
+    [receipts],
+  );
+  const receiptTotal = useMemo(() => sortedReceipts.reduce((sum, receipt) => sum + receipt.amount, 0), [sortedReceipts]);
+  const recordedOpeningAmount = Math.max(0, Math.min(member.partialPaidAmount - receiptTotal, member.feesAmount));
+  const balanceAmount = Math.max(member.balanceAmount, member.feesAmount - member.partialPaidAmount, 0);
+  const [paidOn, setPaidOn] = useState(todayISO());
+  const [amount, setAmount] = useState(balanceAmount > 0 ? String(balanceAmount) : "");
+  const [method, setMethod] = useState<PaymentMethod>("Cash");
+  const [note, setNote] = useState("");
+  const [receiptNo, setReceiptNo] = useState("");
+  const [error, setError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const canRecordPayment = balanceAmount > 0;
+
+  async function submitReceipt(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    setError("");
+    const numericAmount = Number(amount);
+
+    if (!canRecordPayment) {
+      setError("This member has no pending balance.");
+      return;
+    }
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      setError("Enter a valid payment amount.");
+      return;
+    }
+    if (numericAmount > balanceAmount) {
+      setError(`Amount cannot exceed ${formatCurrency(balanceAmount)}.`);
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await onAddPaymentReceipt(member.id, {
+        paidOn,
+        amount: numericAmount,
+        method,
+        note,
+        receiptNo: receiptNo.trim() || undefined,
+      });
+      setAmount("");
+      setNote("");
+      setReceiptNo("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to record payment.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <section className="studio-card grid gap-4 rounded-[var(--radius-card)] p-4 lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-6 lg:p-6">
+      <div className="grid gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="flex items-center gap-2 text-[12px] font-black uppercase tracking-wider text-brand-primary">
+              <ReceiptText size={16} />
+              Payment Desk
+            </p>
+            <h2 className="mt-1 text-[20px] font-black text-text-primary lg:text-[22px]">Receipt history</h2>
+            <p className="mt-1 text-[13px] font-semibold leading-5 text-text-secondary lg:text-[14px]">
+              Track every collection without changing plan dates or training details.
+            </p>
+          </div>
+          <Badge tone={member.paymentStatus === "Paid" ? "paid" : member.paymentStatus === "Partially Paid" ? "due" : "pending"}>
+            {member.paymentStatus}
+          </Badge>
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-3">
+          <PaymentMetric label="Plan Fees" value={formatCurrency(member.feesAmount)} />
+          <PaymentMetric label="Collected" value={formatCurrency(member.partialPaidAmount)} tone="green" />
+          <PaymentMetric label="Balance" value={formatCurrency(balanceAmount)} tone={balanceAmount > 0 ? "amber" : "green"} />
+        </div>
+
+        <form className="grid gap-3 rounded-[var(--radius-card)] border border-border-default bg-surface-raised p-3 lg:p-4" onSubmit={submitReceipt}>
+          <div className="flex items-center justify-between gap-3">
+            <p className="flex items-center gap-2 text-[13px] font-black uppercase tracking-wider text-text-primary">
+              <Banknote size={16} className="text-brand-primary" />
+              Record Payment
+            </p>
+            <span className="rounded-full bg-brand-white px-3 py-1 text-[12px] font-black text-text-secondary">
+              Due {formatCurrency(balanceAmount)}
+            </span>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input label="Amount" type="number" step="1" min="1" max={balanceAmount || undefined} value={amount} onChange={(event) => setAmount(event.target.value)} disabled={!canRecordPayment || isSaving} />
+            <Input label="Paid Date" type="date" value={paidOn} onChange={(event) => setPaidOn(event.target.value)} disabled={!canRecordPayment || isSaving} />
+            <label className="grid gap-2 text-[14px] font-semibold lg:text-[15px]">
+              Method
+              <select className="studio-input w-full px-3 py-2.5 lg:px-4 lg:py-3" value={method} onChange={(event) => setMethod(event.target.value as PaymentMethod)} disabled={!canRecordPayment || isSaving}>
+                {paymentMethodOptions.map((option) => (
+                  <option key={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+            <Input label="Receipt No" placeholder="Auto if empty" value={receiptNo} onChange={(event) => setReceiptNo(event.target.value)} disabled={!canRecordPayment || isSaving} />
+          </div>
+          <label className="grid gap-2 text-[14px] font-semibold lg:text-[15px]">
+            Note
+            <textarea
+              className="studio-input min-h-20 w-full px-3 py-2.5 text-[14px] font-normal lg:px-4 lg:py-3 lg:text-[15px]"
+              value={note}
+              maxLength={180}
+              onChange={(event) => setNote(event.target.value)}
+              disabled={!canRecordPayment || isSaving}
+              placeholder="Cash counter, UPI ref, or trainer note"
+            />
+          </label>
+          {error ? <p className="rounded-[var(--radius-card)] bg-red-50 px-3 py-2 text-[12px] font-bold text-status-expired">{error}</p> : null}
+          <Button type="submit" disabled={!canRecordPayment || isSaving}>
+            <ReceiptText size={18} />
+            {isSaving ? "Saving..." : "Save Receipt"}
+          </Button>
+        </form>
+      </div>
+
+      <div className="rounded-[var(--radius-card)] border border-border-default bg-brand-white p-3 lg:p-4">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[12px] font-black uppercase tracking-wider text-text-muted">Ledger</p>
+          <span className="rounded-full bg-surface-raised px-3 py-1 text-[12px] font-black text-text-secondary">
+            {sortedReceipts.length + (recordedOpeningAmount > 0 ? 1 : 0)} entries
+          </span>
+        </div>
+        <div className="mt-3 grid gap-2">
+          {recordedOpeningAmount > 0 ? (
+            <ReceiptRow
+              title="Recorded before receipt log"
+              date={formatDisplayDate(member.membershipStart)}
+              amount={recordedOpeningAmount}
+              method="Opening"
+              note="Existing paid amount kept from the member record"
+            />
+          ) : null}
+          {sortedReceipts.length > 0 ? (
+            sortedReceipts.map((receipt) => (
+              <ReceiptRow
+                key={receipt.id}
+                title={receipt.receiptNo}
+                date={formatDisplayDate(receipt.paidOn)}
+                amount={receipt.amount}
+                method={receipt.method}
+                note={receipt.note || "No note"}
+              />
+            ))
+          ) : recordedOpeningAmount <= 0 ? (
+            <div className="rounded-[var(--radius-card)] border border-dashed border-border-default bg-surface-raised px-3 py-5 text-center text-[13px] font-bold text-text-muted">
+              No receipts saved yet.
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PaymentMetric({ label, value, tone = "neutral" }: { label: string; value: string; tone?: "neutral" | "green" | "amber" }) {
+  const toneClass = tone === "green" ? "text-status-active" : tone === "amber" ? "text-status-due" : "text-text-primary";
+  return (
+    <div className="rounded-[var(--radius-card)] border border-border-default bg-brand-white px-3 py-2.5 lg:px-4 lg:py-3">
+      <p className="text-[11px] font-black uppercase tracking-wider text-text-muted">{label}</p>
+      <p className={`mt-1 text-[20px] font-black ${toneClass}`}>{value}</p>
+    </div>
+  );
+}
+
+function ReceiptRow({ title, date, amount, method, note }: { title: string; date: string; amount: number; method: string; note: string }) {
+  return (
+    <div className="grid gap-2 rounded-[var(--radius-card)] border border-border-default bg-surface-raised px-3 py-2.5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-mono text-[12px] font-black text-text-primary">{title}</p>
+          <p className="mt-0.5 text-[12px] font-bold text-text-muted">{date} · {method}</p>
+        </div>
+        <strong className="shrink-0 text-[15px] text-status-active">{formatCurrency(amount)}</strong>
+      </div>
+      <p className="line-clamp-2 text-[12px] font-semibold leading-5 text-text-secondary">{note}</p>
+    </div>
   );
 }
 

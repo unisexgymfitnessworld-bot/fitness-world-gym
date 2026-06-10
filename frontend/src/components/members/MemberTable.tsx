@@ -11,7 +11,7 @@ import {
 import { Eye, MessageCircle, MessageSquare, Pencil, UserX, SearchX, Plus, Download, UserCheck } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
-import { createWhatsAppLink, formatDisplayDate, formatPhone, getDueTone } from "../../lib/utils";
+import { compareRegistrationNumbers, createWhatsAppLink, formatDisplayDate, formatPhone, getDueTone, getMemberActionDueDate, getMemberDueKind, isPlanLessThanOneMonth } from "../../lib/utils";
 import type { Member } from "../../types";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
@@ -34,10 +34,9 @@ const columnHelper = createColumnHelper<Member>();
 
 const actionLegend = [
   "View profile",
-  "WhatsApp reminder",
-  "SMS reminder",
+  "WhatsApp/SMS reminders",
   "Edit details",
-  "Suspend member",
+  "Suspend or restore member",
 ] as const;
 
 const memberGlobalFilter: FilterFn<Member> = (row, _columnId, filterValue) => {
@@ -61,8 +60,13 @@ export function MemberTable({
   onAddClick,
   onClearFilters,
 }: MemberTableProps) {
-  const [sorting, setSorting] = useState<SortingState>([{ id: "membershipDue", desc: false }]);
+  const [sorting, setSorting] = useState<SortingState>([{ id: "regNo", desc: false }]);
   const [globalFilter, setGlobalFilter] = useState(query);
+
+  const registerOrderedMembers = useMemo(
+    () => [...members].sort((a, b) => compareRegistrationNumbers(a.regNo, b.regNo)),
+    [members],
+  );
 
   function exportToCsv(): void {
     const headers = [
@@ -78,7 +82,8 @@ export function MemberTable({
       "Goal",
       "Plan Type",
       "Start Date",
-      "Due Date",
+      "Plan Renewal Date",
+      "Plan Date Type",
       "Fees",
       "Payment Status",
       "Status",
@@ -90,7 +95,7 @@ export function MemberTable({
     
     const csvRows = [headers.join(",")];
     
-    for (const member of members) {
+    for (const member of registerOrderedMembers) {
       const row = [
         `"${member.regNo}"`,
         `"${member.name.replace(/"/g, '""')}"`,
@@ -104,7 +109,8 @@ export function MemberTable({
         `"${member.goal}"`,
         `"${member.planType}"`,
         `"${member.membershipStart}"`,
-        `"${member.membershipDue}"`,
+        `"${getMemberActionDueDate(member)}"`,
+        `"${getMemberDueKind(member)}"`,
         member.feesAmount,
         `"${member.paymentStatus}"`,
         `"${member.status}"`,
@@ -135,6 +141,7 @@ export function MemberTable({
       columnHelper.accessor("regNo", {
         header: "Reg No",
         cell: (info) => <span className="font-mono text-[13px] font-bold text-brand-primary">{info.getValue()}</span>,
+        sortingFn: (rowA, rowB) => compareRegistrationNumbers(rowA.original.regNo, rowB.original.regNo),
       }),
       columnHelper.accessor("name", {
         header: "Name",
@@ -183,14 +190,28 @@ export function MemberTable({
           </Badge>
         ),
       }),
-      columnHelper.accessor("membershipDue", {
-        header: "Due Date",
+      columnHelper.accessor((member) => getMemberActionDueDate(member), {
+        id: "nextDue",
+        header: "Renewal Date",
         cell: (info) => {
-          const tone = getDueTone(info.row.original);
+          const member = info.row.original;
+          const tone = getDueTone(member);
+          const isShortTerm = isPlanLessThanOneMonth(member);
           return (
-            <span className={tone === "expired" ? "font-bold text-status-expired" : tone === "due" ? "font-bold text-status-due" : "font-semibold text-status-active"}>
-              {formatDisplayDate(info.getValue())}
-            </span>
+            <div className="flex flex-col gap-0.5">
+              {isShortTerm ? (
+                <span className="font-semibold text-text-muted">N/A</span>
+              ) : (
+                <>
+                  <span className={tone === "expired" ? "font-bold text-status-expired" : tone === "due" ? "font-bold text-status-due" : "font-semibold text-status-active"}>
+                    {formatDisplayDate(info.getValue())}
+                  </span>
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
+                    {getMemberDueKind(member)}
+                  </span>
+                </>
+              )}
+            </div>
           );
         },
       }),
@@ -230,6 +251,7 @@ export function MemberTable({
         header: "Actions",
         cell: (info) => {
           const member = info.row.original;
+          const isShortTerm = isPlanLessThanOneMonth(member);
           return (
             <div className="flex items-center gap-1.5">
               <button
@@ -241,24 +263,28 @@ export function MemberTable({
                 <Eye size={14} />
                 <span>View</span>
               </button>
-              <a
-                className="focus-ring flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-100 bg-emerald-50/50 text-emerald-700 transition hover:bg-emerald-600 hover:text-white"
-                href={createWhatsAppLink(member)}
-                target="_blank"
-                rel="noreferrer"
-                title="Send WhatsApp renewal reminder"
-                aria-label={`Send WhatsApp renewal reminder to ${member.name}`}
-              >
-                <MessageCircle size={15} />
-              </a>
-              <button
-                className="focus-ring flex h-9 w-9 items-center justify-center rounded-lg border border-violet-100 bg-violet-50/50 text-violet-700 transition hover:bg-violet-600 hover:text-white"
-                onClick={() => onSms(member.id)}
-                title="Send SMS renewal reminder"
-                aria-label={`Send SMS renewal reminder to ${member.name}`}
-              >
-                <MessageSquare size={15} />
-              </button>
+              {!isShortTerm && (
+                <>
+                  <a
+                    className="focus-ring flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-100 bg-emerald-50/50 text-emerald-700 transition hover:bg-emerald-600 hover:text-white"
+                    href={createWhatsAppLink(member)}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="Send WhatsApp renewal reminder"
+                    aria-label={`Send WhatsApp renewal reminder to ${member.name}`}
+                  >
+                    <MessageCircle size={15} />
+                  </a>
+                  <button
+                    className="focus-ring flex h-9 w-9 items-center justify-center rounded-lg border border-violet-100 bg-violet-50/50 text-violet-700 transition hover:bg-violet-600 hover:text-white"
+                    onClick={() => onSms(member.id)}
+                    title="Send SMS renewal reminder"
+                    aria-label={`Send SMS renewal reminder to ${member.name}`}
+                  >
+                    <MessageSquare size={15} />
+                  </button>
+                </>
+              )}
               <button
                 className="focus-ring flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-55 text-slate-700 transition hover:bg-slate-600 hover:text-white"
                 onClick={() => onEdit(member.id)}
@@ -295,7 +321,7 @@ export function MemberTable({
   );
 
   const table = useReactTable({
-    data: members,
+    data: registerOrderedMembers,
     columns,
     state: {
       globalFilter,
@@ -387,6 +413,9 @@ export function MemberTable({
         {rows.map((row, i) => {
           const member = row.original;
           const dueTone = getDueTone(member);
+          const nextDueDate = getMemberActionDueDate(member);
+          const nextDueKind = getMemberDueKind(member);
+          const isShortTerm = isPlanLessThanOneMonth(member);
           return (
             <motion.article
               key={row.id}
@@ -427,10 +456,17 @@ export function MemberTable({
                   <p className="mt-0.5 truncate text-[12px] font-bold text-text-primary sm:text-[13px]">{member.goal}</p>
                 </div>
                 <div className="rounded-md bg-surface-overlay px-2 py-1.5 sm:rounded-lg sm:py-2">
-                  <p className="text-[10px] font-bold uppercase text-text-muted">Due</p>
-                  <p className={`mt-0.5 text-[12px] font-bold sm:text-[13px] ${dueTone === "expired" ? "text-status-expired" : dueTone === "due" ? "text-status-due" : "text-status-active"}`}>
-                    {formatDisplayDate(member.membershipDue)}
-                  </p>
+                  <p className="text-[10px] font-bold uppercase text-text-muted">Renewal</p>
+                  {isShortTerm ? (
+                    <p className="mt-0.5 text-[12px] font-bold text-text-muted sm:text-[13px]">N/A</p>
+                  ) : (
+                    <>
+                      <p className={`mt-0.5 text-[12px] font-bold sm:text-[13px] ${dueTone === "expired" ? "text-status-expired" : dueTone === "due" ? "text-status-due" : "text-status-active"}`}>
+                        {formatDisplayDate(nextDueDate)}
+                      </p>
+                      <p className="mt-0.5 text-[9px] font-bold uppercase text-text-muted">{nextDueKind}</p>
+                    </>
+                  )}
                 </div>
                 <div className="rounded-md bg-surface-overlay px-2 py-1.5 sm:rounded-lg sm:py-2">
                   <p className="text-[10px] font-bold uppercase text-text-muted">Pay</p>
@@ -457,24 +493,28 @@ export function MemberTable({
                   <Eye size={13} />
                   <span>View</span>
                 </button>
-                <a
-                  className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-emerald-100 bg-emerald-50/50 text-emerald-700 transition"
-                  href={createWhatsAppLink(member)}
-                  target="_blank"
-                  rel="noreferrer"
-                  title="Send WhatsApp renewal reminder"
-                  aria-label={`Send WhatsApp renewal reminder to ${member.name}`}
-                >
-                  <MessageCircle size={14} />
-                </a>
-                <button
-                  className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-violet-100 bg-violet-50/50 text-violet-700 transition"
-                  onClick={() => onSms(member.id)}
-                  title="Send SMS renewal reminder"
-                  aria-label={`Send SMS renewal reminder to ${member.name}`}
-                >
-                  <MessageSquare size={14} />
-                </button>
+                {!isShortTerm && (
+                  <>
+                    <a
+                      className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-emerald-100 bg-emerald-50/50 text-emerald-700 transition"
+                      href={createWhatsAppLink(member)}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Send WhatsApp renewal reminder"
+                      aria-label={`Send WhatsApp renewal reminder to ${member.name}`}
+                    >
+                      <MessageCircle size={14} />
+                    </a>
+                    <button
+                      className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-violet-100 bg-violet-50/50 text-violet-700 transition"
+                      onClick={() => onSms(member.id)}
+                      title="Send SMS renewal reminder"
+                      aria-label={`Send SMS renewal reminder to ${member.name}`}
+                    >
+                      <MessageSquare size={14} />
+                    </button>
+                  </>
+                )}
                 <button
                   className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-700 transition"
                   onClick={() => onEdit(member.id)}
