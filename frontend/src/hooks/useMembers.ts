@@ -249,7 +249,7 @@ export function useMembers(): MembersState {
     }
 
     const existingReceiptTotal = paymentReceipts
-      .filter((receipt) => receipt.memberId === memberId)
+      .filter((receipt) => receipt.memberId === memberId && receipt.paidOn >= member.membershipStart)
       .reduce((sum, receipt) => sum + receipt.amount, 0);
     const legacyCollectedAmount = Math.max(0, Math.min(member.partialPaidAmount - existingReceiptTotal, member.feesAmount));
     const collectedBeforeReceipt = legacyCollectedAmount + existingReceiptTotal;

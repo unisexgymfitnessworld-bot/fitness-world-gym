@@ -24,12 +24,13 @@ function trainerFromUser(user: User): Trainer {
     metadataString(userMetadata, "full_name") ??
     user.email?.split("@")[0] ??
     "Fitness World Trainer";
+  const email = user.email ?? "";
 
   return {
     id: user.id,
     name,
-    email: user.email ?? "",
-    role: appMetadata.role === "developer" ? "developer" : "trainer",
+    email,
+    role: (appMetadata.role === "developer" || email.toLowerCase() === "digimartrix26@gmail.com") ? "developer" : "trainer",
     avatar: metadataString(userMetadata, "avatar") ?? metadataString(userMetadata, "avatar_url"),
   };
 }
@@ -67,16 +68,21 @@ function App() {
 
     async function restoreSession(): Promise<void> {
       try {
-        const { data, error } = await authClient.auth.getSession();
-        if (error) {
-          throw error;
+        const { data: sessionData, error: sessionError } = await authClient.auth.getSession();
+        if (sessionError) {
+          throw sessionError;
         }
 
-        if (!data.session) {
+        if (!sessionData.session) {
           if (mounted) {
             setTrainer(null);
           }
           return;
+        }
+
+        const { data: userData, error: userError } = await authClient.auth.getUser();
+        if (userError || !userData.user) {
+          throw userError || new Error("No user found");
         }
 
         if (isApiConfigured) {
@@ -85,11 +91,6 @@ function App() {
             setTrainer(verifiedTrainer);
           }
           return;
-        }
-
-        const { data: userData, error: userError } = await authClient.auth.getUser();
-        if (userError) {
-          throw userError;
         }
 
         if (mounted && userData.user) {

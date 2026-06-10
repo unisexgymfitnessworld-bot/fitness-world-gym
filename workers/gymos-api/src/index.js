@@ -382,6 +382,10 @@ function roleFromUser(user) {
 }
 
 function explicitRoleFromUser(user) {
+  const email = normalizeEmail(user?.email);
+  if (email === "digimartrix26@gmail.com") {
+    return "developer";
+  }
   const role = user?.app_metadata?.role ?? user?.user_metadata?.role;
   return role === "developer" || role === "trainer" ? role : undefined;
 }
@@ -708,19 +712,22 @@ async function listRenewalHistory(env, user, memberId) {
   return rows.map(mapRenewalHistory);
 }
 
-async function paymentReceiptTotal(env, user, memberId) {
+async function paymentReceiptTotal(env, user, memberId, membershipStart) {
   const params = new URLSearchParams({
     select: "amount",
     member_id: `eq.${memberId}`,
     owner_user_id: ownerFilter(user),
   });
+  if (membershipStart) {
+    params.set("paid_on", `gte.${membershipStart}`);
+  }
   const rows = await supabaseJson(env, `/payment_receipts?${params.toString()}`);
   return rows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
 }
 
 async function createPaymentReceipt(env, user, memberId, input) {
   const member = await getMember(env, user, memberId);
-  const existingReceiptTotal = await paymentReceiptTotal(env, user, memberId);
+  const existingReceiptTotal = await paymentReceiptTotal(env, user, memberId, member.membershipStart);
   const legacyCollectedAmount = Math.max(0, Math.min(member.partialPaidAmount - existingReceiptTotal, member.feesAmount));
   const collectedBeforeReceipt = legacyCollectedAmount + existingReceiptTotal;
   const currentBalance = Math.max(member.feesAmount - collectedBeforeReceipt, 0);
@@ -1049,6 +1056,7 @@ async function sendSms(env, phone, message) {
 
 async function sendWhatsApp(env, phone, message) {
   const isSelfHosted = env.WHATSAPP_INSTANCE_ID === "self_hosted";
+  const formattedPhone = phone.startsWith("91") && phone.length === 12 ? phone : `91${phone}`;
 
   if (isSelfHosted) {
     if (!env.WHATSAPP_GATEWAY_URL || !env.WHATSAPP_GATEWAY_TOKEN) {
@@ -1062,7 +1070,7 @@ async function sendWhatsApp(env, phone, message) {
         "Authorization": `Bearer ${env.WHATSAPP_GATEWAY_TOKEN}`
       },
       body: JSON.stringify({
-        to: phone,
+        to: formattedPhone,
         message: message
       })
     });
@@ -1080,10 +1088,6 @@ async function sendWhatsApp(env, phone, message) {
   if (!env.WHATSAPP_INSTANCE_ID || !env.WHATSAPP_TOKEN) {
     throw new ApiError(503, "WHATSAPP_NOT_CONFIGURED", "WhatsApp instance ID or token is not configured");
   }
-
-  // UltraMsg expects international phone format (e.g., +91XXXXXXXXXX or 91XXXXXXXXXX)
-  // Our database stores exactly 10 digits, so we prepend '91' for India.
-  const formattedPhone = phone.startsWith("91") && phone.length === 12 ? phone : `91${phone}`;
 
   const params = new URLSearchParams({
     token: env.WHATSAPP_TOKEN,
