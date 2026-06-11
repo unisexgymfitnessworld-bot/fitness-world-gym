@@ -150,7 +150,7 @@ export function TopBar({ trainer, onLogout, onSettings, onReports, members = [],
 
           {/* Autocomplete Dropdown */}
           {isOpen && searchQuery.trim() && (
-            <div className="absolute top-full left-0 right-0 mt-2 z-50 bg-[#0e1122]/98 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden p-1.5 max-h-[360px] overflow-y-auto">
+            <div className="absolute top-full left-0 right-0 mt-2 z-50 bg-[#0e1122]/98 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden p-1.5 max-h-[360px] overflow-y-auto scrollbar-hide">
               {searchResults.length > 0 ? (
                 searchResults.map((member, idx) => {
                   const isSelected = idx === selectedIndex;

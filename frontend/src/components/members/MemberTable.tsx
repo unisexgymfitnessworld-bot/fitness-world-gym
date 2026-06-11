@@ -17,6 +17,7 @@ import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
 import { SkeletonRow } from "../ui/Skeleton";
 
+
 interface MemberTableProps {
   members: Member[];
   query: string;
@@ -275,63 +276,81 @@ export function MemberTable({
           const isShortTerm = isPlanLessThanOneMonth(member);
           return (
             <div className="flex items-center gap-1.5">
-              <button
+              <motion.button
                 className="focus-ring flex h-9 items-center gap-1.5 rounded-lg border border-indigo-100 bg-indigo-50/50 px-2.5 text-[12px] font-bold text-indigo-700 transition hover:bg-indigo-600 hover:text-white"
                 onClick={() => onView(member.id)}
                 title="View full member profile"
                 aria-label={`View full profile for ${member.name}`}
+                whileHover={{ scale: 1.08, y: -1 }}
+                whileTap={{ scale: 0.92 }}
+                transition={{ type: "spring", stiffness: 500, damping: 20 }}
               >
                 <Eye size={14} />
                 <span>View</span>
-              </button>
+              </motion.button>
               {!isShortTerm && (
                 <>
-                  <a
+                  <motion.a
                     className="focus-ring flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-100 bg-emerald-50/50 text-emerald-700 transition hover:bg-emerald-600 hover:text-white"
                     href={createWhatsAppLink(member)}
                     target="_blank"
                     rel="noreferrer"
                     title="Send WhatsApp renewal reminder"
                     aria-label={`Send WhatsApp renewal reminder to ${member.name}`}
+                    whileHover={{ scale: 1.12, y: -1 }}
+                    whileTap={{ scale: 0.9 }}
+                    transition={{ type: "spring", stiffness: 500, damping: 20 }}
                   >
                     <MessageCircle size={15} />
-                  </a>
-                  <button
+                  </motion.a>
+                  <motion.button
                     className="focus-ring flex h-9 w-9 items-center justify-center rounded-lg border border-violet-100 bg-violet-50/50 text-violet-700 transition hover:bg-violet-600 hover:text-white"
                     onClick={() => onSms(member.id)}
                     title="Send SMS renewal reminder"
                     aria-label={`Send SMS renewal reminder to ${member.name}`}
+                    whileHover={{ scale: 1.12, y: -1 }}
+                    whileTap={{ scale: 0.9 }}
+                    transition={{ type: "spring", stiffness: 500, damping: 20 }}
                   >
                     <MessageSquare size={15} />
-                  </button>
+                  </motion.button>
                 </>
               )}
-              <button
+              <motion.button
                 className="focus-ring flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-55 text-slate-700 transition hover:bg-slate-600 hover:text-white"
                 onClick={() => onEdit(member.id)}
                 title="Edit member details"
                 aria-label={`Edit member details for ${member.name}`}
+                whileHover={{ scale: 1.12, y: -1 }}
+                whileTap={{ scale: 0.9 }}
+                transition={{ type: "spring", stiffness: 500, damping: 20 }}
               >
                 <Pencil size={15} />
-              </button>
+              </motion.button>
               {member.status === "Suspended" ? (
-                <button
+                <motion.button
                   className="focus-ring flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-100 bg-emerald-50/50 text-emerald-700 transition hover:bg-emerald-600 hover:text-white"
                   onClick={() => onSuspend(member.id)}
                   title="Unsuspend member access"
                   aria-label={`Unsuspend member access for ${member.name}`}
+                  whileHover={{ scale: 1.12, y: -1 }}
+                  whileTap={{ scale: 0.9 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 20 }}
                 >
                   <UserCheck size={15} />
-                </button>
+                </motion.button>
               ) : (
-                <button
+                <motion.button
                   className="focus-ring flex h-9 w-9 items-center justify-center rounded-lg border border-rose-100 bg-rose-50/50 text-rose-700 transition hover:bg-rose-600 hover:text-white"
                   onClick={() => onSuspend(member.id)}
                   title="Suspend member access"
                   aria-label={`Suspend member access for ${member.name}`}
+                  whileHover={{ scale: 1.12, y: -1 }}
+                  whileTap={{ scale: 0.9 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 20 }}
                 >
                   <UserX size={15} />
-                </button>
+                </motion.button>
               )}
             </div>
           );
@@ -522,63 +541,81 @@ export function MemberTable({
               )}
 
               <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                <button
+                <motion.button
                   className="focus-ring flex h-8 items-center gap-1 rounded-md border border-indigo-100 bg-indigo-50/50 px-2 text-[11px] font-bold text-indigo-700 transition"
                   onClick={() => onView(member.id)}
                   title="View full member profile"
                   aria-label={`View full profile for ${member.name}`}
+                  whileHover={{ scale: 1.08 }}
+                  whileTap={{ scale: 0.92 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 20 }}
                 >
                   <Eye size={13} />
                   <span>View</span>
-                </button>
+                </motion.button>
                 {!isShortTerm && (
                   <>
-                    <a
+                    <motion.a
                       className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-emerald-100 bg-emerald-50/50 text-emerald-700 transition"
                       href={createWhatsAppLink(member)}
                       target="_blank"
                       rel="noreferrer"
                       title="Send WhatsApp renewal reminder"
                       aria-label={`Send WhatsApp renewal reminder to ${member.name}`}
+                      whileHover={{ scale: 1.12 }}
+                      whileTap={{ scale: 0.9 }}
+                      transition={{ type: "spring", stiffness: 500, damping: 20 }}
                     >
                       <MessageCircle size={14} />
-                    </a>
-                    <button
+                    </motion.a>
+                    <motion.button
                       className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-violet-100 bg-violet-50/50 text-violet-700 transition"
                       onClick={() => onSms(member.id)}
                       title="Send SMS renewal reminder"
                       aria-label={`Send SMS renewal reminder to ${member.name}`}
+                      whileHover={{ scale: 1.12 }}
+                      whileTap={{ scale: 0.9 }}
+                      transition={{ type: "spring", stiffness: 500, damping: 20 }}
                     >
                       <MessageSquare size={14} />
-                    </button>
+                    </motion.button>
                   </>
                 )}
-                <button
+                <motion.button
                   className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-700 transition"
                   onClick={() => onEdit(member.id)}
                   title="Edit member details"
                   aria-label={`Edit member details for ${member.name}`}
+                  whileHover={{ scale: 1.12 }}
+                  whileTap={{ scale: 0.9 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 20 }}
                 >
                   <Pencil size={14} />
-                </button>
+                </motion.button>
                 {member.status === "Suspended" ? (
-                  <button
+                  <motion.button
                     className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-emerald-100 bg-emerald-50/50 text-emerald-700 transition"
                     onClick={() => onSuspend(member.id)}
                     title="Unsuspend member access"
                     aria-label={`Unsuspend member access for ${member.name}`}
+                    whileHover={{ scale: 1.12 }}
+                    whileTap={{ scale: 0.9 }}
+                    transition={{ type: "spring", stiffness: 500, damping: 20 }}
                   >
                     <UserCheck size={14} />
-                  </button>
+                  </motion.button>
                 ) : (
-                  <button
+                  <motion.button
                     className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-rose-100 bg-rose-50/50 text-rose-700 transition"
                     onClick={() => onSuspend(member.id)}
                     title="Suspend member access"
                     aria-label={`Suspend member access for ${member.name}`}
+                    whileHover={{ scale: 1.12 }}
+                    whileTap={{ scale: 0.9 }}
+                    transition={{ type: "spring", stiffness: 500, damping: 20 }}
                   >
                     <UserX size={14} />
-                  </button>
+                  </motion.button>
                 )}
               </div>
             </motion.article>

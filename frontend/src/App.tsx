@@ -35,7 +35,7 @@ function trainerFromUser(user: User): Trainer {
   };
 }
 
-function SessionSplash() {
+function SessionSplash({ slow }: { slow?: boolean }) {
   return (
     <main className="grid min-h-screen place-items-center bg-surface-base px-4 text-center">
       <div className="flex flex-col items-center gap-4">
@@ -44,7 +44,13 @@ function SessionSplash() {
         </div>
         <div>
           <h1 className="text-[22px] font-black text-text-primary">Opening GymOS</h1>
-          <p className="mt-1 text-[14px] font-semibold text-text-secondary">Checking your trainer session...</p>
+          {slow ? (
+            <p className="mt-1 text-[14px] font-semibold text-amber-600">
+              Server is waking up from sleep — please wait a moment...
+            </p>
+          ) : (
+            <p className="mt-1 text-[14px] font-semibold text-text-secondary">Checking your trainer session...</p>
+          )}
         </div>
       </div>
     </main>
@@ -56,6 +62,7 @@ function App() {
   const setTrainer = useAppStore((state) => state.setTrainer);
   const path = window.location.pathname;
   const [checkingSession, setCheckingSession] = useState(() => isSupabaseConfigured && path !== "/reset-password");
+  const [slowConnection, setSlowConnection] = useState(false);
 
   useEffect(() => {
     if (path === "/reset-password" || !isSupabaseConfigured || !supabase) {
@@ -65,6 +72,20 @@ function App() {
 
     const authClient = supabase;
     let mounted = true;
+
+    // After 8s, show "waking up" message so trainer knows it's not broken
+    const slowTimer = window.setTimeout(() => {
+      if (mounted) setSlowConnection(true);
+    }, 8000);
+
+    // After 15s hard timeout, give up and show login page
+    const hardTimeout = window.setTimeout(() => {
+      if (mounted) {
+        setCheckingSession(false);
+        setSlowConnection(false);
+        setTrainer(null);
+      }
+    }, 15000);
 
     async function restoreSession(): Promise<void> {
       try {
@@ -103,6 +124,9 @@ function App() {
         }
       } finally {
         if (mounted) {
+          window.clearTimeout(slowTimer);
+          window.clearTimeout(hardTimeout);
+          setSlowConnection(false);
           setCheckingSession(false);
         }
       }
@@ -120,6 +144,8 @@ function App() {
 
     return () => {
       mounted = false;
+      window.clearTimeout(slowTimer);
+      window.clearTimeout(hardTimeout);
       subscription.unsubscribe();
     };
   }, [path, setTrainer]);
@@ -127,7 +153,7 @@ function App() {
   if (checkingSession) {
     return (
       <ErrorBoundary>
-        <SessionSplash />
+        <SessionSplash slow={slowConnection} />
       </ErrorBoundary>
     );
   }

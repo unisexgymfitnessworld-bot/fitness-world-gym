@@ -23,7 +23,23 @@ export function friendlyAuthError(error: unknown): string {
     return "Too many attempts. Wait a few minutes and try again.";
   }
 
-  if (lower.includes("api base url") || lower.includes("failed to fetch")) {
+  // Supabase cold-start / database waking up
+  if (
+    lower.includes("failed to fetch") ||
+    lower.includes("networkerror") ||
+    lower.includes("network request failed") ||
+    lower.includes("load failed") ||
+    lower.includes("fetch failed")
+  ) {
+    return "The server is waking up from sleep — this can take 15–20 seconds. Please wait and try again.";
+  }
+
+  // Timeout errors
+  if (lower.includes("timeout") || lower.includes("timed out") || lower.includes("econnreset")) {
+    return "Request timed out while the server was waking up. Please try again in a moment.";
+  }
+
+  if (lower.includes("api base url")) {
     return "GymOS server connection is not ready. Check VITE_API_BASE_URL and the Cloudflare Worker deploy.";
   }
 

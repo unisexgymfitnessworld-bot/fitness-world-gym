@@ -39,12 +39,8 @@ export function RenewModal({ open, member, onClose, onConfirm }: RenewModalProps
     }
   }, [membershipStart, planType]);
 
-  // Suggest default fees on plan change if it matches default plans
-  useEffect(() => {
-    if (defaultPricing[planType] !== undefined) {
-      setFeesAmount(defaultPricing[planType]);
-    }
-  }, [planType]);
+  // Only set default fees when the modal first opens (not on every plan change)
+  // This prevents overwriting custom amounts trainers have entered
 
   async function handleRenewSubmit(e: React.FormEvent) {
     e.preventDefault();

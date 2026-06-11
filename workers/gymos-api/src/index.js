@@ -1211,24 +1211,46 @@ async function supabaseAuthAdminJson(env, path, init = {}) {
   return payload;
 }
 
-async function supabaseRaw(env, path, init = {}) {
+async function supabaseRaw(env, path, init = {}, retries = 2) {
   const serviceKey = supabaseServiceKey(env);
   const headers = new Headers(init.headers);
   headers.set("apikey", serviceKey);
   headers.set("Authorization", `Bearer ${serviceKey}`);
   if (init.body) headers.set("Content-Type", "application/json");
 
-  const response = await fetch(`${supabaseUrl(env)}/rest/v1${path}`, {
-    ...init,
-    headers,
-  });
+  let lastError;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const response = await fetch(`${supabaseUrl(env)}/rest/v1${path}`, {
+        ...init,
+        headers,
+      });
 
-  if (!response.ok) {
-    const payload = await safeJson(response);
-    throw new ApiError(response.status, payload?.code ?? "SUPABASE_REQUEST_FAILED", payload?.message ?? "Supabase request failed");
+      // Retry on 5xx server errors (Supabase waking up) but not on 4xx client errors
+      if (!response.ok && response.status >= 500 && attempt < retries) {
+        const delay = (attempt + 1) * 1000; // 1s, 2s
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
+
+      if (!response.ok) {
+        const payload = await safeJson(response);
+        throw new ApiError(response.status, payload?.code ?? "SUPABASE_REQUEST_FAILED", payload?.message ?? "Supabase request failed");
+      }
+
+      return response;
+    } catch (err) {
+      // Network errors (connection refused, timeout) — retry if attempts remain
+      if (err instanceof ApiError) throw err; // Don't retry known API errors
+      lastError = err;
+      if (attempt < retries) {
+        const delay = (attempt + 1) * 1000;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
   }
 
-  return response;
+  throw lastError ?? new ApiError(503, "SUPABASE_UNAVAILABLE", "Supabase is not responding");
 }
 
 async function safeJson(response) {

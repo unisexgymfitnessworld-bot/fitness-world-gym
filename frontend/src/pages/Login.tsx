@@ -33,6 +33,7 @@ export function Login() {
   const [resetError, setResetError] = useState<string | null>(null);
   const [resetNotice, setResetNotice] = useState<string | null>(null);
   const [installStatus, setInstallStatus] = useState<"idle" | "installed" | "dismissed">("idle");
+  const [slowSignIn, setSlowSignIn] = useState(false);
 
   function submit(event: React.FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -44,7 +45,12 @@ export function Login() {
       void submitVerifyReset();
       return;
     }
-    void signIn({ email, password });
+    // Show "waking up" hint after 5s if sign-in is slow (Supabase cold start)
+    const slowTimer = window.setTimeout(() => setSlowSignIn(true), 5000);
+    void signIn({ email, password }).finally(() => {
+      window.clearTimeout(slowTimer);
+      setSlowSignIn(false);
+    });
   }
 
   async function submitPasswordReset(): Promise<void> {
@@ -326,6 +332,16 @@ export function Login() {
                 </>
               )}
             </motion.button>
+
+            {mode === "signin" && loading && slowSignIn && (
+              <motion.p
+                className="rounded-[var(--radius-card)] border border-amber-100 bg-amber-50 px-4 py-3 text-[13px] font-semibold text-amber-700"
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                ⏳ Server is waking up from sleep — this is normal and takes 15–20 seconds. Please hold on...
+              </motion.p>
+            )}
 
             {mode === "forgot" ? (
               <button

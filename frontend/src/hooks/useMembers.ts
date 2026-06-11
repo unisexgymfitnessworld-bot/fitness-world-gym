@@ -46,14 +46,20 @@ export function useMembers(): MembersState {
       async function loadLiveData(): Promise<void> {
         setLoading(true);
         try {
-          const [liveMembers, liveAttendance, livePaymentReceipts, liveRenewalHistory] = await Promise.all([
-            api.members(),
+          // Load members first — this clears the loading spinner quickly
+          const liveMembers = await api.members();
+          if (!cancelled) {
+            setMembers(liveMembers);
+            setLoading(false); // Show the UI as soon as members are ready
+          }
+
+          // Load secondary data in the background without blocking the UI
+          const [liveAttendance, livePaymentReceipts, liveRenewalHistory] = await Promise.all([
             api.allAttendance(),
             api.allPaymentReceipts(),
             api.allRenewalHistory(),
           ]);
           if (!cancelled) {
-            setMembers(liveMembers);
             setAttendance(liveAttendance);
             setPaymentReceipts(livePaymentReceipts);
             setRenewalHistory(liveRenewalHistory);
@@ -65,9 +71,6 @@ export function useMembers(): MembersState {
             setAttendance(sampleAttendance);
             setPaymentReceipts(samplePaymentReceipts);
             setRenewalHistory(sampleRenewalHistory);
-          }
-        } finally {
-          if (!cancelled) {
             setLoading(false);
           }
         }

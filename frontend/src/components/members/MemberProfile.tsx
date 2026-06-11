@@ -26,7 +26,10 @@ interface MemberProfileProps {
 export function MemberProfile({ member, attendance, paymentReceipts, renewalHistory, onBack, onEdit, onSms, onRenew, onAddVisit, onAddPaymentReceipt }: MemberProfileProps) {
   const [isRenewOpen, setIsRenewOpen] = useState(false);
   const nextStart = calculateNextRenewalStart(member);
-  const nextDue = calculateDueDate(nextStart, member.planType === "Custom" ? "1 Month" : member.planType);
+  // For Custom plans, preserve the current plan's duration when suggesting next renewal end date
+  const nextDue = member.planType === "Custom"
+    ? member.membershipDue  // Keep existing date for custom plans
+    : calculateDueDate(nextStart, member.planType);
   const actionDueDate = getMemberActionDueDate(member);
   const actionDueKind = getMemberDueKind(member);
   const memberAttendance = useMemo(() => attendance.filter((entry) => entry.memberId === member.id), [attendance, member.id]);
