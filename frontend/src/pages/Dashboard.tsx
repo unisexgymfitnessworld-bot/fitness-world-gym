@@ -1,4 +1,4 @@
-import { AlertTriangle, CalendarClock, IndianRupee, Sparkles, TrendingUp, UsersRound, type LucideIcon } from "lucide-react";
+import { AlertTriangle, CalendarClock, IndianRupee, Sparkles, TrendingUp, UsersRound, UserCheck, type LucideIcon } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { FilterBar } from "../components/filters/FilterBar";
@@ -363,15 +363,24 @@ export function Dashboard() {
                 </motion.div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:gap-3">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5 lg:gap-3">
                 <CommandMetric
                   icon={UsersRound}
+                  label="Total Members"
+                  value={`${stats.total}`}
+                  tone="neutral"
+                  subtext="Registered in system"
+                  footer={`${stats.active} active · ${inactiveTotal} expired`}
+                  index={0}
+                />
+                <CommandMetric
+                  icon={UserCheck}
                   label="Active Members"
                   value={`${stats.active}`}
                   tone="green"
                   subtext="Can train now"
-                  footer={inactiveTotal > 0 ? `${inactiveTotal} need attention` : `${stats.total} total records`}
-                  index={0}
+                  footer={inactiveTotal > 0 ? `${inactiveTotal} need attention` : "All accounts active"}
+                  index={1}
                 />
                 <CommandMetric
                   icon={CalendarClock}
@@ -380,7 +389,7 @@ export function Dashboard() {
                   tone="amber"
                   subtext={nextDueMember ? `${nextDueKind}: ${nextDueMember.name}` : "No urgent renewals"}
                   footer={nextDueDate ? `${formatDisplayDate(nextDueDate)} · ${nextDueDays}d` : "Next 7 days clear"}
-                  index={1}
+                  index={2}
                 />
                 <CommandMetric
                   icon={IndianRupee}
@@ -389,15 +398,16 @@ export function Dashboard() {
                   tone="pink"
                   subtext={`${dashboardSummary.allTime.pendingMembers} payment follow-ups`}
                   footer={collectionPulse}
-                  index={2}
+                  index={3}
                 />
                 <CommandMetric
                   icon={TrendingUp}
                   label="This Month"
                   value={`${dashboardSummary.thisMonth.memberCount}`}
+                  tone="neutral"
                   subtext={`${dashboardSummary.thisMonth.newMembers} new · ${dashboardSummary.thisMonth.renewals} renewal`}
                   footer={`${formatCurrency(dashboardSummary.thisMonth.collectedAmount)} collected`}
-                  index={3}
+                  index={4}
                 />
               </div>
             </div>
