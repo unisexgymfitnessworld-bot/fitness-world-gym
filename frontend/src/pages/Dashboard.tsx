@@ -21,7 +21,7 @@ import { buildTodayFollowUps } from "../lib/followUps";
 import type { MessageTemplateId } from "../lib/messageTemplates";
 import { daysUntil, formatCurrency, formatDisplayDate, getMemberActionDueDate, getMemberDueKind, isPlanLessThanOneMonth } from "../lib/utils";
 import { useAppStore } from "../store/useAppStore";
-import type { MemberInput, PaymentReceiptInput } from "../types";
+import type { MemberInput, PaymentReceiptInput, PlanType } from "../types";
 
 export function Dashboard() {
   const { signOut } = useAuth();
@@ -237,9 +237,9 @@ export function Dashboard() {
     }
   }
 
-  async function handleRenew(memberId: string, start: string, due: string, feesAmount: number): Promise<void> {
+  async function handleRenew(memberId: string, start: string, due: string, feesAmount: number, planType?: PlanType): Promise<void> {
     try {
-      await renewMember(memberId, start, due, feesAmount);
+      await renewMember(memberId, start, due, feesAmount, planType);
       pushToast({
         title: "Membership renewed",
         message: `Plan start: ${formatDisplayDate(start)}`,
@@ -296,7 +296,7 @@ export function Dashboard() {
   if (selectedMember) {
     return (
       <>
-        <TopBar trainer={trainer} onLogout={() => void signOut()} onSettings={() => setIsSettingsOpen(true)} onReports={() => setIsExportOpen(true)} />
+        <TopBar trainer={trainer} onLogout={() => void signOut()} onSettings={() => setIsSettingsOpen(true)} onReports={() => setIsExportOpen(true)} members={members} onSelectMember={setSelectedMemberId} />
         <MemberProfile
           member={selectedMember}
           attendance={attendance}
@@ -305,7 +305,7 @@ export function Dashboard() {
           onBack={() => setSelectedMemberId(null)}
           onEdit={setEditingMemberId}
           onSms={(memberId) => openSms(memberId)}
-          onRenew={(memberId, start, due, feesAmount) => void handleRenew(memberId, start, due, feesAmount)}
+          onRenew={(memberId, start, due, feesAmount, planType) => handleRenew(memberId, start, due, feesAmount, planType)}
           onAddVisit={(memberId, visitDate, weightKg) => void handleAddVisit(memberId, visitDate, weightKg)}
           onAddPaymentReceipt={(memberId, input) => handleAddPaymentReceipt(memberId, input)}
         />
@@ -327,7 +327,7 @@ export function Dashboard() {
 
   return (
     <>
-      <TopBar trainer={trainer} onLogout={() => void signOut()} onSettings={() => setIsSettingsOpen(true)} onReports={() => setIsExportOpen(true)} />
+      <TopBar trainer={trainer} onLogout={() => void signOut()} onSettings={() => setIsSettingsOpen(true)} onReports={() => setIsExportOpen(true)} members={members} onSelectMember={setSelectedMemberId} />
       <main className="studio-shell animated-grid relative min-h-screen overflow-hidden">
         <div className="relative mx-auto grid max-w-[1500px] gap-3 px-3 pb-24 pt-3 sm:px-4 lg:gap-5 lg:px-8 lg:pt-6">
           <motion.section

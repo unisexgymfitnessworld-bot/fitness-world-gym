@@ -1,7 +1,7 @@
 import { format } from "date-fns";
 import { HttpError } from "../lib/httpError.js";
 import { getSupabaseAdmin } from "../lib/supabase.js";
-import type { DbMember, DbRenewalHistoryEntry, Member, PaymentStatus, RenewalHistoryEntry } from "../types/index.js";
+import type { DbMember, DbRenewalHistoryEntry, Member, PaymentStatus, RenewalHistoryEntry, PlanType } from "../types/index.js";
 import { mapRenewalHistory } from "./mappers.js";
 
 interface RecordRenewalHistoryInput {
@@ -11,6 +11,7 @@ interface RecordRenewalHistoryInput {
   amount: number;
   paymentStatus: PaymentStatus;
   ownerUserId?: string | null;
+  newPlanType?: PlanType;
 }
 
 export async function listRenewalHistory(memberId: string): Promise<RenewalHistoryEntry[]> {
@@ -43,14 +44,14 @@ export async function listAllRenewalHistory(): Promise<RenewalHistoryEntry[]> {
 }
 
 export async function recordRenewalHistory(input: RecordRenewalHistoryInput): Promise<RenewalHistoryEntry> {
-  const { oldMember, newStartDate, newDueDate, amount, paymentStatus, ownerUserId = null } = input;
+  const { oldMember, newStartDate, newDueDate, amount, paymentStatus, ownerUserId = null, newPlanType } = input;
   const { data, error } = await getSupabaseAdmin()
     .from("renewal_history")
     .insert({
       member_id: oldMember.id,
       owner_user_id: ownerUserId,
       old_plan_type: oldMember.planType,
-      new_plan_type: oldMember.planType,
+      new_plan_type: newPlanType ?? oldMember.planType,
       old_start_date: oldMember.membershipStart,
       old_due_date: oldMember.membershipDue,
       new_start_date: newStartDate,

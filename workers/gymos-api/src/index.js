@@ -141,6 +141,18 @@ async function handleRequest(request, env) {
 
   assertTrainerWorkspace(authUser);
 
+  if (path === "/members/payments/all" && method === "GET") {
+    return jsonResponse(request, env, { success: true, data: await listAllPaymentReceipts(env, authUser) });
+  }
+
+  if (path === "/members/renewals/all" && method === "GET") {
+    return jsonResponse(request, env, { success: true, data: await listAllRenewalHistory(env, authUser) });
+  }
+
+  if (path === "/attendance" && method === "GET") {
+    return jsonResponse(request, env, { success: true, data: await listAllAttendance(env, authUser) });
+  }
+
   if (path === "/members" && method === "GET") {
     return jsonResponse(request, env, { success: true, data: await listMembers(env, authUser, url.searchParams) });
   }
@@ -191,7 +203,7 @@ async function handleRequest(request, env) {
       const body = validateRenewInput(await parseJsonBody(request));
       return jsonResponse(request, env, {
         success: true,
-        data: await renewMember(env, authUser, memberId, body.membershipStart, body.membershipDue, body.feesAmount),
+        data: await renewMember(env, authUser, memberId, body.membershipStart, body.membershipDue, body.feesAmount, body.planType),
       });
     }
   }
@@ -688,6 +700,36 @@ async function updatePayment(env, user, memberId, paymentStatus) {
   return mapMember(rows[0]);
 }
 
+async function listAllPaymentReceipts(env, user) {
+  const params = new URLSearchParams({
+    select: "*",
+    owner_user_id: ownerFilter(user),
+    order: "paid_on.desc,created_at.desc",
+  });
+  const rows = await supabaseJson(env, `/payment_receipts?${params.toString()}`);
+  return rows.map(mapPaymentReceipt);
+}
+
+async function listAllRenewalHistory(env, user) {
+  const params = new URLSearchParams({
+    select: "*",
+    owner_user_id: ownerFilter(user),
+    order: "renewed_on.desc,created_at.desc",
+  });
+  const rows = await supabaseJson(env, `/renewal_history?${params.toString()}`);
+  return rows.map(mapRenewalHistory);
+}
+
+async function listAllAttendance(env, user) {
+  const params = new URLSearchParams({
+    select: "*,members!inner(owner_user_id)",
+    "members.owner_user_id": `eq.${user.id}`,
+    order: "visit_date.desc",
+  });
+  const rows = await supabaseJson(env, `/attendance?${params.toString()}`);
+  return rows.map(mapAttendance);
+}
+
 async function listPaymentReceipts(env, user, memberId) {
   await getMember(env, user, memberId);
   const params = new URLSearchParams({
@@ -772,8 +814,9 @@ async function createPaymentReceipt(env, user, memberId, input) {
   };
 }
 
-async function renewMember(env, user, memberId, membershipStart, membershipDue, feesAmount) {
+async function renewMember(env, user, memberId, membershipStart, membershipDue, feesAmount, planType) {
   const member = await getMember(env, user, memberId);
+  const newPlan = planType ?? member.planType;
   await supabaseJson(env, "/renewal_history?select=*", {
     method: "POST",
     headers: { Prefer: "return=representation" },
@@ -781,7 +824,7 @@ async function renewMember(env, user, memberId, membershipStart, membershipDue, 
       member_id: memberId,
       owner_user_id: user.id,
       old_plan_type: member.planType,
-      new_plan_type: member.planType,
+      new_plan_type: newPlan,
       old_start_date: member.membershipStart,
       old_due_date: member.membershipDue,
       new_start_date: membershipStart,
@@ -799,6 +842,7 @@ async function renewMember(env, user, memberId, membershipStart, membershipDue, 
       membership_start: membershipStart,
       membership_due: membershipDue,
       fees_amount: feesAmount,
+      plan_type: newPlan,
       payment_status: "Paid",
       partial_paid_amount: feesAmount,
       balance_amount: 0,
@@ -1279,6 +1323,7 @@ function validateRenewInput(body) {
     membershipStart: requiredDate(body.membershipStart ?? body.membership_start, "membership start"),
     membershipDue: requiredDate(body.membershipDue ?? body.membership_due, "membership due"),
     feesAmount: requiredNumber(body.feesAmount ?? body.fees_amount, "fees amount", 0),
+    planType: body.planType ?? body.plan_type ? assertEnum(body.planType ?? body.plan_type, PLAN_TYPES, "plan type") : undefined,
   };
   assertDueDateOrder(input.membershipStart, input.membershipDue);
   return input;

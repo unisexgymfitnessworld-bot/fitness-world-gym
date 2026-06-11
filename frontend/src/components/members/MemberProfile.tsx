@@ -3,11 +3,12 @@ import { motion } from "motion/react";
 import { useMemo, useState, type FormEvent } from "react";
 import { buildAttendanceInsights, buildProgressPoints, summarizeRenewalHistory } from "../../lib/memberInsights";
 import { calculateDueDate, createWhatsAppLink, formatCurrency, formatDisplayDate, formatPhone, getMemberActionDueDate, getMemberDueKind, todayISO, isPlanLessThanOneMonth, calculateNextRenewalStart } from "../../lib/utils";
-import { paymentMethodOptions, type AttendanceEntry, type Member, type PaymentMethod, type PaymentReceipt, type PaymentReceiptInput, type RenewalHistoryEntry } from "../../types";
+import { paymentMethodOptions, type AttendanceEntry, type Member, type PaymentMethod, type PaymentReceipt, type PaymentReceiptInput, type RenewalHistoryEntry, type PlanType } from "../../types";
 import { AttendanceTable } from "../attendance/AttendanceTable";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
+import { RenewModal } from "./RenewModal";
 
 interface MemberProfileProps {
   member: Member;
@@ -15,7 +16,7 @@ interface MemberProfileProps {
   onBack: () => void;
   onEdit: (memberId: string) => void;
   onSms: (memberId: string) => void;
-  onRenew: (memberId: string, start: string, due: string, feesAmount: number) => void;
+  onRenew: (memberId: string, start: string, due: string, feesAmount: number, planType: PlanType) => Promise<void>;
   onAddVisit: (memberId: string, visitDate: string, weightKg?: number) => void;
   paymentReceipts: PaymentReceipt[];
   renewalHistory: RenewalHistoryEntry[];
@@ -23,6 +24,7 @@ interface MemberProfileProps {
 }
 
 export function MemberProfile({ member, attendance, paymentReceipts, renewalHistory, onBack, onEdit, onSms, onRenew, onAddVisit, onAddPaymentReceipt }: MemberProfileProps) {
+  const [isRenewOpen, setIsRenewOpen] = useState(false);
   const nextStart = calculateNextRenewalStart(member);
   const nextDue = calculateDueDate(nextStart, member.planType === "Custom" ? "1 Month" : member.planType);
   const actionDueDate = getMemberActionDueDate(member);
@@ -66,7 +68,7 @@ export function MemberProfile({ member, attendance, paymentReceipts, renewalHist
               </a>
             </>
           )}
-          <Button onClick={() => onRenew(member.id, nextStart, nextDue, member.feesAmount)}>
+          <Button onClick={() => setIsRenewOpen(true)}>
             <RefreshCcw size={18} />
             Renew
           </Button>
@@ -198,6 +200,13 @@ export function MemberProfile({ member, attendance, paymentReceipts, renewalHist
         <AttendanceTable memberId={member.id} attendance={attendance} onAddVisit={onAddVisit} />
       </motion.div>
       </div>
+
+      <RenewModal
+        open={isRenewOpen}
+        member={member}
+        onClose={() => setIsRenewOpen(false)}
+        onConfirm={onRenew}
+      />
     </main>
   );
 }

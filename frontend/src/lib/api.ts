@@ -103,10 +103,10 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(input),
     }),
-  renewMember: (id: string, membershipStart: string, membershipDue: string, feesAmount: number) =>
+  renewMember: (id: string, membershipStart: string, membershipDue: string, feesAmount: number, planType?: string) =>
     request<Member>(`/members/${id}/renew`, {
       method: "PATCH",
-      body: JSON.stringify({ membershipStart, membershipDue, feesAmount }),
+      body: JSON.stringify({ membershipStart, membershipDue, feesAmount, planType }),
     }),
   paymentReceipts: (memberId: string) => request<PaymentReceipt[]>(`/members/${memberId}/payments`),
   allPaymentReceipts: () => request<PaymentReceipt[]>("/members/payments/all"),

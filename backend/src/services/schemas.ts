@@ -71,6 +71,7 @@ export const renewSchema = z.object({
   membershipStart: isoDate,
   membershipDue: isoDate,
   feesAmount: z.coerce.number().min(0),
+  planType: z.enum(["1 Month", "3 Months", "6 Months", "1 Year", "Custom"]).optional(),
 }).superRefine((value, ctx) => {
   if (value.membershipDue < value.membershipStart) {
     ctx.addIssue({

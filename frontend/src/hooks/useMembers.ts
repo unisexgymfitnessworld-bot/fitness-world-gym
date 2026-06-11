@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, isApiConfigured } from "../lib/api";
 import { sampleAttendance, sampleMembers, samplePaymentReceipts, sampleRenewalHistory } from "../lib/sampleData";
 import { daysUntil, getMemberActionDueDate, getMembershipStatus, toMember, isPlanLessThanOneMonth } from "../lib/utils";
-import type { AttendanceEntry, DashboardStats, Member, MemberInput, PaymentReceipt, PaymentReceiptInput, PaymentStatus, RenewalHistoryEntry } from "../types";
+import type { AttendanceEntry, DashboardStats, Member, MemberInput, PaymentReceipt, PaymentReceiptInput, PaymentStatus, RenewalHistoryEntry, PlanType } from "../types";
 
 interface MembersState {
   members: Member[];
@@ -14,7 +14,7 @@ interface MembersState {
   upsertMember: (input: MemberInput, memberId?: string) => Promise<Member>;
   upsertMembers: (inputs: MemberInput[]) => Promise<Member[]>;
   suspendMember: (memberId: string) => Promise<void>;
-  renewMember: (memberId: string, start: string, due: string, feesAmount: number) => Promise<void>;
+  renewMember: (memberId: string, start: string, due: string, feesAmount: number, planType?: PlanType) => Promise<void>;
   addVisit: (memberId: string, visitDate: string, weightKg?: number) => Promise<void>;
   addPaymentReceipt: (memberId: string, input: PaymentReceiptInput) => Promise<PaymentReceipt>;
   markSmsSent: (memberId: string) => Promise<void>;
@@ -170,9 +170,9 @@ export function useMembers(): MembersState {
     );
   }
 
-  async function renewMember(memberId: string, start: string, due: string, feesAmount: number): Promise<void> {
+  async function renewMember(memberId: string, start: string, due: string, feesAmount: number, planType?: PlanType): Promise<void> {
     if (isApiConfigured) {
-      const renewed = await api.renewMember(memberId, start, due, feesAmount);
+      const renewed = await api.renewMember(memberId, start, due, feesAmount, planType);
       setMembers((current) => current.map((member) => (member.id === memberId ? renewed : member)));
       try {
         const updatedHistory = await api.renewalHistory(memberId);
@@ -192,7 +192,7 @@ export function useMembers(): MembersState {
       id: crypto.randomUUID(),
       memberId,
       oldPlanType: oldMember.planType,
-      newPlanType: oldMember.planType,
+      newPlanType: planType ?? oldMember.planType,
       oldStartDate: oldMember.membershipStart,
       oldDueDate: oldMember.membershipDue,
       newStartDate: start,
@@ -208,6 +208,7 @@ export function useMembers(): MembersState {
         member.id === memberId
           ? {
               ...member,
+              planType: planType ?? member.planType,
               membershipStart: start,
               membershipDue: due,
               feesAmount,

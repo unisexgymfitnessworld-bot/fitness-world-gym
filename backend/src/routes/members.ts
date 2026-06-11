@@ -6,7 +6,7 @@ import { createMember, getMember, listMembers, renewMember, suspendMember, updat
 import { createPaymentReceipt, listPaymentReceipts, listAllPaymentReceipts } from "../services/paymentService.js";
 import { listRenewalHistory, listAllRenewalHistory } from "../services/renewalService.js";
 import { memberInputSchema, paymentReceiptSchema, paymentSchema, renewSchema } from "../services/schemas.js";
-import type { AuthenticatedRequest, PaymentReceiptInput, PaymentStatus } from "../types/index.js";
+import type { AuthenticatedRequest, PaymentReceiptInput, PaymentStatus, PlanType } from "../types/index.js";
 
 export const membersRouter = Router();
 
@@ -122,8 +122,8 @@ membersRouter.patch("/:id/payment", validateBody(paymentSchema), async (req, res
 
 membersRouter.patch("/:id/renew", validateBody(renewSchema), async (req, res, next) => {
   try {
-    const body = req.body as { membershipStart: string; membershipDue: string; feesAmount: number };
-    res.json({ success: true, data: await renewMember(memberIdParam(req), body.membershipStart, body.membershipDue, body.feesAmount) });
+    const body = req.body as { membershipStart: string; membershipDue: string; feesAmount: number; planType?: PlanType };
+    res.json({ success: true, data: await renewMember(memberIdParam(req), body.membershipStart, body.membershipDue, body.feesAmount, body.planType) });
   } catch (error) {
     next(error);
   }

@@ -1,7 +1,7 @@
 import { addMonths, format, parseISO } from "date-fns";
 import { HttpError } from "../lib/httpError.js";
 import { getSupabaseAdmin } from "../lib/supabase.js";
-import type { DbMember, Member, MemberInput, PaymentStatus } from "../types/index.js";
+import type { DbMember, Member, MemberInput, PaymentStatus, PlanType } from "../types/index.js";
 import { mapMember, memberInputToDb } from "./mappers.js";
 import { memberOwnerUserId, recordRenewalHistory } from "./renewalService.js";
 
@@ -146,13 +146,15 @@ export async function updatePayment(memberId: string, paymentStatus: PaymentStat
   return mapMember(data as DbMember);
 }
 
-export async function renewMember(memberId: string, membershipStart: string, membershipDue: string, feesAmount: number): Promise<Member> {
+export async function renewMember(memberId: string, membershipStart: string, membershipDue: string, feesAmount: number, planType?: PlanType): Promise<Member> {
   const { data: currentRow, error: currentError } = await getSupabaseAdmin().from("members").select("*").eq("id", memberId).single();
   if (currentError || !currentRow) {
     throw new HttpError(404, "MEMBER_NOT_FOUND", "Member not found");
   }
 
   const currentMember = mapMember(currentRow as DbMember);
+  const newPlan = planType ?? currentMember.planType;
+
   await recordRenewalHistory({
     oldMember: currentMember,
     newStartDate: membershipStart,
@@ -160,6 +162,7 @@ export async function renewMember(memberId: string, membershipStart: string, mem
     amount: feesAmount,
     paymentStatus: "Paid",
     ownerUserId: memberOwnerUserId(currentRow as DbMember),
+    newPlanType: newPlan,
   });
 
   const { data, error } = await getSupabaseAdmin()
@@ -168,6 +171,7 @@ export async function renewMember(memberId: string, membershipStart: string, mem
       membership_start: membershipStart,
       membership_due: membershipDue,
       fees_amount: feesAmount,
+      plan_type: newPlan,
       payment_status: "Paid",
       partial_paid_amount: feesAmount,
       balance_amount: 0,
