@@ -393,6 +393,103 @@ function PaymentReceiptPanel({
     }
   }
 
+  function handlePrintReceipt(receipt: { receiptNo: string; paidOn: string; amount: number; method: string; note: string }) {
+    const receiptHtml = `<!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Receipt_${receipt.receiptNo}</title>
+          <style>
+            @page { size: 80mm auto; margin: 0; }
+            body {
+              font-family: 'Courier New', Courier, monospace;
+              width: 74mm;
+              margin: 0 auto;
+              padding: 10px 5px;
+              color: #000000;
+              background: #ffffff;
+              font-size: 12px;
+              line-height: 1.4;
+            }
+            .text-center { text-align: center; }
+            .header h2 { margin: 5px 0 2px 0; font-size: 16px; font-weight: bold; }
+            .header p { margin: 0; font-size: 10px; color: #555; }
+            .divider { border-top: 1px dashed #000; margin: 10px 0; }
+            table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+            td { padding: 4px 0; vertical-align: top; }
+            .label { font-weight: bold; width: 45%; }
+            .value { text-align: right; }
+            .amount-box {
+              border: 1px solid #000;
+              padding: 8px;
+              text-align: center;
+              font-size: 16px;
+              font-weight: bold;
+              margin: 15px 0;
+            }
+            .footer { font-size: 10px; margin-top: 15px; }
+          </style>
+        </head>
+        <body>
+          <div class="header text-center">
+            <h2>FITNESS WORLD</h2>
+            <p>Unisex Gym & Fitness Center</p>
+            <p>M.G.R Nagar, Chennai</p>
+          </div>
+          <div class="divider"></div>
+          <div class="text-center" style="font-weight: bold; font-size: 13px; margin: 5px 0;">PAYMENT RECEIPT</div>
+          <table>
+            <tr>
+              <td class="label">Receipt No:</td>
+              <td class="value">${receipt.receiptNo}</td>
+            </tr>
+            <tr>
+              <td class="label">Date:</td>
+              <td class="value">${new Date(receipt.paidOn).toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" })}</td>
+            </tr>
+            <tr>
+              <td class="label">Member ID:</td>
+              <td class="value">${member.regNo}</td>
+            </tr>
+            <tr>
+              <td class="label">Name:</td>
+              <td class="value">${member.name}</td>
+            </tr>
+            <tr>
+              <td class="label">Method:</td>
+              <td class="value">${receipt.method}</td>
+            </tr>
+          </table>
+          <div class="divider"></div>
+          <div class="amount-box">
+            PAID: ₹${receipt.amount}
+          </div>
+          ${receipt.note ? `
+            <div style="font-size: 11px; margin: 10px 0;">
+              <strong>Note:</strong> ${receipt.note}
+            </div>
+          ` : ''}
+          <div class="divider"></div>
+          <div class="footer text-center">
+            <p>Thank you for training with us!</p>
+            <p>Please keep this receipt for your reference.</p>
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+              window.close();
+            }
+          </script>
+        </body>
+      </html>`;
+
+    const printWindow = window.open("", "_blank");
+    if (printWindow) {
+      printWindow.document.write(receiptHtml);
+      printWindow.document.close();
+    }
+  }
+
   return (
     <section className="studio-card grid gap-4 rounded-[var(--radius-card)] p-4 lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-6 lg:p-6">
       <div className="grid gap-4">
@@ -500,6 +597,7 @@ function PaymentReceiptPanel({
                 amount={receipt.amount}
                 method={receipt.method}
                 note={receipt.note || "No note"}
+                onPrint={() => handlePrintReceipt(receipt)}
               />
             ))
           ) : recordedOpeningAmount <= 0 ? (
@@ -523,7 +621,21 @@ function PaymentMetric({ label, value, tone = "neutral" }: { label: string; valu
   );
 }
 
-function ReceiptRow({ title, date, amount, method, note }: { title: string; date: string; amount: number; method: string; note: string }) {
+function ReceiptRow({
+  title,
+  date,
+  amount,
+  method,
+  note,
+  onPrint,
+}: {
+  title: string;
+  date: string;
+  amount: number;
+  method: string;
+  note: string;
+  onPrint?: () => void;
+}) {
   return (
     <div className="grid gap-2 rounded-[var(--radius-card)] border border-border-default bg-surface-raised px-3 py-2.5">
       <div className="flex items-start justify-between gap-3">
@@ -531,7 +643,19 @@ function ReceiptRow({ title, date, amount, method, note }: { title: string; date
           <p className="truncate font-mono text-[12px] font-black text-text-primary">{title}</p>
           <p className="mt-0.5 text-[12px] font-bold text-text-muted">{date} · {method}</p>
         </div>
-        <strong className="shrink-0 text-[15px] text-status-active">{formatCurrency(amount)}</strong>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <strong className="text-[15px] text-status-active">{formatCurrency(amount)}</strong>
+          {onPrint && (
+            <button
+              type="button"
+              className="focus-ring flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-brand-white text-slate-600 hover:text-brand-primary hover:border-brand-primary/40 transition print:hidden"
+              onClick={onPrint}
+              title="Print/Download receipt slip"
+            >
+              <Printer size={12} />
+            </button>
+          )}
+        </div>
       </div>
       <p className="line-clamp-2 text-[12px] font-semibold leading-5 text-text-secondary">{note}</p>
     </div>

@@ -178,10 +178,14 @@ export function useMembers(): MembersState {
       const renewed = await api.renewMember(memberId, start, due, feesAmount, planType);
       setMembers((current) => current.map((member) => (member.id === memberId ? renewed : member)));
       try {
-        const updatedHistory = await api.renewalHistory(memberId);
-        setRenewalHistory((current) => [...updatedHistory, ...current.filter((entry) => entry.memberId !== memberId)]);
+        const [updatedHistory, updatedReceipts] = await Promise.all([
+          api.allRenewalHistory(),
+          api.allPaymentReceipts(),
+        ]);
+        setRenewalHistory(updatedHistory);
+        setPaymentReceipts(updatedReceipts);
       } catch (error) {
-        console.warn("Unable to refresh renewal history", error);
+        console.warn("Unable to refresh renewal history and receipts", error);
       }
       return;
     }
@@ -206,6 +210,17 @@ export function useMembers(): MembersState {
       createdAt: new Date().toISOString(),
     };
 
+    const receiptEntry: PaymentReceipt = {
+      id: crypto.randomUUID(),
+      memberId,
+      receiptNo: generateLocalReceiptNo(),
+      paidOn: start,
+      amount: feesAmount,
+      method: "Cash",
+      note: `Membership Renewal: ${planType ?? oldMember.planType} plan (${start} to ${due})`,
+      createdAt: new Date().toISOString(),
+    };
+
     setMembers((current) =>
       current.map((member) =>
         member.id === memberId
@@ -226,6 +241,7 @@ export function useMembers(): MembersState {
       ),
     );
     setRenewalHistory((current) => [renewalEntry, ...current]);
+    setPaymentReceipts((current) => [receiptEntry, ...current]);
   }
 
   async function addVisit(memberId: string, visitDate: string, weightKg?: number): Promise<void> {

@@ -817,6 +817,7 @@ async function createPaymentReceipt(env, user, memberId, input) {
 async function renewMember(env, user, memberId, membershipStart, membershipDue, feesAmount, planType) {
   const member = await getMember(env, user, memberId);
   const newPlan = planType ?? member.planType;
+  
   await supabaseJson(env, "/renewal_history?select=*", {
     method: "POST",
     headers: { Prefer: "return=representation" },
@@ -832,6 +833,22 @@ async function renewMember(env, user, memberId, membershipStart, membershipDue, 
       amount: feesAmount,
       payment_status: "Paid",
       renewed_on: isoDateInTimeZone(),
+    }),
+  });
+
+  // Automatically create a payment receipt for the renewal
+  const receiptNo = generateReceiptNo(new Date(membershipStart));
+  await supabaseJson(env, "/payment_receipts?select=*", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({
+      member_id: memberId,
+      owner_user_id: user.id,
+      receipt_no: receiptNo,
+      paid_on: membershipStart,
+      amount: feesAmount,
+      method: "Cash",
+      note: `Membership Renewal: ${newPlan} plan (${membershipStart} to ${membershipDue})`,
     }),
   });
 

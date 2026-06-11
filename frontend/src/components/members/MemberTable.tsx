@@ -220,7 +220,7 @@ export function MemberTable({
           const tone = getDueTone(member);
           const isShortTerm = isPlanLessThanOneMonth(member);
           return (
-            <div className="flex flex-col gap-0.5">
+            <div className="flex flex-col gap-1 justify-center">
               {isShortTerm ? (
                 <span className="font-semibold text-text-muted">N/A</span>
               ) : (
@@ -228,7 +228,7 @@ export function MemberTable({
                   <span className={tone === "expired" ? "font-bold text-status-expired" : tone === "due" ? "font-bold text-status-due" : "font-semibold text-status-active"}>
                     {formatDisplayDate(info.getValue())}
                   </span>
-                  <span className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-text-muted leading-none">
                     {getMemberDueKind(member)}
                   </span>
                 </>
@@ -244,12 +244,12 @@ export function MemberTable({
           const member = info.row.original;
           const tone = status === "Paid" ? "paid" : status === "Partially Paid" ? "due" : "pending";
           return (
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-1.5 items-start justify-center">
               <Badge tone={tone}>
                 {status}
               </Badge>
               {status === "Partially Paid" && member.balanceAmount > 0 && (
-                <span className="text-[11px] font-bold text-status-due">
+                <span className="text-[11px] font-black text-status-due leading-none pl-1">
                   Due: ₹{member.balanceAmount}
                 </span>
               )}
