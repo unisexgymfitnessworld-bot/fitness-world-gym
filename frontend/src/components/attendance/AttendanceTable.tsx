@@ -24,7 +24,7 @@ export function AttendanceTable({ memberId, attendance, onAddVisit }: Attendance
 
   return (
     <section className="grid gap-3 lg:gap-4">
-      <div className="studio-card grid gap-2 rounded-[var(--radius-card)] p-3 md:grid-cols-[1fr_1fr_auto] lg:gap-3 lg:p-4">
+      <div className="studio-card grid gap-2 rounded-[var(--radius-card)] p-3 md:grid-cols-[1fr_1fr_auto] lg:gap-3 lg:p-4 print:hidden">
         <Input label="Visit Date" className="studio-input" type="date" value={visitDate} onChange={(event) => setVisitDate(event.target.value)} />
         <Input label="Weight kg" className="studio-input" type="number" step="0.01" value={weight} onChange={(event) => setWeight(event.target.value)} />
         <Button className="self-end" onClick={submitVisit}>

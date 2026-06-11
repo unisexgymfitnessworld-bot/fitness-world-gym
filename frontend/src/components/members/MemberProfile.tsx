@@ -1,4 +1,4 @@
-import { ArrowLeft, Banknote, CalendarCheck, MessageCircle, MessageSquare, Pencil, ReceiptText, RefreshCcw, Scale, TrendingUp } from "lucide-react";
+import { ArrowLeft, Banknote, CalendarCheck, MessageCircle, MessageSquare, Pencil, ReceiptText, RefreshCcw, Scale, TrendingUp, Printer } from "lucide-react";
 import { motion } from "motion/react";
 import { useMemo, useState, type FormEvent } from "react";
 import { buildAttendanceInsights, buildProgressPoints, summarizeRenewalHistory } from "../../lib/memberInsights";
@@ -37,7 +37,7 @@ export function MemberProfile({ member, attendance, paymentReceipts, renewalHist
     <main className="studio-shell animated-grid relative min-h-screen overflow-hidden">
       <div className="relative mx-auto grid max-w-[1440px] gap-4 px-4 pb-10 pt-4 lg:gap-6 lg:px-8 lg:pt-6">
       <motion.div
-        className="flex flex-wrap items-center justify-between gap-3"
+        className="flex flex-wrap items-center justify-between gap-3 print:hidden"
         initial={{ opacity: 0, y: -12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
@@ -47,6 +47,10 @@ export function MemberProfile({ member, attendance, paymentReceipts, renewalHist
           Back
         </Button>
         <div className="scrollbar-hide flex flex-nowrap gap-2 overflow-x-auto">
+          <Button variant="secondary" onClick={() => window.print()}>
+            <Printer size={18} />
+            <span className="hidden sm:inline">Print / PDF</span>
+          </Button>
           <Button variant="secondary" onClick={() => onEdit(member.id)}>
             <Pencil size={18} />
             <span className="hidden sm:inline">Edit</span>
@@ -411,7 +415,7 @@ function PaymentReceiptPanel({
           <PaymentMetric label="Balance" value={formatCurrency(balanceAmount)} tone={balanceAmount > 0 ? "amber" : "green"} />
         </div>
 
-        <form className="grid gap-3 rounded-[var(--radius-card)] border border-border-default bg-surface-raised p-3 lg:p-4" onSubmit={submitReceipt}>
+        <form className="grid gap-3 rounded-[var(--radius-card)] border border-border-default bg-surface-raised p-3 lg:p-4 print:hidden" onSubmit={submitReceipt}>
           <div className="flex items-center justify-between gap-3">
             <p className="flex items-center gap-2 text-[13px] font-black uppercase tracking-wider text-text-primary">
               <Banknote size={16} className="text-brand-primary" />

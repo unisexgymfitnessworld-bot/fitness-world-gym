@@ -544,3 +544,46 @@ img {
   height: 2px;
   background: linear-gradient(90deg, #E8175D, #F0447D, rgba(232, 23, 93, 0.1));
 }
+
+/* ─── Print Styles ─── */
+@media print {
+  body, html {
+    background: white !important;
+    color: black !important;
+  }
+  .studio-shell {
+    background: white !important;
+    padding: 0 !important;
+    min-height: auto !important;
+  }
+  .studio-shell::before {
+    display: none !important;
+  }
+  .studio-dark {
+    background: white !important;
+    color: #0f172a !important;
+    border: 1px solid #e2e8f0 !important;
+  }
+  .studio-card {
+    background: white !important;
+    color: #0f172a !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: none !important;
+  }
+  .text-brand-white,
+  .text-text-primary,
+  .text-text-secondary,
+  .text-text-muted,
+  .text-white\/60,
+  .text-white\/70,
+  .text-white\/80 {
+    color: #0f172a !important;
+  }
+  .border-white\/10 {
+    border-color: #e2e8f0 !important;
+  }
+  .bg-white\/10 {
+    background-color: #f8fafc !important;
+    border-color: #e2e8f0 !important;
+  }
+}
