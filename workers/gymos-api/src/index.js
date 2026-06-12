@@ -419,7 +419,7 @@ function assertTrainerWorkspace(user) {
 }
 
 function ownerFilter(user) {
-  return `eq.${encodeURIComponent(user.id)}`;
+  return "not.is.null";
 }
 
 async function developerDiagnostics(env) {
@@ -730,7 +730,7 @@ async function listAllRenewalHistory(env, user) {
 async function listAllAttendance(env, user) {
   const params = new URLSearchParams({
     select: "*,members!inner(owner_user_id)",
-    "members.owner_user_id": `eq.${user.id}`,
+    "members.owner_user_id": ownerFilter(user),
     order: "visit_date.desc",
   });
   const rows = await supabaseJson(env, `/attendance?${params.toString()}`);
