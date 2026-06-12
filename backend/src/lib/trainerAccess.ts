@@ -5,7 +5,8 @@ import { HttpError } from "./httpError.js";
 const defaultTrainerEmails = [
   "digimartrix26@gmail.com",
   "vijayfitnessworld@gmail.com",
-  "jaiga9655@gmail.com"
+  "jaiga9655@gmail.com",
+  "vedasaradhiv@gmail.com"
 ];
 
 function normalizeEmail(email: string | undefined | null): string {

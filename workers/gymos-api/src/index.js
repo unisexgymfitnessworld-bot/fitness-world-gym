@@ -13,7 +13,8 @@ const TRAINING_TYPES = new Set(["Personal", "General", "Couple"]);
 const DEFAULT_TRAINER_EMAILS = [
   "digimartrix26@gmail.com",
   "vijayfitnessworld@gmail.com",
-  "jaiga9655@gmail.com"
+  "jaiga9655@gmail.com",
+  "vedasaradhiv@gmail.com"
 ];
 const rateLimitStore = new Map();
 const logBuffer = [];
