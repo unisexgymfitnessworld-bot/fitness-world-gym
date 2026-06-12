@@ -11,8 +11,6 @@ const PAYMENT_METHODS = new Set(["Cash", "UPI", "Card", "Bank Transfer", "Other"
 const STATUS_VALUES = new Set(["Active", "Expired", "Suspended"]);
 const TRAINING_TYPES = new Set(["Personal", "General", "Couple"]);
 const DEFAULT_TRAINER_EMAILS = [
-  "fitnessworld@gmail.com",
-  "trainer@fitnessworld.in",
   "digimartrix26@gmail.com",
   "vijayfitnessworld@gmail.com",
   "jaiga9655@gmail.com"

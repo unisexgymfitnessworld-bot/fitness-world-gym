@@ -3,9 +3,7 @@ import { env } from "./env.js";
 import { HttpError } from "./httpError.js";
 
 const defaultTrainerEmails = [
-  "vedasaradhiv@gmail.com",
-  "fitnessworld@gmail.com",
-  "trainer@fitnessworld.in",
+  "digimartrix26@gmail.com",
   "vijayfitnessworld@gmail.com",
   "jaiga9655@gmail.com"
 ];
