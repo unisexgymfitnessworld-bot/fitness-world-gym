@@ -65,6 +65,7 @@ export const accountCreateSchema = z.object({
 });
 
 export const accountUpdateSchema = z.object({
+  email: z.string().trim().email("Enter a valid account email"),
   name: requiredText,
   role: z.enum(["developer", "trainer"]),
   password: z.string().min(12, "Use at least 12 characters").optional().or(z.literal("")),

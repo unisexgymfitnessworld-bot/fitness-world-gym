@@ -2,7 +2,13 @@ import type { User } from "@supabase/supabase-js";
 import { env } from "./env.js";
 import { HttpError } from "./httpError.js";
 
-const defaultTrainerEmails = ["vedasaradhiv@gmail.com", "fitnessworld@gmail.com", "trainer@fitnessworld.in"];
+const defaultTrainerEmails = [
+  "vedasaradhiv@gmail.com",
+  "fitnessworld@gmail.com",
+  "trainer@fitnessworld.in",
+  "vijayfitnessworld@gmail.com",
+  "jaiga9655@gmail.com"
+];
 
 function normalizeEmail(email: string | undefined | null): string {
   return typeof email === "string" ? email.trim().toLowerCase() : "";

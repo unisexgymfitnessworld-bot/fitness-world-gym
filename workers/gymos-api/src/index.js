@@ -10,7 +10,13 @@ const PAYMENT_STATUSES = new Set(["Paid", "Pending", "Partially Paid"]);
 const PAYMENT_METHODS = new Set(["Cash", "UPI", "Card", "Bank Transfer", "Other"]);
 const STATUS_VALUES = new Set(["Active", "Expired", "Suspended"]);
 const TRAINING_TYPES = new Set(["Personal", "General", "Couple"]);
-const DEFAULT_TRAINER_EMAILS = ["fitnessworld@gmail.com", "trainer@fitnessworld.in", "digimartrix26@gmail.com"];
+const DEFAULT_TRAINER_EMAILS = [
+  "fitnessworld@gmail.com",
+  "trainer@fitnessworld.in",
+  "digimartrix26@gmail.com",
+  "vijayfitnessworld@gmail.com",
+  "jaiga9655@gmail.com"
+];
 const rateLimitStore = new Map();
 const logBuffer = [];
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -531,6 +537,9 @@ async function updateTrainerAccount(env, accountId, body, currentUser) {
     app_metadata: { role: input.role },
     user_metadata: { name: input.name },
   };
+  if (input.email) {
+    update.email = input.email;
+  }
   if (input.password) {
     update.password = input.password;
   }

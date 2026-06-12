@@ -32,7 +32,7 @@ export function DeveloperDashboard() {
   const [dbSleepStatus, setDbSleepStatus] = useState<string>("unknown");
   const [deleteAccount, setDeleteAccount] = useState<TrainerAccount | null>(null);
   const [createForm, setCreateForm] = useState<{ email: string; name: string; role: AccountRole; password: string }>({ email: "", name: "", role: "trainer", password: "" });
-  const [editForms, setEditForms] = useState<Record<string, { name: string; role: AccountRole; password: string }>>({});
+  const [editForms, setEditForms] = useState<Record<string, { email: string; name: string; role: AccountRole; password: string }>>({});
 
   const statusItems = useMemo(() => {
     if (!diagnostics) return [];
@@ -68,6 +68,7 @@ export function DeveloperDashboard() {
           nextAccounts.map((account) => [
             account.id,
             {
+              email: account.email,
               name: account.name,
               role: account.role,
               password: "",
@@ -168,7 +169,7 @@ export function DeveloperDashboard() {
   }
 
   async function saveAccount(account: TrainerAccount): Promise<void> {
-    const form = editForms[account.id];
+    const form = editForms[account.id] ?? { email: account.email, name: account.name, role: account.role, password: "" };
     const parsed = accountUpdateSchema.safeParse(form);
     if (!parsed.success) {
       pushToast({ title: "Account check failed", message: parsed.error.issues[0]?.message ?? "Check account details.", tone: "error" });
@@ -177,11 +178,12 @@ export function DeveloperDashboard() {
     try {
       const password = parsed.data.password || undefined;
       await api.updateTrainerAccount(account.id, {
+        email: parsed.data.email,
         name: parsed.data.name,
         role: parsed.data.role,
         password,
       });
-      pushToast({ title: "Account saved", message: account.email, tone: "success" });
+      pushToast({ title: "Account saved", message: parsed.data.email, tone: "success" });
       await loadDeveloperData();
     } catch (error) {
       pushToast({ title: "Save failed", message: error instanceof Error ? error.message : "Unable to save account.", tone: "error" });
@@ -405,7 +407,7 @@ export function DeveloperDashboard() {
               </div>
               <div className="mt-5 grid gap-4 max-h-[600px] overflow-y-auto scrollbar-soft pr-1">
                 {accounts.map((account) => {
-                  const form = editForms[account.id] ?? { name: account.name, role: account.role, password: "" };
+                  const form = editForms[account.id] ?? { email: account.email, name: account.name, role: account.role, password: "" };
                   return (
                     <div
                       key={account.id}
@@ -434,7 +436,13 @@ export function DeveloperDashboard() {
                         </span>
                       </div>
 
-                      <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_140px_minmax(0,1fr)_auto_auto] lg:items-end">
+                      <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_120px_minmax(0,1fr)_auto_auto] lg:items-end">
+                        <Input
+                          label="Email"
+                          variant="dark"
+                          value={form.email}
+                          onChange={(e) => setEditForms((f) => ({ ...f, [account.id]: { ...form, email: e.target.value } }))}
+                        />
                         <Input
                           label="Name"
                           variant="dark"
