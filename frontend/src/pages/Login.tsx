@@ -421,14 +421,44 @@ function AppInstallPanel({ canInstall, installStatus, isIos, isStandalone, onIns
           <Download size={18} className="text-brand-primary" />
           Install GymOS
         </button>
+      ) : isIos ? (
+        <div className="rounded-[var(--radius-card)] border border-brand-primary/20 bg-surface-raised/40 p-4 shadow-sm">
+          <div className="flex items-center gap-2 text-[14px] font-extrabold text-brand-primary">
+            <Smartphone size={18} />
+            Install on iPhone / iPad
+          </div>
+          <p className="mt-1.5 text-[12px] font-semibold leading-5 text-text-secondary">
+            Apple iOS requires you to add web apps manually to your home screen:
+          </p>
+          <div className="mt-3.5 space-y-3">
+            <div className="flex items-start gap-3 text-[13px]">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-primary/10 text-[11px] font-bold text-brand-primary">1</span>
+              <p className="font-semibold text-text-primary leading-5">
+                Tap the <span className="inline-flex items-center gap-1 rounded bg-brand-primary/5 px-1.5 py-0.5 font-bold text-brand-primary">Share <Share2 size={13} /></span> button in Safari (at the bottom or top of your screen).
+              </p>
+            </div>
+            <div className="flex items-start gap-3 text-[13px]">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-primary/10 text-[11px] font-bold text-brand-primary">2</span>
+              <p className="font-semibold text-text-primary leading-5">
+                Scroll down the menu list and tap <span className="font-bold text-brand-primary">Add to Home Screen</span>.
+              </p>
+            </div>
+            <div className="flex items-start gap-3 text-[13px]">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-primary/10 text-[11px] font-bold text-brand-primary">3</span>
+              <p className="font-semibold text-text-primary leading-5">
+                Tap <span className="font-bold text-brand-primary">Add</span> in the top-right corner to finish.
+              </p>
+            </div>
+          </div>
+        </div>
       ) : (
         <div className="rounded-[var(--radius-card)] border border-border-default bg-surface-raised px-4 py-3">
           <div className="flex items-center gap-2.5 text-[14px] font-bold text-text-primary">
-            {isIos ? <Share2 size={18} className="text-brand-primary" /> : <Smartphone size={18} className="text-brand-primary" />}
-            {isIos ? "Add GymOS from Safari Share" : "Install GymOS from browser menu"}
+            <Smartphone size={18} className="text-brand-primary" />
+            Install GymOS from browser menu
           </div>
           <p className="mt-1 text-[12px] font-semibold leading-5 text-text-muted">
-            {isIos ? "Choose Add to Home Screen to open it like a tablet app." : "After deploy, supported browsers show the install option automatically."}
+            After deploy, supported browsers show the install option automatically.
           </p>
         </div>
       )}

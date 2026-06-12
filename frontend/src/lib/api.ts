@@ -60,7 +60,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
-  updateTrainerAccount: (id: string, input: { name: string; role: "developer" | "trainer"; password?: string }) =>
+  updateTrainerAccount: (id: string, input: { email?: string; name: string; role: "developer" | "trainer"; password?: string }) =>
     request<TrainerAccount>(`/developer/accounts/${id}`, {
       method: "PATCH",
       body: JSON.stringify(input),
