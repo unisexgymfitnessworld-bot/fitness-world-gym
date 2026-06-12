@@ -434,7 +434,7 @@ export function MemberSheet({ open, member, onClose, onSave }: MemberSheetProps)
                   type="file"
                   ref={cameraInputRef}
                   accept="image/*"
-                  capture="user"
+                  capture="environment"
                   className="hidden"
                   onChange={handleImageFile}
                 />
