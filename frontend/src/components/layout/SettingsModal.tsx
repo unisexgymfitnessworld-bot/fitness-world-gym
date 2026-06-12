@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Camera, HelpCircle, Key, Loader2, LockKeyhole, Save, ShieldCheck, User } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Camera, HelpCircle, Key, Loader2, LockKeyhole, Save, ShieldCheck, Upload, User } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
@@ -8,6 +8,7 @@ import { friendlyAuthError } from "../../lib/authMessages";
 import { supabase, isSupabaseConfigured } from "../../lib/supabase";
 import { initials } from "../../lib/utils";
 import { passwordChangeSchema } from "../../lib/validations";
+import { compressImage } from "../../lib/imageCompression";
 import type { Trainer } from "../../types";
 
 interface SettingsModalProps {
@@ -27,6 +28,26 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      try {
+        const compressed = await compressImage(file);
+        setAvatar(compressed);
+      } catch (err) {
+        console.error("Image compression failed:", err);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setAvatar(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+  };
 
   // Sync state with prop updates
   useEffect(() => {
@@ -164,35 +185,60 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
 
           <div className="flex flex-col sm:flex-row items-center gap-4">
             {/* Avatar Uploader */}
-            <div className="relative group flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border-default bg-brand-white shadow-sm ring-2 ring-brand-primary/20">
+            <div 
+              className="relative group flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border-default bg-brand-white shadow-sm ring-2 ring-brand-primary/20 cursor-pointer"
+              onClick={() => fileInputRef.current?.click()}
+            >
               {avatar ? (
                 <img src={avatar} alt="Profile preview" className="h-full w-full object-cover" />
               ) : (
                 <span className="text-[18px] font-black text-text-muted">{initials(name || trainer.name)}</span>
               )}
-              <label className="absolute inset-0 flex cursor-pointer flex-col items-center justify-center bg-black/60 opacity-0 transition-opacity group-hover:opacity-100">
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 opacity-0 transition-opacity group-hover:opacity-100">
                 <Camera size={18} className="text-white mb-0.5" />
                 <span className="text-[10px] font-bold text-white uppercase">Upload</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      const reader = new FileReader();
-                      reader.onloadend = () => {
-                        setAvatar(reader.result as string);
-                      };
-                      reader.readAsDataURL(file);
-                    }
-                  }}
-                />
-              </label>
+              </div>
             </div>
 
-            <div className="grid gap-1 w-full text-center sm:text-left">
+            {/* Hidden inputs for gallery selection and direct camera capture */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/*"
+              className="hidden"
+              onChange={handleImageFile}
+            />
+            <input
+              type="file"
+              ref={cameraInputRef}
+              accept="image/*"
+              capture="user"
+              className="hidden"
+              onChange={handleImageFile}
+            />
+
+            <div className="grid gap-2 w-full text-center sm:text-left">
               <span className="block text-[13px] text-text-muted font-bold tracking-wide">{trainer.email}</span>
+              
+              <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border-default bg-brand-white text-[11px] font-bold text-text-primary hover:bg-surface-raised shadow-sm transition-all cursor-pointer"
+                >
+                  <Upload size={12} className="text-text-secondary" />
+                  Upload Photo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => cameraInputRef.current?.click()}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border-default bg-brand-white text-[11px] font-bold text-text-primary hover:bg-surface-raised shadow-sm transition-all cursor-pointer"
+                >
+                  <Camera size={12} className="text-brand-primary" />
+                  Take Live Photo
+                </button>
+              </div>
+
               {avatar && (
                 <button
                   type="button"

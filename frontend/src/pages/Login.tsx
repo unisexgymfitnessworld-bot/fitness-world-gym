@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowRight, CalendarClock, CheckCircle2, Download, Loader2, MessageCircle, Search, Share2, ShieldCheck, Smartphone } from "lucide-react";
+import { ArrowRight, CalendarClock, CheckCircle2, Download, Eye, EyeOff, Loader2, MessageCircle, Search, Share2, ShieldCheck, Smartphone } from "lucide-react";
 import { motion } from "motion/react";
 import { FwMark } from "../components/layout/FwMark";
 import { friendlyAuthError } from "../lib/authMessages";
@@ -25,10 +25,13 @@ export function Login() {
   const [mode, setMode] = useState<"signin" | "forgot" | "verify_reset">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [code, setCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
   const [resetNotice, setResetNotice] = useState<string | null>(null);
@@ -235,24 +238,44 @@ export function Login() {
 
                 <label className="grid gap-1.5 lg:gap-2">
                   <span className="text-[12px] font-bold uppercase tracking-wider text-text-muted">New Password</span>
-                  <input
-                    className="studio-input min-h-12 rounded-[var(--radius-card)] px-4 text-[16px] font-semibold lg:min-h-14"
-                    type="password"
-                    value={newPassword}
-                    onChange={(event) => setNewPassword(event.target.value)}
-                    placeholder="At least 12 characters"
-                  />
+                  <div className="relative w-full">
+                    <input
+                      className="studio-input min-h-12 w-full rounded-[var(--radius-card)] pl-4 pr-10 text-[16px] font-semibold lg:min-h-14"
+                      type={showNewPassword ? "text" : "password"}
+                      value={newPassword}
+                      onChange={(event) => setNewPassword(event.target.value)}
+                      placeholder="At least 12 characters"
+                    />
+                    <button
+                      type="button"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center p-1 rounded-full text-text-muted hover:text-text-primary hover:bg-black/5 transition-colors focus:outline-none"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      aria-label={showNewPassword ? "Hide password" : "Show password"}
+                    >
+                      {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                 </label>
 
                 <label className="grid gap-1.5 lg:gap-2">
                   <span className="text-[12px] font-bold uppercase tracking-wider text-text-muted">Confirm Password</span>
-                  <input
-                    className="studio-input min-h-12 rounded-[var(--radius-card)] px-4 text-[16px] font-semibold lg:min-h-14"
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(event) => setConfirmPassword(event.target.value)}
-                    placeholder="Re-enter new password"
-                  />
+                  <div className="relative w-full">
+                    <input
+                      className="studio-input min-h-12 w-full rounded-[var(--radius-card)] pl-4 pr-10 text-[16px] font-semibold lg:min-h-14"
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={confirmPassword}
+                      onChange={(event) => setConfirmPassword(event.target.value)}
+                      placeholder="Re-enter new password"
+                    />
+                    <button
+                      type="button"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center p-1 rounded-full text-text-muted hover:text-text-primary hover:bg-black/5 transition-colors focus:outline-none"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                    >
+                      {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                 </label>
               </>
             ) : null}
@@ -260,14 +283,24 @@ export function Login() {
             {mode === "signin" ? (
               <label className="grid gap-1.5 lg:gap-2">
                 <span className="text-[12px] font-bold uppercase tracking-wider text-text-muted">Password</span>
-                <input
-                  className="studio-input min-h-12 rounded-[var(--radius-card)] px-4 text-[16px] font-semibold lg:min-h-14"
-                  type="password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  autoComplete="current-password"
-                  placeholder="Enter password"
-                />
+                <div className="relative w-full">
+                  <input
+                    className="studio-input min-h-12 w-full rounded-[var(--radius-card)] pl-4 pr-10 text-[16px] font-semibold lg:min-h-14"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    autoComplete="current-password"
+                    placeholder="Enter password"
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center p-1 rounded-full text-text-muted hover:text-text-primary hover:bg-black/5 transition-colors focus:outline-none"
+                    onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
               </label>
             ) : null}
 

@@ -1,6 +1,7 @@
-import { AlertTriangle, Save, X } from "lucide-react";
+import { AlertTriangle, Camera, Save, Upload, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
+import { compressImage } from "../../lib/imageCompression";
 import { useForm } from "react-hook-form";
 import { splitAmountForCouple } from "../../lib/analytics";
 import { calculateBmi, calculateDueDate, createPlanDueSummary, formatDisplayDate, getPlanDurationLabel, normalizePhone, todayISO } from "../../lib/utils";
@@ -243,6 +244,26 @@ function Section({ title, children, delay = 0 }: { title: string; children: Reac
 
 export function MemberSheet({ open, member, onClose, onSave }: MemberSheetProps) {
   const [showCloseWarning, setShowCloseWarning] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      try {
+        const compressed = await compressImage(file);
+        setValue("avatar", compressed, { shouldDirty: true });
+      } catch (err) {
+        console.error("Image compression failed:", err);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setValue("avatar", reader.result as string, { shouldDirty: true });
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+  };
+
   const initialValues = useMemo(() => defaults(member), [member]);
   const {
     register,
@@ -387,36 +408,64 @@ export function MemberSheet({ open, member, onClose, onSave }: MemberSheetProps)
 
             <form className="scrollbar-soft flex-1 overflow-y-auto pb-28" onSubmit={handleSubmit(submit)}>
               <div className="flex flex-col items-center justify-center border-b border-border-default bg-surface-raised py-6">
-                <div className="relative group flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border border-border-default bg-brand-white shadow-sm ring-4 ring-brand-primary-light">
+                <div 
+                  className="relative group flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border border-border-default bg-brand-white shadow-sm ring-4 ring-brand-primary-light cursor-pointer"
+                  onClick={() => fileInputRef.current?.click()}
+                >
                   {watch("avatar") ? (
                     <img src={watch("avatar")} alt="Profile preview" className="h-full w-full object-cover" />
                   ) : (
                     <span className="text-[20px] font-black text-text-muted">{watch("name") ? watch("name").slice(0, 2).toUpperCase() : "FW"}</span>
                   )}
-                  <label className="absolute inset-0 flex cursor-pointer flex-col items-center justify-center bg-black/60 opacity-0 transition-opacity group-hover:opacity-100">
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 opacity-0 transition-opacity group-hover:opacity-100">
                     <span className="text-[12px] font-bold text-white uppercase">Upload</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onloadend = () => {
-                            setValue("avatar", reader.result as string, { shouldDirty: true });
-                          };
-                          reader.readAsDataURL(file);
-                        }
-                      }}
-                    />
-                  </label>
+                  </div>
                 </div>
+
+                {/* Hidden File Inputs */}
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleImageFile}
+                />
+                <input
+                  type="file"
+                  ref={cameraInputRef}
+                  accept="image/*"
+                  capture="user"
+                  className="hidden"
+                  onChange={handleImageFile}
+                />
+
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-default bg-brand-white text-[12px] font-bold text-text-primary hover:bg-surface-raised shadow-sm transition-all cursor-pointer"
+                  >
+                    <Upload size={13} className="text-text-secondary" />
+                    Upload Photo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => cameraInputRef.current?.click()}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-default bg-brand-white text-[12px] font-bold text-text-primary hover:bg-surface-raised shadow-sm transition-all cursor-pointer"
+                  >
+                    <Camera size={13} className="text-brand-primary" />
+                    Take Live Photo
+                  </button>
+                </div>
+
                 {watch("avatar") && (
                   <button
                     type="button"
-                    className="mt-2 text-[12px] font-bold text-status-expired hover:underline"
-                    onClick={() => setValue("avatar", "", { shouldDirty: true })}
+                    className="mt-2 text-[12px] font-bold text-status-expired hover:underline cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setValue("avatar", "", { shouldDirty: true });
+                    }}
                   >
                     Remove Photo
                   </button>
