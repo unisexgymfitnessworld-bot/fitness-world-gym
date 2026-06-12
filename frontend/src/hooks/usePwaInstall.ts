@@ -12,6 +12,7 @@ interface PwaInstallState {
   canInstall: boolean;
   isStandalone: boolean;
   isIos: boolean;
+  isMacSafari: boolean;
   install: () => Promise<boolean>;
 }
 
@@ -26,15 +27,22 @@ function detectIos(): boolean {
   return /iphone|ipad|ipod/.test(userAgent) || (platform === "macintel" && navigator.maxTouchPoints > 1);
 }
 
+function detectMacSafari(): boolean {
+  const ua = navigator.userAgent.toLowerCase();
+  return /macintosh/.test(ua) && /safari/.test(ua) && !/chrome/.test(ua) && !/chromium/.test(ua) && !/iphone|ipad|ipod/.test(ua);
+}
+
 export function usePwaInstall(): PwaInstallState {
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [canInstall, setCanInstall] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
   const [isIos, setIsIos] = useState(false);
+  const [isMacSafari, setIsMacSafari] = useState(false);
 
   useEffect(() => {
     setIsStandalone(detectStandalone());
     setIsIos(detectIos());
+    setIsMacSafari(detectMacSafari());
 
     function handleBeforeInstallPrompt(event: Event): void {
       event.preventDefault();
@@ -74,5 +82,5 @@ export function usePwaInstall(): PwaInstallState {
     return choice.outcome === "accepted";
   }, [installPrompt]);
 
-  return { canInstall, isStandalone, isIos, install };
+  return { canInstall, isStandalone, isIos, isMacSafari, install };
 }

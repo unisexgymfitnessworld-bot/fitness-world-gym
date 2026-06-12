@@ -21,7 +21,7 @@ const itemVariants = {
 
 export function Login() {
   const { signIn, sendPasswordReset, verifyRecoveryCode, clearError, loading, error } = useAuth();
-  const { canInstall, install, isIos, isStandalone } = usePwaInstall();
+  const { canInstall, install, isIos, isMacSafari, isStandalone } = usePwaInstall();
   const [mode, setMode] = useState<"signin" | "forgot" | "verify_reset">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -381,6 +381,7 @@ export function Login() {
               canInstall={canInstall}
               installStatus={installStatus}
               isIos={isIos}
+              isMacSafari={isMacSafari}
               isStandalone={isStandalone}
               onInstall={() => void installApp()}
             />
@@ -395,11 +396,12 @@ interface AppInstallPanelProps {
   canInstall: boolean;
   installStatus: "idle" | "installed" | "dismissed";
   isIos: boolean;
+  isMacSafari: boolean;
   isStandalone: boolean;
   onInstall: () => void;
 }
 
-function AppInstallPanel({ canInstall, installStatus, isIos, isStandalone, onInstall }: AppInstallPanelProps) {
+function AppInstallPanel({ canInstall, installStatus, isIos, isMacSafari, isStandalone, onInstall }: AppInstallPanelProps) {
   if (isStandalone || installStatus === "installed") {
     return (
       <div className="mt-2 flex items-center gap-3 rounded-[var(--radius-card)] border border-green-100 bg-green-50 px-4 py-3 text-[13px] font-bold text-status-active">
@@ -447,6 +449,36 @@ function AppInstallPanel({ canInstall, installStatus, isIos, isStandalone, onIns
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-primary/10 text-[11px] font-bold text-brand-primary">3</span>
               <p className="font-semibold text-text-primary leading-5">
                 Tap <span className="font-bold text-brand-primary">Add</span> in the top-right corner to finish.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : isMacSafari ? (
+        <div className="rounded-[var(--radius-card)] border border-brand-primary/20 bg-surface-raised/40 p-4 shadow-sm">
+          <div className="flex items-center gap-2 text-[14px] font-extrabold text-brand-primary">
+            <Smartphone size={18} />
+            Install on Mac (Safari)
+          </div>
+          <p className="mt-1.5 text-[12px] font-semibold leading-5 text-text-secondary">
+            To install GymOS as a standalone desktop app on macOS Safari:
+          </p>
+          <div className="mt-3.5 space-y-3">
+            <div className="flex items-start gap-3 text-[13px]">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-primary/10 text-[11px] font-bold text-brand-primary">1</span>
+              <p className="font-semibold text-text-primary leading-5">
+                Click the <span className="inline-flex items-center gap-1 rounded bg-brand-primary/5 px-1.5 py-0.5 font-bold text-brand-primary">Share <Share2 size={13} /></span> button in the top-right corner of Safari.
+              </p>
+            </div>
+            <div className="flex items-start gap-3 text-[13px]">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-primary/10 text-[11px] font-bold text-brand-primary">2</span>
+              <p className="font-semibold text-text-primary leading-5">
+                Select <span className="font-bold text-brand-primary">Add to Dock</span> from the list.
+              </p>
+            </div>
+            <div className="flex items-start gap-3 text-[13px]">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-primary/10 text-[11px] font-bold text-brand-primary">3</span>
+              <p className="font-semibold text-text-primary leading-5">
+                Click <span className="font-bold text-brand-primary">Add</span> to place the GymOS desktop app directly in your Dock!
               </p>
             </div>
           </div>
