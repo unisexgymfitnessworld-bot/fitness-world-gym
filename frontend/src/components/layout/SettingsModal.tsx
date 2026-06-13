@@ -472,7 +472,8 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
                   
                   <Button
                     type="button"
-                    className="h-8 text-[11px] font-black bg-status-expired text-white hover:bg-status-expired/90 cursor-pointer"
+                    variant="danger"
+                    className="h-8 text-[11px] font-black cursor-pointer"
                     onClick={handleResetGateway}
                     disabled={loadingGateway || resettingGateway}
                   >

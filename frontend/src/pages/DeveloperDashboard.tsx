@@ -426,6 +426,7 @@ export function DeveloperDashboard() {
               <Button
                 onClick={() => void runSmsReminderFix()}
                 disabled={smsSending}
+                variant="secondary"
                 className="bg-white/5 border border-white/10 text-green-400 hover:bg-white/10 hover:border-white/20 shadow-sm font-bold flex items-center gap-2"
               >
                 {smsSending ? <Loader2 size={17} className="animate-spin" /> : <MessageCircle size={17} />}
@@ -435,6 +436,7 @@ export function DeveloperDashboard() {
               <Button
                 onClick={() => void handlePingDb()}
                 disabled={pinging}
+                variant="secondary"
                 className="bg-white/5 border border-white/10 text-[#38BDF8] hover:bg-white/10 hover:border-white/20 shadow-sm font-bold flex items-center gap-2"
               >
                 {pinging ? <Loader2 size={17} className="animate-spin" /> : <RefreshCw size={17} />}
@@ -715,6 +717,7 @@ export function DeveloperDashboard() {
                 <Button
                   onClick={() => void handleSendTestNotification()}
                   disabled={testingNotification}
+                  variant="secondary"
                   className="w-full bg-gradient-to-r from-[#38BDF8] to-[#0369A1] text-black font-bold shadow-[0_12px_32px_rgba(56,189,248,0.2)]"
                 >
                   {testingNotification ? <Loader2 size={17} className="animate-spin" /> : <Save size={17} />}
@@ -850,7 +853,8 @@ export function DeveloperDashboard() {
                         
                         <Button
                           type="button"
-                          className="h-8 text-[11px] font-bold bg-red-600 hover:bg-red-700 text-white"
+                          variant="danger"
+                          className="h-8 text-[11px] font-bold"
                           onClick={handleResetGateway}
                           disabled={loadingGateway || resettingGateway}
                         >
