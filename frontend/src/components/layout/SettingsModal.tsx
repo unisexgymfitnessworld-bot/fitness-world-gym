@@ -41,7 +41,7 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
   const [loadingGateway, setLoadingGateway] = useState<boolean>(false);
   const [resettingGateway, setResettingGateway] = useState<boolean>(false);
   const [iframeKey, setIframeKey] = useState<number>(0);
-  const [qrZoom, setQrZoom] = useState<number>(0.85);
+  const [qrZoom, setQrZoom] = useState<number>(0.6);
 
   async function fetchGatewayStatus() {
     setLoadingGateway(true);
@@ -502,7 +502,6 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
                       <button
                         type="button"
                         onClick={() => {
-                          setQrZoom(1.0);
                           setIsQrExpanded(true);
                         }}
                         className="absolute top-2.5 right-2.5 p-2 rounded-lg bg-black/75 hover:bg-black/90 text-white transition-all shadow-md hover:scale-105 cursor-pointer z-10 border border-white/10"
@@ -512,48 +511,7 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
                       </button>
                     </div>
 
-                    <div className="flex flex-col items-center gap-1.5 mb-3 w-full max-w-[280px]">
-                      <div className="flex items-center justify-between w-full text-[11px] font-bold text-text-secondary">
-                        <span>Adjust QR Size:</span>
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => setQrZoom(prev => Math.max(0.5, Number((prev - 0.05).toFixed(2))))}
-                            className="w-5 h-5 flex items-center justify-center rounded border border-border-default bg-brand-white hover:bg-surface-raised active:bg-border-default transition-all font-black cursor-pointer text-text-primary"
-                            title="Zoom Out"
-                          >
-                            －
-                          </button>
-                          <span className="min-w-[28px] text-center font-extrabold text-text-primary text-[10px]">
-                            {Math.round(qrZoom * 100)}%
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setQrZoom(prev => Math.min(1.5, Number((prev + 0.05).toFixed(2))))}
-                            className="w-5 h-5 flex items-center justify-center rounded border border-border-default bg-brand-white hover:bg-surface-raised active:bg-border-default transition-all font-black cursor-pointer text-text-primary"
-                            title="Zoom In"
-                          >
-                            ＋
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setQrZoom(0.85)}
-                            className="px-1.5 py-0.5 rounded border border-border-default bg-brand-white hover:bg-surface-raised active:bg-border-default text-[9px] font-bold text-text-muted hover:text-text-primary transition-all ml-1 cursor-pointer"
-                          >
-                            Reset
-                          </button>
-                        </div>
-                      </div>
-                      <input
-                        type="range"
-                        min="0.5"
-                        max="1.5"
-                        step="0.05"
-                        value={qrZoom}
-                        onChange={(e) => setQrZoom(Number(e.target.value))}
-                        className="w-full h-1 bg-border-default rounded-lg appearance-none cursor-pointer accent-brand-primary"
-                      />
-                    </div>
+                    {/* Size is locked at 60% default */}
                   </div>
                 )}
 
@@ -602,7 +560,6 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
                           variant="secondary"
                           className="h-8 text-[11px] font-black cursor-pointer bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100"
                           onClick={() => {
-                            setQrZoom(1.0);
                             setIsQrExpanded(true);
                           }}
                         >
@@ -719,46 +676,7 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
               />
             </div>
 
-            <div className="flex flex-col items-center gap-2 mb-5 w-full max-w-[320px]">
-              <div className="flex items-center justify-between w-full text-[12px] font-bold text-white/60">
-                <span>Adjust Code Size:</span>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setQrZoom(prev => Math.max(0.5, Number((prev - 0.05).toFixed(2))))}
-                    className="w-6 h-6 flex items-center justify-center rounded border border-white/15 bg-white/5 hover:bg-white/10 transition-all font-black text-white cursor-pointer"
-                  >
-                    －
-                  </button>
-                  <span className="min-w-[32px] text-center font-mono font-extrabold text-white text-[11px]">
-                    {Math.round(qrZoom * 100)}%
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setQrZoom(prev => Math.min(1.5, Number((prev + 0.05).toFixed(2))))}
-                    className="w-6 h-6 flex items-center justify-center rounded border border-white/15 bg-white/5 hover:bg-white/10 transition-all font-black text-white cursor-pointer"
-                  >
-                    ＋
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setQrZoom(1.0)}
-                    className="px-2 py-0.5 rounded border border-white/15 bg-white/5 hover:bg-white/10 text-[10px] font-bold text-white/50 transition-all cursor-pointer"
-                  >
-                    Reset
-                  </button>
-                </div>
-              </div>
-              <input
-                type="range"
-                min="0.5"
-                max="1.5"
-                step="0.05"
-                value={qrZoom}
-                onChange={(e) => setQrZoom(Number(e.target.value))}
-                className="w-full h-1.5 bg-white/15 rounded-lg appearance-none cursor-pointer accent-brand-primary"
-              />
-            </div>
+            {/* Size is locked at 60% default */}
 
             <div className="flex flex-col gap-3.5 w-full">
               <div className="flex items-center justify-between border-t border-b border-white/5 py-2.5 px-1">

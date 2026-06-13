@@ -67,7 +67,7 @@ export function DeveloperDashboard() {
   const [loadingGateway, setLoadingGateway] = useState<boolean>(false);
   const [resettingGateway, setResettingGateway] = useState<boolean>(false);
   const [iframeKey, setIframeKey] = useState<number>(0);
-  const [qrZoom, setQrZoom] = useState<number>(0.8);
+  const [qrZoom, setQrZoom] = useState<number>(0.6);
   const [isQrExpanded, setIsQrExpanded] = useState<boolean>(false);
 
   async function fetchGatewayStatus() {
@@ -836,7 +836,6 @@ export function DeveloperDashboard() {
                           <button
                             type="button"
                             onClick={() => {
-                              setQrZoom(1.0);
                               setIsQrExpanded(true);
                             }}
                             className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/80 hover:bg-black/95 text-white/90 hover:text-white transition-all shadow-md hover:scale-105 cursor-pointer z-10 border border-white/10"
@@ -845,48 +844,7 @@ export function DeveloperDashboard() {
                             <Maximize2 size={13} />
                           </button>
                         </div>
-                        <div className="flex flex-col items-center gap-1.5 mb-3 w-full max-w-[200px]">
-                          <div className="flex items-center justify-between w-full text-[10px] font-bold text-white/60">
-                            <span>Zoom:</span>
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                onClick={() => setQrZoom(prev => Math.max(0.4, Number((prev - 0.05).toFixed(2))))}
-                                className="w-4 h-4 flex items-center justify-center rounded border border-white/10 bg-white/5 hover:bg-white/10 active:bg-white/20 transition-all font-black text-white cursor-pointer"
-                                title="Zoom Out"
-                              >
-                                －
-                              </button>
-                              <span className="min-w-[24px] text-center font-extrabold text-white">
-                                {Math.round(qrZoom * 100)}%
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => setQrZoom(prev => Math.min(1.2, Number((prev + 0.05).toFixed(2))))}
-                                className="w-4 h-4 flex items-center justify-center rounded border border-white/10 bg-white/5 hover:bg-white/10 active:bg-white/20 transition-all font-black text-white cursor-pointer"
-                                title="Zoom In"
-                              >
-                                ＋
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setQrZoom(0.8)}
-                                className="px-1 py-0.5 rounded border border-white/10 bg-white/5 hover:bg-white/10 active:bg-white/20 text-[8px] font-bold text-white/40 hover:text-white transition-all ml-0.5 cursor-pointer"
-                              >
-                                Reset
-                              </button>
-                            </div>
-                          </div>
-                          <input
-                            type="range"
-                            min="0.4"
-                            max="1.2"
-                            step="0.05"
-                            value={qrZoom}
-                            onChange={(e) => setQrZoom(Number(e.target.value))}
-                            className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                          />
-                        </div>
+                        {/* Size is locked at 60% default */}
                       </div>
                     )}
 
@@ -923,7 +881,6 @@ export function DeveloperDashboard() {
                               variant="secondary"
                               className="h-8 text-[11px] font-bold bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500/20"
                               onClick={() => {
-                                setQrZoom(1.0);
                                 setIsQrExpanded(true);
                               }}
                             >
@@ -1206,46 +1163,7 @@ export function DeveloperDashboard() {
               />
             </div>
 
-            <div className="flex flex-col items-center gap-2 mb-5 w-full max-w-[320px]">
-              <div className="flex items-center justify-between w-full text-[12px] font-bold text-white/60">
-                <span>Adjust Code Size:</span>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setQrZoom(prev => Math.max(0.4, Number((prev - 0.05).toFixed(2))))}
-                    className="w-6 h-6 flex items-center justify-center rounded border border-white/15 bg-white/5 hover:bg-white/10 transition-all font-black text-white cursor-pointer"
-                  >
-                    －
-                  </button>
-                  <span className="min-w-[32px] text-center font-mono font-extrabold text-white text-[11px]">
-                    {Math.round(qrZoom * 100)}%
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setQrZoom(prev => Math.min(1.5, Number((prev + 0.05).toFixed(2))))}
-                    className="w-6 h-6 flex items-center justify-center rounded border border-white/15 bg-white/5 hover:bg-white/10 transition-all font-black text-white cursor-pointer"
-                  >
-                    ＋
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setQrZoom(1.0)}
-                    className="px-2 py-0.5 rounded border border-white/15 bg-white/5 hover:bg-white/10 text-[10px] font-bold text-white/50 transition-all cursor-pointer"
-                  >
-                    Reset
-                  </button>
-                </div>
-              </div>
-              <input
-                type="range"
-                min="0.4"
-                max="1.5"
-                step="0.05"
-                value={qrZoom}
-                onChange={(e) => setQrZoom(Number(e.target.value))}
-                className="w-full h-1.5 bg-white/15 rounded-lg appearance-none cursor-pointer accent-blue-500"
-              />
-            </div>
+            {/* Size is locked at 60% default */}
 
             <div className="flex flex-col gap-3.5 w-full">
               <div className="flex items-center justify-between border-t border-b border-white/5 py-2.5 px-1">
