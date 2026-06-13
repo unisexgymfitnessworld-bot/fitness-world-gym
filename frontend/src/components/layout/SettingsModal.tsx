@@ -433,7 +433,7 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
           ) : (
             <div className="grid gap-4 items-center justify-center text-center">
               {gatewayUrl && (
-                <div className="relative border border-border-default/80 rounded-xl overflow-hidden bg-white shadow-sm mx-auto" style={{ width: '280px', height: '320px' }}>
+                <div className="relative border border-border-default/80 rounded-xl overflow-hidden bg-white shadow-sm mx-auto" style={{ width: '300px', height: '350px' }}>
                   <iframe
                     key={iframeKey}
                     src={gatewayUrl}
