@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { Camera, HelpCircle, Key, Loader2, LockKeyhole, Save, ShieldCheck, Upload, User, Maximize2, Minimize2, MessageCircle, Settings } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
@@ -254,7 +255,8 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
   return (
     <Modal open={open} title="Fitness World Settings" onClose={onClose}>
       {/* Premium Tabbed Navigation */}
-      <div className="flex border-b border-border-default/60 mb-5 pb-0">
+      <div className="sticky top-0 bg-brand-white z-20 flex border-b border-border-default/60 mb-5 pb-0 pt-1">
+
         <button
           type="button"
           onClick={() => setActiveTab("profile")}
@@ -465,23 +467,22 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
               Connect your gym's WhatsApp to dispatch automated reminders. Scan the QR code below using WhatsApp on your mobile phone.
             </p>
 
-            {gatewayStatus === "unavailable" ? (
-              <div className="rounded-lg border border-red-200 bg-red-50/50 p-4 text-center text-status-expired text-[12px] font-bold flex flex-col items-center gap-2">
-                <span>WhatsApp service is currently offline. Please refresh or contact support if the issue persists.</span>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="h-8 text-[11px] font-black cursor-pointer bg-white border border-red-200 text-status-expired hover:bg-red-50 mt-1"
-                  onClick={() => void fetchGatewayStatus()}
-                  disabled={loadingGateway}
-                >
-                  {loadingGateway ? <Loader2 size={12} className="animate-spin mr-1.5 inline-block" /> : null}
-                  Retry / Refresh Status
-                </Button>
-              </div>
-            ) : (
-              <div className="grid gap-4 items-center justify-center text-center">
-                {gatewayUrl && (
+            <div className="grid gap-4 items-center justify-center text-center">
+              {gatewayStatus === "unavailable" && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3.5 text-center text-amber-700 text-[12px] font-bold flex flex-col items-center gap-1.5 max-w-[320px] mx-auto shadow-sm">
+                  <span>Warning: Cloud status check failed. If your gateway is running locally, it may still function.</span>
+                  <button
+                    type="button"
+                    className="text-[10px] font-black text-brand-primary underline hover:opacity-80 cursor-pointer"
+                    onClick={() => void fetchGatewayStatus()}
+                    disabled={loadingGateway}
+                  >
+                    {loadingGateway ? "Rechecking..." : "Recheck Status"}
+                  </button>
+                </div>
+              )}
+
+              {gatewayUrl && (
                   <div className="flex flex-col items-center">
                     <div className="relative border border-border-default/80 rounded-xl overflow-hidden bg-white shadow-sm mx-auto mb-2" style={{ width: '300px', height: '320px' }}>
                       <iframe
@@ -631,7 +632,6 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
                   </div>
                 </div>
               </div>
-            )}
           </section>
         )}
 
@@ -684,7 +684,7 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
       </div>
 
       {/* Premium Full-Screen QR Lightbox Overlay */}
-      {isQrExpanded && gatewayUrl && (
+      {isQrExpanded && gatewayUrl && createPortal(
         <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 p-4 backdrop-blur-md animate-fade-in">
           <div className="relative w-full max-w-lg rounded-2xl border border-white/10 bg-[#090A16] p-6 text-white shadow-2xl flex flex-col items-center">
             
@@ -795,7 +795,8 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </Modal>
   );

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { AlertTriangle, CheckCircle2, Loader2, Save, ShieldCheck, Trash2, UserPlus, Wrench, Terminal, Cpu, Database, RefreshCw, MessageCircle, Maximize2, Minimize2 } from "lucide-react";
 import { motion } from "motion/react";
 import { SettingsModal } from "../components/layout/SettingsModal";
@@ -1170,7 +1171,7 @@ export function DeveloperDashboard() {
       />
 
       {/* Full-Screen QR Lightbox Overlay */}
-      {isQrExpanded && gatewayUrl && (
+      {isQrExpanded && gatewayUrl && createPortal(
         <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 p-4 backdrop-blur-md animate-fade-in">
           <div className="relative w-full max-w-lg rounded-2xl border border-white/10 bg-[#090A16] p-6 text-white shadow-2xl flex flex-col items-center">
             
@@ -1281,7 +1282,8 @@ export function DeveloperDashboard() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       <Toast toast={toast} />
