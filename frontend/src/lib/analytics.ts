@@ -80,13 +80,14 @@ export function summarizePeriod(label: string, members: Member[]): PeriodAnalyti
 }
 
 export function getMembersForAnalyticsRange(members: Member[], range: AnalyticsRange, now = new Date()): Member[] {
+  const nonDeleted = members.filter((member) => member.status !== "Deleted");
   if (range === "all") {
-    return members;
+    return nonDeleted;
   }
 
   const currentMonthEnd = endOfMonth(now);
   const periodStart = range === "1m" ? startOfMonth(now) : startOfMonth(subMonths(now, 1));
-  return members.filter((member) => memberTouchesPeriod(member, periodStart, currentMonthEnd));
+  return nonDeleted.filter((member) => memberTouchesPeriod(member, periodStart, currentMonthEnd));
 }
 
 export function summarizeAnalyticsRange(members: Member[], range: AnalyticsRange, now = new Date()): PeriodAnalytics {
@@ -95,16 +96,17 @@ export function summarizeAnalyticsRange(members: Member[], range: AnalyticsRange
 }
 
 export function summarizeMemberAnalytics(members: Member[], now = new Date()): DashboardAnalytics {
+  const nonDeleted = members.filter((member) => member.status !== "Deleted");
   const currentMonthStart = startOfMonth(now);
   const currentMonthEnd = endOfMonth(now);
   const lastTwoMonthsStart = startOfMonth(subMonths(now, 1));
 
-  const thisMonthMembers = members.filter((member) => memberTouchesPeriod(member, currentMonthStart, currentMonthEnd));
-  const lastTwoMonthsMembers = members.filter((member) => memberTouchesPeriod(member, lastTwoMonthsStart, currentMonthEnd));
+  const thisMonthMembers = nonDeleted.filter((member) => memberTouchesPeriod(member, currentMonthStart, currentMonthEnd));
+  const lastTwoMonthsMembers = nonDeleted.filter((member) => memberTouchesPeriod(member, lastTwoMonthsStart, currentMonthEnd));
 
   return {
     thisMonth: summarizePeriod("This Month", thisMonthMembers),
     lastTwoMonths: summarizePeriod("Last 2 Months", lastTwoMonthsMembers),
-    allTime: summarizePeriod("All Time", members),
+    allTime: summarizePeriod("All Time", nonDeleted),
   };
 }
