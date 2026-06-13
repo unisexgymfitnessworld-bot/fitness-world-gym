@@ -116,7 +116,7 @@ function SessionSplash({ slow }: { slow?: boolean }) {
             {slow ? (
               <p className="text-[13px] font-semibold text-amber-400 animate-pulse flex items-center justify-center gap-1.5">
                 <Loader2 className="animate-spin" size={13} />
-                Server waking up from sleep — please wait...
+                Optimizing secure connection — please hold on...
               </p>
             ) : (
               <p className="text-[13px] font-semibold text-white/50">

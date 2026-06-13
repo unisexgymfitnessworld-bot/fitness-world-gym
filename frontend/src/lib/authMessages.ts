@@ -31,12 +31,12 @@ export function friendlyAuthError(error: unknown): string {
     lower.includes("load failed") ||
     lower.includes("fetch failed")
   ) {
-    return "The server is waking up from sleep — this can take 15–20 seconds. Please wait and try again.";
+    return "Connecting to secure trainer portal — please wait a moment and try again.";
   }
 
   // Timeout errors
   if (lower.includes("timeout") || lower.includes("timed out") || lower.includes("econnreset")) {
-    return "Request timed out while the server was waking up. Please try again in a moment.";
+    return "Connecting to secure trainer portal — please wait a moment and try again.";
   }
 
   if (lower.includes("api base url")) {

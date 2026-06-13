@@ -48,8 +48,8 @@ export function Login() {
       void submitVerifyReset();
       return;
     }
-    // Show "waking up" hint after 5s if sign-in is slow (Supabase cold start)
-    const slowTimer = window.setTimeout(() => setSlowSignIn(true), 5000);
+    // Show connection warning hint after 8s if sign-in is slow (Supabase cold start)
+    const slowTimer = window.setTimeout(() => setSlowSignIn(true), 8000);
     void signIn({ email, password }).finally(() => {
       window.clearTimeout(slowTimer);
       setSlowSignIn(false);
@@ -372,7 +372,7 @@ export function Login() {
                 initial={{ opacity: 0, y: -8 }}
                 animate={{ opacity: 1, y: 0 }}
               >
-                ⏳ Server is waking up from sleep — this is normal and takes 15–20 seconds. Please hold on...
+                ⏳ Optimizing secure connection — please hold on, this might take a moment...
               </motion.p>
             )}
 
