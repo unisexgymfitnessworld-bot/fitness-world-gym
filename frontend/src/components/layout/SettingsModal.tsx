@@ -248,7 +248,7 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
   }
 
   return (
-    <Modal open={open} title="GymOS Settings" onClose={onClose}>
+    <Modal open={open} title="Fitness World Settings" onClose={onClose}>
       <div className="grid gap-6 py-2 text-text-primary">
         {/* Profile Edit Panel */}
         <section className="rounded-xl bg-surface-raised/80 p-5 border border-border-default/60 grid gap-4 hover:border-brand-primary/20 transition-all duration-300 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">

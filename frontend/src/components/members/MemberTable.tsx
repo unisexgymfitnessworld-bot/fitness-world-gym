@@ -432,7 +432,7 @@ export function MemberTable({
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-primary-light text-brand-primary shadow-[0_12px_24px_rgba(232,23,93,0.12)]">
               <Plus size={28} className="animate-pulse" />
             </div>
-            <h2 className="mt-6 text-[22px] font-black text-text-primary sm:text-[24px]">Welcome to GymOS!</h2>
+            <h2 className="mt-6 text-[22px] font-black text-text-primary sm:text-[24px]">Welcome to Fitness World!</h2>
             <p className="mt-2.5 max-w-md text-[14px] font-semibold text-text-secondary leading-relaxed sm:text-[15px]">
               Start by registering your first member to track their plans, body metrics, BMI, and daily attendance.
             </p>
