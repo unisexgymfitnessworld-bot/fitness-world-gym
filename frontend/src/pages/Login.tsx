@@ -130,7 +130,7 @@ export function Login() {
             <motion.div className="flex flex-wrap items-center justify-between gap-4" variants={itemVariants}>
               <FwMark />
               <div className="rounded-full border border-white/[0.14] bg-white/[0.08] px-3 py-1.5 text-[12px] font-bold uppercase tracking-wider text-white/70">
-                GymOS
+                Unisex Gym
               </div>
             </motion.div>
 

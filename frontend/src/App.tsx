@@ -1,6 +1,7 @@
 import type { User } from "@supabase/supabase-js";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { motion } from "motion/react";
 import { ErrorBoundary } from "./components/layout/ErrorBoundary";
 import { api, isApiConfigured } from "./lib/api";
 import { isSupabaseConfigured, supabase } from "./lib/supabase";
@@ -37,20 +38,92 @@ function trainerFromUser(user: User): Trainer {
 
 function SessionSplash({ slow }: { slow?: boolean }) {
   return (
-    <main className="grid min-h-screen place-items-center bg-surface-base px-4 text-center">
-      <div className="flex flex-col items-center gap-4">
-        <div className="grid h-14 w-14 place-items-center rounded-full bg-brand-primary-light text-brand-primary">
-          <Loader2 className="animate-spin" size={26} />
+    <main className="grid min-h-screen place-items-center bg-[#080A16] px-4 text-center relative overflow-hidden">
+      {/* Background radial glow */}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(219,39,119,0.12)_0%,transparent_65%)] pointer-events-none" />
+      
+      <div className="flex flex-col items-center gap-6 relative z-10">
+        {/* Glowing Animated Logo Container */}
+        <div className="relative flex items-center justify-center">
+          {/* Ripple Ring 1 */}
+          <motion.div
+            className="absolute h-24 w-24 rounded-full border border-pink-500/20 bg-pink-500/5"
+            animate={{
+              scale: [1, 2],
+              opacity: [0.6, 0],
+            }}
+            transition={{
+              duration: 2,
+              repeat: Infinity,
+              ease: "easeOut",
+            }}
+          />
+          {/* Ripple Ring 2 */}
+          <motion.div
+            className="absolute h-24 w-24 rounded-full border border-pink-500/10 bg-pink-500/2"
+            animate={{
+              scale: [1, 2.5],
+              opacity: [0.4, 0],
+            }}
+            transition={{
+              duration: 2,
+              delay: 0.7,
+              repeat: Infinity,
+              ease: "easeOut",
+            }}
+          />
+          
+          {/* Logo Card with Breathing Glow */}
+          <motion.div
+            className="relative h-20 w-20 overflow-hidden rounded-full bg-white p-1.5 shadow-[0_0_30px_rgba(219,39,119,0.3)] ring-2 ring-pink-500/30"
+            animate={{
+              scale: [0.95, 1.05, 0.95],
+              boxShadow: [
+                "0 0 20px rgba(219,39,119,0.2)",
+                "0 0 40px rgba(219,39,119,0.5)",
+                "0 0 20px rgba(219,39,119,0.2)",
+              ],
+            }}
+            transition={{
+              duration: 2.5,
+              repeat: Infinity,
+              ease: "easeInOut",
+            }}
+          >
+            <img
+              src="/brand/fitness-world-logo-tight.png"
+              alt="Fitness World Logo"
+              className="h-full w-full object-contain rounded-full"
+            />
+          </motion.div>
         </div>
-        <div>
-          <h1 className="text-[22px] font-black text-text-primary">Opening GymOS</h1>
-          {slow ? (
-            <p className="mt-1 text-[14px] font-semibold text-amber-600">
-              Server is waking up from sleep — please wait a moment...
-            </p>
-          ) : (
-            <p className="mt-1 text-[14px] font-semibold text-text-secondary">Checking your trainer session...</p>
-          )}
+
+        <div className="space-y-2">
+          <motion.h1 
+            className="text-[24px] font-black tracking-tight text-white"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+          >
+            Opening <span className="text-pink-500">Fitness World</span>
+          </motion.h1>
+          
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.4 }}
+          >
+            {slow ? (
+              <p className="text-[13px] font-semibold text-amber-400 animate-pulse flex items-center justify-center gap-1.5">
+                <Loader2 className="animate-spin" size={13} />
+                Server waking up from sleep — please wait...
+              </p>
+            ) : (
+              <p className="text-[13px] font-semibold text-white/50">
+                Checking your trainer session...
+              </p>
+            )}
+          </motion.div>
         </div>
       </div>
     </main>

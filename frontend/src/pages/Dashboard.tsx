@@ -343,8 +343,8 @@ export function Dashboard() {
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-wider text-brand-primary sm:text-[12px]">Live Trainer Desk</p>
                   <h1 className="mt-1 text-[22px] font-black leading-tight text-text-primary sm:text-[28px] lg:mt-2 lg:text-[36px]">
-                    Fitness World{" "}
-                    <span className="gradient-text">GymOS</span>
+                    Fitness{" "}
+                    <span className="gradient-text">World</span>
                   </h1>
                   <p className="mt-1 hidden text-[14px] font-semibold text-text-secondary sm:block lg:mt-2 lg:text-[15px]">Today's members, renewals, payments, and outreach in one clean work view.</p>
                 </div>
