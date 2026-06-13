@@ -795,8 +795,18 @@ export function DeveloperDashboard() {
                 </p>
 
                 {gatewayStatus === "unavailable" ? (
-                  <div className="mt-6 rounded-lg border border-red-500/20 bg-red-500/5 p-4 text-center text-red-400 text-[12px] font-bold leading-relaxed">
-                    WhatsApp Gateway is offline or not configured as "GymOS Self-Hosted".
+                  <div className="mt-6 rounded-lg border border-red-500/20 bg-red-500/5 p-4 text-center text-red-400 text-[12px] font-bold leading-relaxed flex flex-col items-center gap-2">
+                    <span>WhatsApp Gateway is offline or not configured as "GymOS Self-Hosted".</span>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="h-8 text-[11px] font-bold bg-white/5 border border-white/10 text-white hover:bg-white/10 mt-1"
+                      onClick={() => void fetchGatewayStatus()}
+                      disabled={loadingGateway}
+                    >
+                      {loadingGateway ? <Loader2 size={12} className="animate-spin mr-1.5 inline-block" /> : null}
+                      Retry / Check Status
+                    </Button>
                   </div>
                 ) : (
                   <div className="mt-6 grid gap-4 items-center justify-center text-center">

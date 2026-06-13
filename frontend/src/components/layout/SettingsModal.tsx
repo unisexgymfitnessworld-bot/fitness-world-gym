@@ -417,8 +417,18 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
           </p>
 
           {gatewayStatus === "unavailable" ? (
-            <div className="rounded-lg border border-red-200 bg-red-50/50 p-4 text-center text-status-expired text-[12px] font-bold">
-              WhatsApp Gateway URL is not configured or not running.
+            <div className="rounded-lg border border-red-200 bg-red-50/50 p-4 text-center text-status-expired text-[12px] font-bold flex flex-col items-center gap-2">
+              <span>WhatsApp Gateway URL is not configured or not running.</span>
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-8 text-[11px] font-black cursor-pointer bg-white border border-red-200 text-status-expired hover:bg-red-50 mt-1"
+                onClick={() => void fetchGatewayStatus()}
+                disabled={loadingGateway}
+              >
+                {loadingGateway ? <Loader2 size={12} className="animate-spin mr-1.5 inline-block" /> : null}
+                Retry / Refresh Status
+              </Button>
             </div>
           ) : (
             <div className="grid gap-4 items-center justify-center text-center">
