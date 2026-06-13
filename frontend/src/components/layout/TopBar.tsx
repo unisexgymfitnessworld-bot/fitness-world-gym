@@ -1,4 +1,4 @@
-import { FileSpreadsheet, LogOut, Settings, Search, X } from "lucide-react";
+import { FileSpreadsheet, LogOut, Settings, Search, X, RefreshCw } from "lucide-react";
 import { motion } from "motion/react";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { FwMark } from "./FwMark";
@@ -258,6 +258,37 @@ export function TopBar({ trainer, onLogout, onSettings, onReports, members = [],
               <Settings size={22} />
             </Button>
           )}
+          <Button
+            aria-label="Refresh App"
+            title="Refresh App"
+            variant="ghost"
+            className="!h-10 !w-10 !p-0 !text-brand-white hover:!bg-white/10 hover:!text-brand-white sm:!h-12 sm:!w-12 group"
+            onClick={async () => {
+              if (navigator.serviceWorker) {
+                try {
+                  const regs = await navigator.serviceWorker.getRegistrations();
+                  for (const r of regs) {
+                    await r.unregister();
+                  }
+                } catch (e) {
+                  console.warn("Failed to unregister service worker:", e);
+                }
+              }
+              if (window.caches) {
+                try {
+                  const keys = await caches.keys();
+                  for (const k of keys) {
+                    await caches.delete(k);
+                  }
+                } catch (e) {
+                  console.warn("Failed to delete cache keys:", e);
+                }
+              }
+              window.location.reload();
+            }}
+          >
+            <RefreshCw size={22} className="group-hover:rotate-180 transition-transform duration-500 ease-out" />
+          </Button>
           <Button aria-label="Logout" title="Logout" variant="ghost" className="!h-10 !w-10 !p-0 !text-brand-white hover:!bg-white/10 hover:!text-brand-white sm:!h-12 sm:!w-12" onClick={onLogout}>
             <LogOut size={22} />
           </Button>
