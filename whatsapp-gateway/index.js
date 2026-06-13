@@ -385,6 +385,9 @@ function verifyToken(req, res, next) {
 // UI page showing status or QR code
 app.get("/", async (req, res) => {
   res.setHeader("Content-Type", "text/html");
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
 
   if (connectionStatus === "connected") {
     return res.send(`
@@ -468,6 +471,9 @@ app.get("/", async (req, res) => {
 
 // JSON Status endpoint
 app.get("/status", (req, res) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
   res.json({
     success: true,
     status: connectionStatus,
