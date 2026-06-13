@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { AlertTriangle, Calendar, CheckCircle2, Coins, Download, FileSpreadsheet, FileText, TrendingUp, Users, type LucideIcon } from "lucide-react";
+import { AlertTriangle, Calendar, CheckCircle2, Coins, Download, FileSpreadsheet, FileText, TrendingUp, Users, Trash2, type LucideIcon } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
 import { getMemberCollectedAmount, getMemberPendingAmount } from "../../lib/analytics";
@@ -15,7 +15,7 @@ interface ReportExportModalProps {
   onClose: () => void;
 }
 
-type ReportType = "all" | "payments" | "dues" | "expired" | "active" | "registrations" | "renewals";
+type ReportType = "all" | "payments" | "dues" | "expired" | "active" | "registrations" | "renewals" | "deleted";
 type ReportPeriod = "all" | "month";
 
 const months = [
@@ -76,9 +76,15 @@ const typeDetails = {
     icon: TrendingUp,
     period: "month",
   },
+  deleted: {
+    title: "Deleted Members",
+    desc: "Members who were soft-deleted or removed from the system.",
+    icon: Trash2,
+    period: "all",
+  },
 } as const satisfies Record<ReportType, { title: string; desc: string; icon: LucideIcon; period: ReportPeriod }>;
 
-const reportTypeOrder = ["all", "payments", "dues", "expired", "active", "registrations", "renewals"] as const satisfies readonly ReportType[];
+const reportTypeOrder = ["all", "payments", "dues", "expired", "active", "registrations", "renewals", "deleted"] as const satisfies readonly ReportType[];
 
 function monthMatches(date: string, selectedMonth: number, selectedYear: number): boolean {
   const parsed = new Date(date);
@@ -124,6 +130,9 @@ function downloadBlob(content: string, type: string, fileName: string): void {
 }
 
 function memberMatchesReport(member: Member, reportType: ReportType, selectedMonth: number, selectedYear: number): boolean {
+  if (member.status === "Deleted" && reportType !== "deleted") {
+    return false;
+  }
   switch (reportType) {
     case "all":
       return true;
@@ -139,6 +148,8 @@ function memberMatchesReport(member: Member, reportType: ReportType, selectedMon
       return member.joinDate !== member.membershipStart && monthMatches(member.membershipStart, selectedMonth, selectedYear);
     case "dues":
       return getMemberDueDatesForMonth(member, selectedYear, selectedMonth).length > 0;
+    case "deleted":
+      return member.status === "Deleted";
   }
 }
 
@@ -182,6 +193,7 @@ export function ReportExportModal({ open, members, attendance = [], paymentRecei
         active: 0,
         registrations: 0,
         renewals: 0,
+        deleted: 0,
       },
     );
   }, [members, selectedMonth, selectedYear, selectedTrainingType]);

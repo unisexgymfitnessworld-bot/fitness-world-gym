@@ -14,6 +14,7 @@ interface MembersState {
   upsertMember: (input: MemberInput, memberId?: string) => Promise<Member>;
   upsertMembers: (inputs: MemberInput[]) => Promise<Member[]>;
   suspendMember: (memberId: string) => Promise<void>;
+  deleteMember: (memberId: string) => Promise<void>;
   renewMember: (memberId: string, start: string, due: string, feesAmount: number, planType?: PlanType) => Promise<void>;
   addVisit: (memberId: string, visitDate: string, weightKg?: number) => Promise<void>;
   addPaymentReceipt: (memberId: string, input: PaymentReceiptInput) => Promise<PaymentReceipt>;
@@ -92,10 +93,10 @@ export function useMembers(): MembersState {
     }).length;
 
     return {
-      total: members.length,
+      total: members.filter((member) => member.status !== "Deleted").length,
       active: members.filter((member) => member.status === "Active").length,
       dueThisWeek,
-      pendingPayments: members.filter((member) => member.paymentStatus === "Pending" || member.paymentStatus === "Partially Paid").length,
+      pendingPayments: members.filter((member) => member.status !== "Deleted" && (member.paymentStatus === "Pending" || member.paymentStatus === "Partially Paid")).length,
     };
   }, [members]);
 
@@ -166,6 +167,26 @@ export function useMembers(): MembersState {
           ? {
               ...member,
               status: member.status === "Suspended" ? getMembershipStatus(member.membershipDue) : "Suspended",
+              updatedAt: new Date().toISOString(),
+            }
+          : member,
+      ),
+    );
+  }
+
+  async function deleteMember(memberId: string): Promise<void> {
+    if (isApiConfigured) {
+      const deleted = await api.deleteMember(memberId);
+      setMembers((current) => current.map((member) => (member.id === memberId ? deleted : member)));
+      return;
+    }
+
+    setMembers((current) =>
+      current.map((member) =>
+        member.id === memberId
+          ? {
+              ...member,
+              status: "Deleted" as const,
               updatedAt: new Date().toISOString(),
             }
           : member,
@@ -332,6 +353,7 @@ export function useMembers(): MembersState {
     upsertMember,
     upsertMembers,
     suspendMember,
+    deleteMember,
     renewMember,
     addVisit,
     addPaymentReceipt,

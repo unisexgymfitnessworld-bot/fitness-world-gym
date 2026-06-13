@@ -14,18 +14,20 @@ interface FilterBarProps {
 export function FilterBar({ filters, resultCount, onChange, members }: FilterBarProps) {
   const selectClassName = "studio-select min-h-10 w-full px-3 text-[14px] font-semibold lg:min-h-11 lg:text-[15px] bg-brand-white";
 
-  const statusHelp: Record<"All" | "Active" | "Expired", string> = useMemo(
+  const statusHelp: Record<"All" | "Active" | "Expired" | "Suspended" | "Deleted", string> = useMemo(
     () => ({
-      All: `Show all ${members.length} members in this trainer workspace`,
+      All: `Show all ${members.filter((member) => member.status !== "Deleted").length} members in this trainer workspace`,
       Active: `Show ${members.filter((member) => member.status === "Active").length} active members`,
       Expired: `Show ${members.filter((member) => member.status === "Expired").length} expired members`,
+      Suspended: `Show ${members.filter((member) => member.status === "Suspended").length} suspended members`,
+      Deleted: `Show ${members.filter((member) => member.status === "Deleted").length} deleted members`,
     }),
     [members],
   );
 
   const quickCounts = useMemo(() => {
-    const pending = members.filter((member) => member.paymentStatus === "Pending").length;
-    const partial = members.filter((member) => member.paymentStatus === "Partially Paid").length;
+    const pending = members.filter((member) => member.status !== "Deleted" && member.paymentStatus === "Pending").length;
+    const partial = members.filter((member) => member.status !== "Deleted" && member.paymentStatus === "Partially Paid").length;
     const dueSoon = members.filter((member) => {
       const remaining = daysUntil(getMemberActionDueDate(member));
       return member.status === "Active" && remaining >= 0 && remaining <= 3;
@@ -148,7 +150,7 @@ export function FilterBar({ filters, resultCount, onChange, members }: FilterBar
       {/* Quick Filters Row */}
       <div className="scrollbar-hide flex min-w-0 max-w-full items-center gap-2 overflow-x-auto pb-0.5 border-t border-border-default/50 pt-3 lg:pt-4">
         <div className="flex bg-surface-overlay p-0.5 rounded-[var(--radius-card)] gap-0.5 shrink-0">
-          {(["All", "Active", "Expired"] as const).map((status) => (
+          {(["All", "Active", "Expired", "Suspended", "Deleted"] as const).map((status) => (
             <button
               key={status}
               type="button"

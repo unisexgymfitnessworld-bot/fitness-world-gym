@@ -8,7 +8,7 @@ import {
   type FilterFn,
   type SortingState,
 } from "@tanstack/react-table";
-import { Eye, MessageCircle, MessageSquare, Pencil, UserX, SearchX, Plus, Download, UserCheck } from "lucide-react";
+import { Eye, MessageCircle, MessageSquare, Pencil, UserX, SearchX, Plus, Download, UserCheck, Trash2 } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { compareRegistrationNumbers, createWhatsAppLink, formatDisplayDate, formatPhone, getDueTone, getMemberActionDueDate, getMemberDueKind, isPlanLessThanOneMonth } from "../../lib/utils";
@@ -26,6 +26,7 @@ interface MemberTableProps {
   onEdit: (memberId: string) => void;
   onSms: (memberId: string) => void;
   onSuspend: (memberId: string) => void;
+  onDelete: (memberId: string) => void;
   isDbEmpty?: boolean;
   onAddClick?: () => void;
   onClearFilters?: () => void;
@@ -57,6 +58,7 @@ export function MemberTable({
   onEdit,
   onSms,
   onSuspend,
+  onDelete,
   isDbEmpty = false,
   onAddClick,
   onClearFilters,
@@ -352,12 +354,23 @@ export function MemberTable({
                   <UserX size={15} />
                 </motion.button>
               )}
+              <motion.button
+                className="focus-ring flex h-9 w-9 items-center justify-center rounded-lg border border-red-100 bg-red-50/50 text-red-700 transition hover:bg-red-600 hover:text-white"
+                onClick={() => onDelete(member.id)}
+                title="Delete member"
+                aria-label={`Delete member ${member.name}`}
+                whileHover={{ scale: 1.12, y: -1 }}
+                whileTap={{ scale: 0.9 }}
+                transition={{ type: "spring", stiffness: 500, damping: 20 }}
+              >
+                <Trash2 size={15} />
+              </motion.button>
             </div>
           );
         },
       }),
     ],
-    [onEdit, onSms, onSuspend, onView],
+    [onEdit, onSms, onSuspend, onDelete, onView],
   );
 
   const table = useReactTable({
@@ -617,6 +630,17 @@ export function MemberTable({
                     <UserX size={14} />
                   </motion.button>
                 )}
+                <motion.button
+                  className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-red-100 bg-red-50 text-red-700 transition hover:bg-red-600 hover:text-white"
+                  onClick={() => onDelete(member.id)}
+                  title="Delete member"
+                  aria-label={`Delete member ${member.name}`}
+                  whileHover={{ scale: 1.12 }}
+                  whileTap={{ scale: 0.9 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 20 }}
+                >
+                  <Trash2 size={14} />
+                </motion.button>
               </div>
             </motion.article>
           );

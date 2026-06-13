@@ -33,6 +33,90 @@ export function DeveloperDashboard() {
   const [deleteAccount, setDeleteAccount] = useState<TrainerAccount | null>(null);
   const [createForm, setCreateForm] = useState<{ email: string; name: string; role: AccountRole; password: string }>({ email: "", name: "", role: "trainer", password: "" });
   const [editForms, setEditForms] = useState<Record<string, { email: string; name: string; role: AccountRole; password: string }>>({});
+  const [settingsForm, setSettingsForm] = useState<{
+    sms_enabled: boolean;
+    whatsapp_enabled: boolean;
+    whatsapp_provider: "none" | "ultramsg" | "self_hosted";
+    whatsapp_gateway_url: string;
+    whatsapp_gateway_token: string;
+    whatsapp_instance_id: string;
+    whatsapp_token: string;
+    fast2sms_api_key: string;
+    db_keep_alive_enabled: boolean;
+    sms_auto_reminder_paused: boolean;
+    whatsapp_auto_reminder_paused: boolean;
+  }>({
+    sms_enabled: true,
+    whatsapp_enabled: true,
+    whatsapp_provider: "none",
+    whatsapp_gateway_url: "",
+    whatsapp_gateway_token: "",
+    whatsapp_instance_id: "",
+    whatsapp_token: "",
+    fast2sms_api_key: "",
+    db_keep_alive_enabled: false,
+    sms_auto_reminder_paused: false,
+    whatsapp_auto_reminder_paused: false,
+  });
+  const [savingSettings, setSavingSettings] = useState(false);
+
+  // WhatsApp Gateway states
+  const [gatewayStatus, setGatewayStatus] = useState<string>("checking");
+  const [gatewayUrl, setGatewayUrl] = useState<string>("");
+  const [loadingGateway, setLoadingGateway] = useState<boolean>(false);
+  const [resettingGateway, setResettingGateway] = useState<boolean>(false);
+  const [iframeKey, setIframeKey] = useState<number>(0);
+
+  async function fetchGatewayStatus() {
+    setLoadingGateway(true);
+    try {
+      const res = await api.getWhatsAppGatewayStatus();
+      if (res && res.status) {
+        setGatewayStatus(res.status);
+      }
+      if (res && res.gatewayUrl) {
+        setGatewayUrl(res.gatewayUrl);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch WhatsApp gateway status:", err);
+      setGatewayStatus("unavailable");
+    } finally {
+      setLoadingGateway(false);
+    }
+  }
+
+  async function handleResetGateway() {
+    if (!window.confirm("Are you sure you want to disconnect the current WhatsApp session? This will force a new QR code scan.")) {
+      return;
+    }
+    setResettingGateway(true);
+    try {
+      await api.resetWhatsAppGateway();
+      pushToast({
+        title: "Session Disconnected",
+        message: "WhatsApp session cleared. Scan the new QR code to reconnect.",
+        tone: "success",
+      });
+      setIframeKey(prev => prev + 1);
+      setTimeout(() => {
+        void fetchGatewayStatus();
+      }, 1000);
+    } catch (err) {
+      pushToast({
+        title: "Disconnect Failed",
+        message: err instanceof Error ? err.message : "Unable to reset WhatsApp gateway.",
+        tone: "error",
+      });
+    } finally {
+      setResettingGateway(false);
+    }
+  }
+
+  // Playground Sandbox state
+  const [testType, setTestType] = useState<"sms" | "whatsapp">("sms");
+  const [testPhone, setTestPhone] = useState<string>("");
+  const [testMessage, setTestMessage] = useState<string>("Hello from GymOS Developer Playground!");
+  const [testingNotification, setTestingNotification] = useState<boolean>(false);
 
   const statusItems = useMemo(() => {
     if (!diagnostics) return [];
@@ -48,6 +132,7 @@ export function DeveloperDashboard() {
   useEffect(() => {
     void loadDeveloperData();
     void handlePingDb();
+    void fetchGatewayStatus();
   }, []);
 
   if (!trainer) return null;
@@ -61,6 +146,21 @@ export function DeveloperDashboard() {
         api.developerLogs(),
       ]);
       setDiagnostics(nextDiagnostics);
+      if (nextDiagnostics.settings) {
+        setSettingsForm({
+          sms_enabled: nextDiagnostics.settings.sms_enabled === "true",
+          whatsapp_enabled: nextDiagnostics.settings.whatsapp_enabled === "true",
+          whatsapp_provider: nextDiagnostics.settings.whatsapp_provider,
+          whatsapp_gateway_url: nextDiagnostics.settings.whatsapp_gateway_url,
+          whatsapp_gateway_token: nextDiagnostics.settings.whatsapp_gateway_token,
+          whatsapp_instance_id: nextDiagnostics.settings.whatsapp_instance_id,
+          whatsapp_token: nextDiagnostics.settings.whatsapp_token,
+          fast2sms_api_key: nextDiagnostics.settings.fast2sms_api_key,
+          db_keep_alive_enabled: nextDiagnostics.settings.db_keep_alive_enabled === "true",
+          sms_auto_reminder_paused: nextDiagnostics.settings.sms_auto_reminder_paused === "true",
+          whatsapp_auto_reminder_paused: nextDiagnostics.settings.whatsapp_auto_reminder_paused === "true",
+        });
+      }
       setAccounts(nextAccounts);
       setLogs(nextLogs);
       setEditForms(
@@ -76,6 +176,7 @@ export function DeveloperDashboard() {
           ]),
         ),
       );
+      void fetchGatewayStatus();
     } catch (error) {
       pushToast({
         title: "Developer check failed",
@@ -149,6 +250,68 @@ export function DeveloperDashboard() {
       });
     } finally {
       setSmsSending(false);
+    }
+  }
+
+  async function handleSaveSettings(): Promise<void> {
+    setSavingSettings(true);
+    try {
+      await api.saveSystemSettings({
+        sms_enabled: String(settingsForm.sms_enabled),
+        whatsapp_enabled: String(settingsForm.whatsapp_enabled),
+        whatsapp_provider: settingsForm.whatsapp_provider,
+        whatsapp_gateway_url: settingsForm.whatsapp_gateway_url,
+        whatsapp_gateway_token: settingsForm.whatsapp_gateway_token,
+        whatsapp_instance_id: settingsForm.whatsapp_instance_id,
+        whatsapp_token: settingsForm.whatsapp_token,
+        fast2sms_api_key: settingsForm.fast2sms_api_key,
+        db_keep_alive_enabled: String(settingsForm.db_keep_alive_enabled),
+        sms_auto_reminder_paused: String(settingsForm.sms_auto_reminder_paused),
+        whatsapp_auto_reminder_paused: String(settingsForm.whatsapp_auto_reminder_paused),
+      });
+      pushToast({
+        title: "Settings Saved",
+        message: "System notifications settings saved successfully.",
+        tone: "success",
+      });
+      await loadDeveloperData();
+    } catch (error) {
+      pushToast({
+        title: "Save Failed",
+        message: error instanceof Error ? error.message : "Unable to save system settings.",
+        tone: "error",
+      });
+    } finally {
+      setSavingSettings(false);
+    }
+  }
+
+  async function handleSendTestNotification(): Promise<void> {
+    if (!testPhone) {
+      pushToast({
+        title: "Validation Error",
+        message: "Please enter a destination phone number.",
+        tone: "error",
+      });
+      return;
+    }
+    setTestingNotification(true);
+    try {
+      const res = await api.testNotification(testType, testPhone, testMessage);
+      pushToast({
+        title: "Test Sent",
+        message: `Notification dispatch triggered successfully. Request ID: ${res.requestId}`,
+        tone: "success",
+      });
+      await loadDeveloperData();
+    } catch (error) {
+      pushToast({
+        title: "Test Dispatch Failed",
+        message: error instanceof Error ? error.message : "Notification test dispatch failed.",
+        tone: "error",
+      });
+    } finally {
+      setTestingNotification(false);
     }
   }
 
@@ -292,6 +455,404 @@ export function DeveloperDashboard() {
               )}
             </div>
           </motion.section>
+
+          {/* System Configuration & Gateways Panel */}
+          <motion.section
+            className="neon-panel rounded-[var(--radius-panel)] p-6 lg:p-8"
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, delay: 0.05 }}
+          >
+            <div className="flex items-center gap-2.5">
+              <Cpu size={20} className="text-brand-primary" />
+              <h2 className="text-[18px] font-black text-white">Alert Gateways & Feature Toggles</h2>
+            </div>
+            <p className="mt-1 text-[13px] font-semibold text-text-secondary">
+              Dynamically switch messaging gates, turn alerts ON/OFF, and configure self-hosted/cloud gateways in real-time.
+            </p>
+
+            <div className="mt-6 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {/* SMS Config Card */}
+              <div className="rounded-[var(--radius-card)] border border-white/5 bg-white/5 p-5">
+                <div className="flex items-center justify-between">
+                  <span className="block text-[15px] font-black text-white">SMS Notifications (Fast2SMS)</span>
+                  <label className="relative inline-flex cursor-pointer items-center">
+                    <input
+                      type="checkbox"
+                      className="peer sr-only"
+                      checked={settingsForm.sms_enabled}
+                      onChange={(e) => setSettingsForm((form) => ({ ...form, sms_enabled: e.target.checked }))}
+                    />
+                    <div className="peer h-6 w-11 rounded-full bg-slate-800 border border-white/10 after:absolute after:top-[2px] after:left-[2px] after:h-5 after:w-5 after:rounded-full after:bg-slate-400 after:transition-all after:content-[''] peer-checked:bg-brand-primary peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
+                  </label>
+                </div>
+                <p className="mt-1.5 text-[12px] font-semibold leading-normal text-text-secondary">
+                  Enable or disable automated text reminders. Requires active Fast2SMS API key.
+                </p>
+
+                <div className="mt-4">
+                  <Input
+                    label="Fast2SMS API Key"
+                    variant="dark"
+                    type="password"
+                    disabled={!settingsForm.sms_enabled}
+                    value={settingsForm.fast2sms_api_key}
+                    onChange={(e) => setSettingsForm((form) => ({ ...form, fast2sms_api_key: e.target.value }))}
+                    placeholder="Enter Fast2SMS API key"
+                  />
+                </div>
+
+                <div className="mt-4 flex items-center justify-between border-t border-white/5 pt-4">
+                  <span className="text-[13px] font-semibold text-white/80">Pause Auto Reminders</span>
+                  <label className="relative inline-flex cursor-pointer items-center">
+                    <input
+                      type="checkbox"
+                      className="peer sr-only"
+                      disabled={!settingsForm.sms_enabled}
+                      checked={settingsForm.sms_auto_reminder_paused}
+                      onChange={(e) => setSettingsForm((form) => ({ ...form, sms_auto_reminder_paused: e.target.checked }))}
+                    />
+                    <div className="peer h-5 w-9 rounded-full bg-slate-800 border border-white/10 after:absolute after:top-[2px] after:left-[2px] after:h-3.5 after:w-3.5 after:rounded-full after:bg-slate-400 after:transition-all after:content-[''] peer-checked:bg-amber-500 peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
+                  </label>
+                </div>
+              </div>
+
+              {/* WhatsApp Config Card */}
+              <div className="rounded-[var(--radius-card)] border border-white/5 bg-white/5 p-5">
+                <div className="flex items-center justify-between">
+                  <span className="block text-[15px] font-black text-white">WhatsApp Alert Service</span>
+                  <label className="relative inline-flex cursor-pointer items-center">
+                    <input
+                      type="checkbox"
+                      className="peer sr-only"
+                      checked={settingsForm.whatsapp_enabled}
+                      onChange={(e) => setSettingsForm((form) => ({ ...form, whatsapp_enabled: e.target.checked }))}
+                    />
+                    <div className="peer h-6 w-11 rounded-full bg-slate-800 border border-white/10 after:absolute after:top-[2px] after:left-[2px] after:h-5 after:w-5 after:rounded-full after:bg-slate-400 after:transition-all after:content-[''] peer-checked:bg-green-500 peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
+                  </label>
+                </div>
+                <p className="mt-1.5 text-[12px] font-semibold leading-normal text-text-secondary">
+                  Configure dynamic chat reminders. Supports UltraMsg API cloud provider or self-hosted gateway.
+                </p>
+
+                <div className="mt-4 grid gap-4">
+                  <label className="grid gap-2 text-[14px] font-semibold text-white/80">
+                    WhatsApp Gateway Provider
+                    <select
+                      disabled={!settingsForm.whatsapp_enabled}
+                      className="focus-ring w-full rounded-[var(--radius-card)] border border-white/10 bg-[#080913]/40 px-4 py-2.5 text-[14px] font-normal text-white focus:border-brand-primary focus:bg-[#101426] disabled:opacity-50"
+                      value={settingsForm.whatsapp_provider}
+                      onChange={(e) => setSettingsForm((form) => ({ ...form, whatsapp_provider: e.target.value as any }))}
+                    >
+                      <option value="none" className="bg-[#101426] text-white">Disabled / None</option>
+                      <option value="self_hosted" className="bg-[#101426] text-white">GymOS Self-Hosted (Render / local)</option>
+                      <option value="ultramsg" className="bg-[#101426] text-white">UltraMsg Cloud Service</option>
+                    </select>
+                  </label>
+
+                  {settingsForm.whatsapp_provider === "self_hosted" && (
+                    <div className="grid gap-3 pt-1">
+                      <Input
+                        label="Gateway URL"
+                        variant="dark"
+                        disabled={!settingsForm.whatsapp_enabled}
+                        value={settingsForm.whatsapp_gateway_url}
+                        onChange={(e) => setSettingsForm((form) => ({ ...form, whatsapp_gateway_url: e.target.value }))}
+                        placeholder="https://gymos-whatsapp-gateway.onrender.com"
+                      />
+                      <Input
+                        label="Gateway Access Token"
+                        variant="dark"
+                        type="password"
+                        disabled={!settingsForm.whatsapp_enabled}
+                        value={settingsForm.whatsapp_gateway_token}
+                        onChange={(e) => setSettingsForm((form) => ({ ...form, whatsapp_gateway_token: e.target.value }))}
+                        placeholder="Bearer token configured in Render variables"
+                      />
+                    </div>
+                  )}
+
+                  {settingsForm.whatsapp_provider === "ultramsg" && (
+                    <div className="grid gap-3 pt-1">
+                      <Input
+                        label="UltraMsg Instance ID"
+                        variant="dark"
+                        disabled={!settingsForm.whatsapp_enabled}
+                        value={settingsForm.whatsapp_instance_id}
+                        onChange={(e) => setSettingsForm((form) => ({ ...form, whatsapp_instance_id: e.target.value }))}
+                        placeholder="instanceXXXXXX"
+                      />
+                      <Input
+                        label="UltraMsg Token"
+                        variant="dark"
+                        type="password"
+                        disabled={!settingsForm.whatsapp_enabled}
+                        value={settingsForm.whatsapp_token}
+                        onChange={(e) => setSettingsForm((form) => ({ ...form, whatsapp_token: e.target.value }))}
+                        placeholder="Instance authentication token"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-4 flex items-center justify-between border-t border-white/5 pt-4">
+                  <span className="text-[13px] font-semibold text-white/80">Pause Auto Reminders</span>
+                  <label className="relative inline-flex cursor-pointer items-center">
+                    <input
+                      type="checkbox"
+                      className="peer sr-only"
+                      disabled={!settingsForm.whatsapp_enabled}
+                      checked={settingsForm.whatsapp_auto_reminder_paused}
+                      onChange={(e) => setSettingsForm((form) => ({ ...form, whatsapp_auto_reminder_paused: e.target.checked }))}
+                    />
+                    <div className="peer h-5 w-9 rounded-full bg-slate-800 border border-white/10 after:absolute after:top-[2px] after:left-[2px] after:h-3.5 after:w-3.5 after:rounded-full after:bg-slate-400 after:transition-all after:content-[''] peer-checked:bg-amber-500 peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
+                  </label>
+                </div>
+              </div>
+
+              {/* Database Keep-Alive Card */}
+              <div className="rounded-[var(--radius-card)] border border-white/5 bg-white/5 p-5">
+                <div className="flex items-center justify-between">
+                  <span className="block text-[15px] font-black text-white">DB Sleep Preventer (Keep-Alive)</span>
+                  <label className="relative inline-flex cursor-pointer items-center">
+                    <input
+                      type="checkbox"
+                      className="peer sr-only"
+                      checked={settingsForm.db_keep_alive_enabled}
+                      onChange={(e) => setSettingsForm((form) => ({ ...form, db_keep_alive_enabled: e.target.checked }))}
+                    />
+                    <div className="peer h-6 w-11 rounded-full bg-slate-800 border border-white/10 after:absolute after:top-[2px] after:left-[2px] after:h-5 after:w-5 after:rounded-full after:bg-slate-400 after:transition-all after:content-[''] peer-checked:bg-[#38BDF8] peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
+                  </label>
+                </div>
+                <p className="mt-1.5 text-[12px] font-semibold leading-normal text-text-secondary">
+                  Automatically query Supabase every 30 minutes. Prevents database from entering inactivity pause/sleep mode.
+                </p>
+                <div className="mt-6 flex items-center justify-center p-4 border border-dashed border-white/10 rounded-lg bg-[#080913]/30">
+                  <div className="text-center">
+                    <Database size={24} className={`mx-auto ${settingsForm.db_keep_alive_enabled ? "text-[#38BDF8] animate-pulse" : "text-white/30"}`} />
+                    <span className="mt-2 block text-[11px] font-bold uppercase tracking-wider text-white/50">
+                      Auto-Ping: {settingsForm.db_keep_alive_enabled ? "Active Loop" : "Deactivated"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <Button
+                onClick={() => void handleSaveSettings()}
+                disabled={savingSettings}
+                className="bg-[#38BDF8] text-black hover:bg-[#38BDF8]/90 font-bold px-6 py-2.5 flex items-center gap-2 shadow-[0_12px_24px_rgba(56,189,248,0.2)]"
+              >
+                {savingSettings ? <Loader2 size={17} className="animate-spin" /> : <Save size={17} />}
+                Save Configurations
+              </Button>
+            </div>
+          </motion.section>
+
+          {/* Gateway Playground, DB Performance & WhatsApp Gateway Section */}
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {/* Gateway Testing Sandbox */}
+            <motion.section
+              className="neon-panel rounded-[var(--radius-panel)] p-6"
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.45, delay: 0.08 }}
+            >
+              <div className="flex items-center gap-2.5">
+                <Terminal size={20} className="text-brand-primary" />
+                <h2 className="text-[18px] font-black text-white">Gateway Playground</h2>
+              </div>
+              <p className="mt-1 text-[13px] font-semibold text-text-secondary">
+                Dispatch manual test SMS or WhatsApp alerts to check gateway credentials instantly.
+              </p>
+
+              <div className="mt-5 grid gap-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setTestType("sms")}
+                    className={`rounded-lg border px-4 py-3 text-[13px] font-bold transition-all duration-300 ${
+                      testType === "sms"
+                        ? "bg-brand-primary/10 border-brand-primary text-brand-primary-light"
+                        : "bg-white/5 border-white/5 text-white/60 hover:bg-white/10"
+                    }`}
+                  >
+                    SMS (Fast2SMS)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTestType("whatsapp")}
+                    className={`rounded-lg border px-4 py-3 text-[13px] font-bold transition-all duration-300 ${
+                      testType === "whatsapp"
+                        ? "bg-green-500/10 border-green-500 text-green-400"
+                        : "bg-white/5 border-white/5 text-white/60 hover:bg-white/10"
+                    }`}
+                  >
+                    WhatsApp Alert
+                  </button>
+                </div>
+
+                <Input
+                  label="Destination Phone (with country code for WhatsApp)"
+                  variant="dark"
+                  value={testPhone}
+                  onChange={(e) => setTestPhone(e.target.value)}
+                  placeholder="e.g. 919876543210"
+                />
+
+                <label className="grid gap-2 text-[14px] font-semibold text-white/80">
+                  Test Message
+                  <textarea
+                    rows={3}
+                    className="focus-ring w-full rounded-[var(--radius-card)] border border-white/10 bg-[#080913]/40 px-4 py-3 text-[14px] font-normal text-white focus:border-brand-primary focus:bg-[#101426]"
+                    value={testMessage}
+                    onChange={(e) => setTestMessage(e.target.value)}
+                    placeholder="Enter test alert message content..."
+                  />
+                </label>
+
+                <Button
+                  onClick={() => void handleSendTestNotification()}
+                  disabled={testingNotification}
+                  className="w-full bg-gradient-to-r from-[#38BDF8] to-[#0369A1] text-black font-bold shadow-[0_12px_32px_rgba(56,189,248,0.2)]"
+                >
+                  {testingNotification ? <Loader2 size={17} className="animate-spin" /> : <Save size={17} />}
+                  Send Test Notification
+                </Button>
+              </div>
+            </motion.section>
+
+            {/* DB Health Speedometer */}
+            <motion.section
+              className="neon-panel rounded-[var(--radius-panel)] p-6"
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.45, delay: 0.09 }}
+            >
+              <div className="flex items-center gap-2.5">
+                <Database size={20} className="text-[#38BDF8]" />
+                <h2 className="text-[18px] font-black text-white">Database Performance</h2>
+              </div>
+              <p className="mt-1 text-[13px] font-semibold text-text-secondary">
+                Real-time query performance latency diagnostics and waking state indexes.
+              </p>
+
+              <div className="mt-6 flex flex-col items-center justify-center">
+                {/* Visual Latency Ring */}
+                <div className="relative flex items-center justify-center h-32 w-32 rounded-full border-4 border-white/5 bg-[#080913]/40 shadow-inner">
+                  {/* Gauge indicator */}
+                  <div className={`absolute inset-1 rounded-full border-4 border-dashed animate-[spin_10s_linear_infinite] ${
+                    dbLatency === null ? "border-slate-600" : dbLatency < 150 ? "border-green-500" : dbLatency < 600 ? "border-yellow-500" : "border-red-500"
+                  }`} />
+                  <div className="text-center z-10">
+                    <span className="block text-[24px] font-black text-white font-mono">
+                      {dbLatency !== null ? `${dbLatency}ms` : "N/A"}
+                    </span>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-white/40">Latency</span>
+                  </div>
+                </div>
+
+                <div className="mt-6 w-full space-y-3">
+                  <div className="flex justify-between border-b border-white/5 pb-2">
+                    <span className="text-[12px] font-bold text-white/50">Performance Status</span>
+                    <span className={`text-[12px] font-black uppercase ${
+                      dbLatency === null ? "text-slate-400" : dbLatency < 150 ? "text-green-400" : dbLatency < 600 ? "text-yellow-400" : "text-red-400"
+                    }`}>
+                      {dbLatency === null ? "Not Verified" : dbLatency < 150 ? "Optimal (Hot)" : dbLatency < 600 ? "Moderate" : "Slow (Cold Start)"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between border-b border-white/5 pb-2">
+                    <span className="text-[12px] font-bold text-white/50">Keep-Alive Status</span>
+                    <span className={`text-[12px] font-black uppercase ${settingsForm.db_keep_alive_enabled ? "text-[#38BDF8]" : "text-white/40"}`}>
+                      {settingsForm.db_keep_alive_enabled ? "Automatic 30m Ping" : "Disabled"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[12px] font-bold text-white/50">Instance Wake State</span>
+                    <span className={`text-[12px] font-black uppercase ${dbSleepStatus === "active" ? "text-green-400" : "text-amber-400"}`}>
+                      {dbSleepStatus}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </motion.section>
+
+            {/* WhatsApp Gateway Live Session */}
+            <motion.section
+              className="neon-panel rounded-[var(--radius-panel)] p-6 flex flex-col justify-between"
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.45, delay: 0.1 }}
+            >
+              <div>
+                <div className="flex items-center gap-2.5">
+                  <MessageCircle size={20} className="text-[#22C55E]" />
+                  <h2 className="text-[18px] font-black text-white">WhatsApp Live Gateway</h2>
+                </div>
+                <p className="mt-1 text-[13px] font-semibold text-text-secondary">
+                  Scan QR or manage connection state for the active self-hosted gateway.
+                </p>
+
+                {gatewayStatus === "unavailable" ? (
+                  <div className="mt-6 rounded-lg border border-red-500/20 bg-red-500/5 p-4 text-center text-red-400 text-[12px] font-bold leading-relaxed">
+                    WhatsApp Gateway is offline or not configured as "GymOS Self-Hosted".
+                  </div>
+                ) : (
+                  <div className="mt-6 grid gap-4 items-center justify-center text-center">
+                    {gatewayUrl && (
+                      <div className="relative border border-white/10 rounded-xl overflow-hidden bg-white shadow-[0_0_20px_rgba(0,0,0,0.3)] mx-auto" style={{ width: '200px', height: '220px' }}>
+                        <iframe
+                          key={iframeKey}
+                          src={gatewayUrl}
+                          title="WhatsApp QR Scanner Developer"
+                          className="w-full h-full border-0"
+                          sandbox="allow-scripts allow-same-origin"
+                        />
+                      </div>
+                    )}
+
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[12px] font-bold text-white/60">Status:</span>
+                        <span className={`text-[11px] font-black uppercase tracking-wider border rounded-full px-2.5 py-0.5 ${
+                          gatewayStatus === "connected" 
+                            ? "bg-green-500/10 border-green-500/20 text-green-400" 
+                            : "bg-amber-500/10 border-amber-200/20 text-amber-400"
+                        }`}>
+                          {gatewayStatus}
+                        </span>
+                      </div>
+
+                      <div className="flex gap-2 mt-2">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="h-8 text-[11px] font-bold bg-white/5 border border-white/10 text-white hover:bg-white/10"
+                          onClick={() => {
+                            setIframeKey(prev => prev + 1);
+                            void fetchGatewayStatus();
+                          }}
+                          disabled={loadingGateway || resettingGateway}
+                        >
+                          {loadingGateway ? <Loader2 size={12} className="animate-spin" /> : "Refresh"}
+                        </Button>
+                        
+                        <Button
+                          type="button"
+                          className="h-8 text-[11px] font-bold bg-red-600 hover:bg-red-700 text-white"
+                          onClick={handleResetGateway}
+                          disabled={loadingGateway || resettingGateway}
+                        >
+                          {resettingGateway ? "Disconnecting..." : "Disconnect"}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.section>
+          </div>
 
           {/* Live System Logs Console */}
           <motion.section

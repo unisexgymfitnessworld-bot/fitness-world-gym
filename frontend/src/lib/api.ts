@@ -1,4 +1,4 @@
-import type { ApiEnvelope, AttendanceEntry, DashboardStats, DeveloperDiagnostics, LogEntry, Member, MemberInput, PaymentReceipt, PaymentReceiptInput, RenewalHistoryEntry, Trainer, TrainerAccount } from "../types";
+import type { ApiEnvelope, AttendanceEntry, DashboardStats, DeveloperDiagnostics, LogEntry, Member, MemberInput, PaymentReceipt, PaymentReceiptInput, RenewalHistoryEntry, Trainer, TrainerAccount, SystemConfigSettings } from "../types";
 import { supabase } from "./supabase";
 
 export const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
@@ -46,9 +46,25 @@ export const api = {
       body: JSON.stringify({ email, password }),
     }),
   me: () => request<{ trainer: Trainer }>("/auth/me"),
+  getWhatsAppGatewayStatus: () =>
+    request<{ success: boolean; status: string; qrReady: boolean; qrRetries: number; gatewayUrl?: string }>("/whatsapp-gateway/status"),
+  resetWhatsAppGateway: () =>
+    request<{ success: boolean; message: string }>("/whatsapp-gateway/reset", {
+      method: "POST",
+    }),
   developerDiagnostics: () => request<DeveloperDiagnostics>("/developer/diagnostics"),
   developerLogs: () => request<LogEntry[]>("/developer/logs"),
   pingDb: () => request<{ latency: number; supabase: string; checkedAt: string }>("/developer/ping-db"),
+  saveSystemSettings: (input: Partial<SystemConfigSettings>) =>
+    request<{ message: string }>("/developer/settings", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  testNotification: (type: "sms" | "whatsapp", phone: string, message: string) =>
+    request<{ requestId: string }>("/developer/test-notification", {
+      method: "POST",
+      body: JSON.stringify({ type, phone, message }),
+    }),
   runDeveloperFix: (action: "expire-members" | "send-sms-reminder") =>
     request<{ message: string; changed?: number; sent?: number }>("/developer/fix", {
       method: "POST",
@@ -118,6 +134,10 @@ export const api = {
       body: JSON.stringify(input),
     }),
   suspendMember: (id: string) =>
+    request<Member>(`/members/${id}/suspend`, {
+      method: "PATCH",
+    }),
+  deleteMember: (id: string) =>
     request<Member>(`/members/${id}`, {
       method: "DELETE",
     }),

@@ -402,61 +402,131 @@ function PaymentReceiptPanel({
           <style>
             @page { size: 80mm auto; margin: 0; }
             body {
-              font-family: 'Courier New', Courier, monospace;
+              font-family: system-ui, -apple-system, sans-serif;
               width: 74mm;
               margin: 0 auto;
-              padding: 10px 5px;
-              color: #000000;
+              padding: 15px 5px;
+              color: #1f2937;
               background: #ffffff;
-              font-size: 12px;
-              line-height: 1.4;
+              font-size: 11px;
+              line-height: 1.5;
             }
             .text-center { text-align: center; }
-            .header h2 { margin: 5px 0 2px 0; font-size: 16px; font-weight: bold; }
-            .header p { margin: 0; font-size: 10px; color: #555; }
-            .divider { border-top: 1px dashed #000; margin: 10px 0; }
-            table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-            td { padding: 4px 0; vertical-align: top; }
-            .label { font-weight: bold; width: 45%; }
-            .value { text-align: right; }
-            .amount-box {
-              border: 1px solid #000;
-              padding: 8px;
-              text-align: center;
-              font-size: 16px;
-              font-weight: bold;
-              margin: 15px 0;
+            .header h1 {
+              margin: 0;
+              font-size: 18px;
+              font-weight: 800;
+              letter-spacing: 0.05em;
+              color: #db2777;
             }
-            .footer { font-size: 10px; margin-top: 15px; }
+            .header p {
+              margin: 2px 0;
+              font-size: 9px;
+              text-transform: uppercase;
+              letter-spacing: 0.08em;
+              color: #6b7280;
+              font-weight: 600;
+            }
+            .header .address {
+              margin-top: 1px;
+              font-size: 9px;
+              color: #9ca3af;
+              text-transform: none;
+              letter-spacing: normal;
+              font-weight: normal;
+            }
+            .divider {
+              border-top: 1px dashed #e5e7eb;
+              margin: 12px 0;
+            }
+            .title {
+              font-weight: 800;
+              font-size: 12px;
+              margin: 6px 0;
+              color: #374151;
+              letter-spacing: 0.05em;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin: 10px 0;
+            }
+            td {
+              padding: 5px 0;
+              vertical-align: middle;
+            }
+            .label {
+              color: #4b5563;
+              font-weight: 500;
+              text-align: left;
+              width: 40%;
+            }
+            .value {
+              text-align: right;
+              font-weight: 600;
+              color: #111827;
+            }
+            .amount-box {
+              background: #fdf2f8;
+              border: 1px solid #fbcfe8;
+              border-radius: 8px;
+              padding: 12px;
+              text-align: center;
+              font-size: 15px;
+              font-weight: 800;
+              color: #db2777;
+              margin: 15px 0;
+              letter-spacing: 0.02em;
+            }
+            .note-card {
+              background: #f9fafb;
+              border-left: 3px solid #db2777;
+              padding: 8px 10px;
+              border-radius: 4px;
+              margin: 12px 0;
+              font-size: 10px;
+              color: #4b5563;
+              line-height: 1.4;
+              text-align: left;
+            }
+            .note-card strong {
+              color: #374151;
+            }
+            .footer {
+              font-size: 9px;
+              color: #9ca3af;
+              margin-top: 15px;
+              line-height: 1.4;
+            }
           </style>
         </head>
         <body>
           <div class="header text-center">
-            <h2>FITNESS WORLD</h2>
+            <h1>FITNESS WORLD</h1>
             <p>Unisex Gym & Fitness Center</p>
-            <p>M.G.R Nagar, Chennai</p>
+            <p class="address">M.G.R Nagar, Chennai</p>
           </div>
           <div class="divider"></div>
-          <div class="text-center" style="font-weight: bold; font-size: 13px; margin: 5px 0;">PAYMENT RECEIPT</div>
+          <div class="title text-center">PAYMENT RECEIPT</div>
           <table>
             <tr>
-              <td class="label">Receipt No:</td>
+              <td class="label">Receipt No</td>
               <td class="value">${receipt.receiptNo}</td>
             </tr>
             <tr>
-              <td class="label">Date:</td>
+              <td class="label">Date</td>
               <td class="value">${new Date(receipt.paidOn).toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" })}</td>
             </tr>
             <tr>
-              <td class="label">Member ID:</td>
+              <td class="label">Member ID</td>
               <td class="value">${member.regNo}</td>
             </tr>
             <tr>
-              <td class="label">Name:</td>
+              <td class="label">Name</td>
               <td class="value">${member.name}</td>
             </tr>
             <tr>
-              <td class="label">Method:</td>
+              <td class="label">Method</td>
               <td class="value">${receipt.method}</td>
             </tr>
           </table>
@@ -465,14 +535,14 @@ function PaymentReceiptPanel({
             PAID: ₹${receipt.amount}
           </div>
           ${receipt.note ? `
-            <div style="font-size: 11px; margin: 10px 0;">
+            <div class="note-card">
               <strong>Note:</strong> ${receipt.note}
             </div>
           ` : ''}
           <div class="divider"></div>
           <div class="footer text-center">
-            <p>Thank you for training with us!</p>
-            <p>Please keep this receipt for your reference.</p>
+            <p style="margin: 0; font-weight: 600; color: #6b7280;">Thank you for training with us!</p>
+            <p style="margin: 2px 0 0 0;">Please keep this receipt for your reference.</p>
           </div>
           <script>
             window.onload = function() {

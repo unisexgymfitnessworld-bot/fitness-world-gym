@@ -25,7 +25,7 @@ import type { MemberInput, PaymentReceiptInput, PlanType } from "../types";
 
 export function Dashboard() {
   const { signOut } = useAuth();
-  const { members, attendance, paymentReceipts, renewalHistory, stats, loading, upsertMember, upsertMembers, suspendMember, renewMember, addVisit, addPaymentReceipt, markSmsSent } = useMembers();
+  const { members, attendance, paymentReceipts, renewalHistory, stats, loading, upsertMember, upsertMembers, suspendMember, deleteMember, renewMember, addVisit, addPaymentReceipt, markSmsSent } = useMembers();
   const trainer = useAppStore((state) => state.trainer);
   const filters = useAppStore((state) => state.filters);
   const selectedMemberId = useAppStore((state) => state.selectedMemberId);
@@ -38,6 +38,7 @@ export function Dashboard() {
   const setSmsMemberId = useAppStore((state) => state.setSmsMemberId);
   const pushToast = useAppStore((state) => state.pushToast);
   const [confirmingSuspendId, setConfirmingSuspendId] = useState<string | null>(null);
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [analysisRange, setAnalysisRange] = useState<AnalyticsRange>("2m");
@@ -56,7 +57,7 @@ export function Dashboard() {
 
   const baseFilteredMembers = useMemo(() => {
     return members.filter((member) => {
-      const statusMatch = filters.status === "All" || member.status === filters.status;
+      const statusMatch = filters.status === "All" ? member.status !== "Deleted" : member.status === filters.status;
       const goalMatch = filters.goal === "All Goals" || member.goal === filters.goal;
       const paymentMatch = filters.payment === "All Payments" || member.paymentStatus === filters.payment;
       const dueMatch =
@@ -115,6 +116,7 @@ export function Dashboard() {
   }, [members, filters.month]);
 
   const confirmingMember = members.find((member) => member.id === confirmingSuspendId) ?? null;
+  const confirmingDeleteMember = members.find((member) => member.id === confirmingDeleteId) ?? null;
 
   const selectedMember = members.find((member) => member.id === selectedMemberId) ?? null;
   const editingMember = members.find((member) => member.id === editingMemberId) ?? null;
@@ -619,6 +621,7 @@ export function Dashboard() {
             onEdit={setEditingMemberId}
             onSms={(memberId) => openSms(memberId)}
             onSuspend={setConfirmingSuspendId}
+            onDelete={setConfirmingDeleteId}
             isDbEmpty={members.length === 0}
             onAddClick={() => setEditingMemberId("new")}
             onClearFilters={() => {
@@ -654,6 +657,33 @@ export function Dashboard() {
           }
         }}
         onClose={() => setConfirmingSuspendId(null)}
+      />
+      <ConfirmModal
+        open={confirmingDeleteId !== null}
+        title="Delete Member"
+        message={`Are you sure you want to delete ${confirmingDeleteMember?.name ?? "this member"}? This will soft-delete the member and keep their history in the database. They can be viewed by selecting the "Deleted" status filter.`}
+        confirmText="Delete"
+        variant="danger"
+        onConfirm={async () => {
+          if (confirmingDeleteId) {
+            try {
+              await deleteMember(confirmingDeleteId);
+              pushToast({
+                title: "Member Deleted",
+                message: `${confirmingDeleteMember?.name ?? "Member"} has been soft-deleted successfully.`,
+                tone: "success",
+              });
+            } catch (error) {
+              pushToast({
+                title: "Error",
+                message: error instanceof Error ? error.message : "Unable to delete member",
+                tone: "error",
+              });
+            }
+            setConfirmingDeleteId(null);
+          }
+        }}
+        onClose={() => setConfirmingDeleteId(null)}
       />
       <SettingsModal open={isSettingsOpen} trainer={trainer} onClose={() => setIsSettingsOpen(false)} />
       <ReportExportModal

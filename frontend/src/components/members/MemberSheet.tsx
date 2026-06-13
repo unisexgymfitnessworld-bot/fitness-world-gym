@@ -485,7 +485,7 @@ export function MemberSheet({ open, member, onClose, onSave }: MemberSheetProps)
                 </div>
               </Section>
 
-              <Section title={isNewCouple ? "Member 1 Details" : "Personal"} delay={0.1}>
+              <Section title={isNewCouple ? "Member 1 Details" : "Bio Data"} delay={0.1}>
                 <div className="grid gap-3 md:grid-cols-2 lg:gap-4">
                   <Input label="Name" error={errors.name?.message} {...register("name")} />
                   <Input

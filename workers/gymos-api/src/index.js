@@ -8,7 +8,7 @@ const GOALS = new Set(["Weight Loss", "Weight Gain", "Muscle Gain", "General Fit
 const PLAN_TYPES = new Set(["1 Month", "3 Months", "6 Months", "1 Year", "Custom"]);
 const PAYMENT_STATUSES = new Set(["Paid", "Pending", "Partially Paid"]);
 const PAYMENT_METHODS = new Set(["Cash", "UPI", "Card", "Bank Transfer", "Other"]);
-const STATUS_VALUES = new Set(["Active", "Expired", "Suspended"]);
+const STATUS_VALUES = new Set(["Active", "Expired", "Suspended", "Deleted"]);
 const TRAINING_TYPES = new Set(["Personal", "General", "Couple"]);
 const DEFAULT_TRAINER_EMAILS = [
   "digimartrix26@gmail.com",
@@ -84,9 +84,75 @@ async function handleRequest(request, env) {
     return jsonResponse(request, env, { success: true, data: { message: "Logged out" } });
   }
 
+  if (path === "/whatsapp-gateway/status" && method === "GET") {
+    assertTrainer(authUser);
+    const settings = await getSystemSettings(env);
+    const waGatewayUrl = settings.whatsapp_gateway_url || env.WHATSAPP_GATEWAY_URL;
+    const waGatewayToken = settings.whatsapp_gateway_token || env.WHATSAPP_GATEWAY_TOKEN;
+    if (!waGatewayUrl) {
+      return jsonResponse(request, env, { success: false, error: "WhatsApp Gateway URL is not configured. Please check developer settings." }, 400);
+    }
+    try {
+      const response = await fetch(`${waGatewayUrl.replace(/\/$/, "")}/status`);
+      const data = await response.json();
+      return jsonResponse(request, env, { success: true, data, gatewayUrl: waGatewayUrl });
+    } catch (err) {
+      return jsonResponse(request, env, { success: false, error: "Unable to reach WhatsApp gateway service. Make sure it is running." }, 502);
+    }
+  }
+
+  if (path === "/whatsapp-gateway/reset" && method === "POST") {
+    assertTrainer(authUser);
+    const settings = await getSystemSettings(env);
+    const waGatewayUrl = settings.whatsapp_gateway_url || env.WHATSAPP_GATEWAY_URL;
+    const waGatewayToken = settings.whatsapp_gateway_token || env.WHATSAPP_GATEWAY_TOKEN;
+    if (!waGatewayUrl || !waGatewayToken) {
+      return jsonResponse(request, env, { success: false, error: "WhatsApp Gateway URL or Access Token is not configured." }, 400);
+    }
+    try {
+      const response = await fetch(`${waGatewayUrl.replace(/\/$/, "")}/reset`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${waGatewayToken}`
+        }
+      });
+      const data = await response.json();
+      return jsonResponse(request, env, { success: true, data });
+    } catch (err) {
+      return jsonResponse(request, env, { success: false, error: "Unable to reach WhatsApp gateway service to disconnect." }, 502);
+    }
+  }
+
   if (path === "/developer/diagnostics" && method === "GET") {
     assertDeveloper(authUser);
     return jsonResponse(request, env, { success: true, data: await developerDiagnostics(env) });
+  }
+
+  if (path === "/developer/settings" && method === "POST") {
+    assertDeveloper(authUser);
+    const body = await parseJsonBody(request);
+    await saveSystemSettings(env, body);
+    return jsonResponse(request, env, { success: true, data: { message: "Settings saved successfully" } });
+  }
+
+  if (path === "/developer/test-notification" && method === "POST") {
+    assertDeveloper(authUser);
+    const body = await parseJsonBody(request);
+    const type = requiredString(body.type, "notification type");
+    const phone = requiredString(body.phone, "phone number");
+    const message = requiredString(body.message, "test message");
+
+    let requestId;
+    if (type === "sms") {
+      requestId = await sendSms(env, phone, message);
+    } else if (type === "whatsapp") {
+      requestId = await sendWhatsApp(env, phone, message);
+    } else {
+      throw new ApiError(400, "INVALID_NOTIFICATION_TYPE", "Notification type must be sms or whatsapp");
+    }
+
+    logInfo("developer_test_notification", { type, phone, requestId });
+    return jsonResponse(request, env, { success: true, data: { requestId } });
   }
 
   if (path === "/developer/logs" && method === "GET") {
@@ -182,6 +248,10 @@ async function handleRequest(request, env) {
     }
 
     if (!action && method === "DELETE") {
+      return jsonResponse(request, env, { success: true, data: await deleteMember(env, authUser, memberId) });
+    }
+
+    if (action === "suspend" && method === "PATCH") {
       return jsonResponse(request, env, { success: true, data: await suspendMember(env, authUser, memberId) });
     }
 
@@ -245,23 +315,34 @@ async function handleRequest(request, env) {
     let sentSMS = false;
     let sentWA = false;
 
-    if (env.FAST2SMS_API_KEY) {
+    const settings = await getSystemSettings(env);
+    const fast2SmsKey = settings.fast2sms_api_key || env.FAST2SMS_API_KEY;
+    const waInstanceId = settings.whatsapp_instance_id || env.WHATSAPP_INSTANCE_ID;
+    const waToken = settings.whatsapp_token || env.WHATSAPP_TOKEN;
+    const waGatewayUrl = settings.whatsapp_gateway_url || env.WHATSAPP_GATEWAY_URL;
+    const waGatewayToken = settings.whatsapp_gateway_token || env.WHATSAPP_GATEWAY_TOKEN;
+
+    const smsEnabled = settings.sms_enabled !== "false";
+    const whatsappEnabled = settings.whatsapp_enabled !== "false";
+
+    if (fast2SmsKey && smsEnabled) {
       requestId = await sendSms(env, member.phone, body.message);
       sentSMS = true;
     }
+
     const isWhatsAppConfigured = Boolean(
-      (env.WHATSAPP_INSTANCE_ID && env.WHATSAPP_TOKEN) ||
-      (env.WHATSAPP_INSTANCE_ID === "self_hosted" && env.WHATSAPP_GATEWAY_URL)
+      (waInstanceId && waToken) ||
+      (waInstanceId === "self_hosted" && waGatewayUrl)
     );
 
-    if (isWhatsAppConfigured) {
+    if (isWhatsAppConfigured && whatsappEnabled) {
       const waId = await sendWhatsApp(env, member.phone, body.message);
-      if (!sentSMS) requestId = waId;
+      if (!sentSMS || requestId === "skipped_disabled") requestId = waId;
       sentWA = true;
     }
 
     if (!sentSMS && !sentWA) {
-      throw new ApiError(503, "NOTIFICATIONS_NOT_CONFIGURED", "Neither SMS nor WhatsApp is configured");
+      throw new ApiError(503, "NOTIFICATIONS_NOT_CONFIGURED", "Neither SMS nor WhatsApp is configured or enabled");
     }
 
     await markReminderSent(env, member.id);
@@ -281,6 +362,15 @@ async function handleRequest(request, env) {
 async function handleScheduled(controller, env) {
   const startedAt = new Date().toISOString();
   try {
+    if (controller.cron === "*/30 * * * *") {
+      const settings = await getSystemSettings(env);
+      if (settings.db_keep_alive_enabled === "true") {
+        await keepSupabaseAlive(env);
+        logInfo("scheduled_keep_alive_complete", { startedAt });
+      }
+      return;
+    }
+
     if (controller.cron === EXPIRY_CRON) {
       const expired = await runExpireStatus(env);
       logInfo("scheduled_expiry_complete", { startedAt, expired });
@@ -446,15 +536,27 @@ async function developerDiagnostics(env) {
     logWarn("developer_diagnostics_partial_failure", { message: error instanceof Error ? error.message : "Unknown error" });
   }
 
+  const settings = await getSystemSettings(env);
   const accounts = await listAllTrainerAccounts(env);
+
+  const fast2SmsKey = settings.fast2sms_api_key || env.FAST2SMS_API_KEY;
+  const waInstanceId = settings.whatsapp_instance_id || env.WHATSAPP_INSTANCE_ID;
+  const waToken = settings.whatsapp_token || env.WHATSAPP_TOKEN;
+  const waGatewayUrl = settings.whatsapp_gateway_url || env.WHATSAPP_GATEWAY_URL;
+  const waGatewayToken = settings.whatsapp_gateway_token || env.WHATSAPP_GATEWAY_TOKEN;
+
+  const smsEnabled = settings.sms_enabled !== "false";
+  const whatsappEnabled = settings.whatsapp_enabled !== "false";
+  const whatsAppConfigured = Boolean(
+    (waInstanceId && waToken) ||
+    (waInstanceId === "self_hosted" && waGatewayUrl)
+  );
+
   return {
     api: "ok",
     supabase,
-    smsConfigured: Boolean(env.FAST2SMS_API_KEY),
-    whatsAppConfigured: Boolean(
-      (env.WHATSAPP_INSTANCE_ID && env.WHATSAPP_TOKEN) ||
-      (env.WHATSAPP_INSTANCE_ID === "self_hosted" && env.WHATSAPP_GATEWAY_URL)
-    ),
+    smsConfigured: Boolean(fast2SmsKey) && smsEnabled,
+    whatsAppConfigured: whatsAppConfigured && whatsappEnabled,
     memberOwnershipReady,
     orphanMembers,
     expiredActiveMembers,
@@ -468,6 +570,19 @@ async function developerDiagnostics(env) {
     cron: {
       expiry: "00:00 IST daily",
       sms: "09:00 IST daily",
+    },
+    settings: {
+      sms_enabled: settings.sms_enabled ?? "true",
+      whatsapp_enabled: settings.whatsapp_enabled ?? "true",
+      whatsapp_provider: settings.whatsapp_provider ?? (env.WHATSAPP_INSTANCE_ID === "self_hosted" ? "self_hosted" : env.WHATSAPP_INSTANCE_ID ? "ultramsg" : "none"),
+      whatsapp_gateway_url: settings.whatsapp_gateway_url ?? (env.WHATSAPP_GATEWAY_URL ?? ""),
+      whatsapp_gateway_token: settings.whatsapp_gateway_token ?? (env.WHATSAPP_GATEWAY_TOKEN ?? ""),
+      whatsapp_instance_id: settings.whatsapp_instance_id ?? (env.WHATSAPP_INSTANCE_ID ?? ""),
+      whatsapp_token: settings.whatsapp_token ?? (env.WHATSAPP_TOKEN ?? ""),
+      fast2sms_api_key: settings.fast2sms_api_key ?? (env.FAST2SMS_API_KEY ?? ""),
+      db_keep_alive_enabled: settings.db_keep_alive_enabled ?? "false",
+      sms_auto_reminder_paused: settings.sms_auto_reminder_paused ?? "false",
+      whatsapp_auto_reminder_paused: settings.whatsapp_auto_reminder_paused ?? "false",
     },
     checkedAt: new Date().toISOString(),
   };
@@ -538,6 +653,7 @@ async function updateTrainerAccount(env, accountId, body, currentUser) {
   };
   if (input.email) {
     update.email = input.email;
+    update.email_confirm = true;
   }
   if (input.password) {
     update.password = input.password;
@@ -816,10 +932,15 @@ async function createPaymentReceipt(env, user, memberId, input) {
   });
   if (!memberRows[0]) throw new ApiError(404, "MEMBER_NOT_FOUND", "Member not found");
 
-  return {
+  const result = {
     receipt: mapPaymentReceipt(receipt),
     member: mapMember(memberRows[0]),
   };
+
+  // Automatically send receipt via WhatsApp
+  await sendReceiptWhatsApp(env, result.member, result.receipt);
+
+  return result;
 }
 
 async function renewMember(env, user, memberId, membershipStart, membershipDue, feesAmount, planType) {
@@ -846,7 +967,7 @@ async function renewMember(env, user, memberId, membershipStart, membershipDue, 
 
   // Automatically create a payment receipt for the renewal
   const receiptNo = generateReceiptNo(new Date(membershipStart));
-  await supabaseJson(env, "/payment_receipts?select=*", {
+  const receiptRows = await supabaseJson(env, "/payment_receipts?select=*", {
     method: "POST",
     headers: { Prefer: "return=representation" },
     body: JSON.stringify({
@@ -876,7 +997,20 @@ async function renewMember(env, user, memberId, membershipStart, membershipDue, 
     }),
   });
   if (!rows[0]) throw new ApiError(404, "MEMBER_NOT_FOUND", "Member not found");
-  return mapMember(rows[0]);
+
+  const updatedMember = mapMember(rows[0]);
+  const receipt = receiptRows && receiptRows[0] ? mapPaymentReceipt(receiptRows[0]) : {
+    receiptNo,
+    paidOn: membershipStart,
+    amount: feesAmount,
+    method: "Cash",
+    note: `Membership Renewal: ${newPlan} plan (${membershipStart} to ${membershipDue})`,
+  };
+
+  // Automatically send receipt via WhatsApp
+  await sendReceiptWhatsApp(env, updatedMember, receipt);
+
+  return updatedMember;
 }
 
 async function suspendMember(env, user, memberId) {
@@ -886,6 +1020,16 @@ async function suspendMember(env, user, memberId) {
     method: "PATCH",
     headers: { Prefer: "return=representation" },
     body: JSON.stringify({ status: nextStatus }),
+  });
+  if (!rows[0]) throw new ApiError(404, "MEMBER_NOT_FOUND", "Member not found");
+  return mapMember(rows[0]);
+}
+
+async function deleteMember(env, user, memberId) {
+  const rows = await supabaseJson(env, `/members?id=eq.${encodeURIComponent(memberId)}&owner_user_id=${ownerFilter(user)}&select=*`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({ status: "Deleted" }),
   });
   if (!rows[0]) throw new ApiError(404, "MEMBER_NOT_FOUND", "Member not found");
   return mapMember(rows[0]);
@@ -935,18 +1079,18 @@ async function getDashboardStats(env, user) {
   const monthStart = `${today.slice(0, 8)}01`;
 
   const [total, active, expired, pending, partiallyPaid, due, newThisMonth] = await Promise.all([
-    countRows(env, "members", [["owner_user_id", ownerFilter(user)]]),
+    countRows(env, "members", [["owner_user_id", ownerFilter(user)], ["status", "neq.Deleted"]]),
     countRows(env, "members", [["owner_user_id", ownerFilter(user)], ["status", "eq.Active"]]),
     countRows(env, "members", [["owner_user_id", ownerFilter(user)], ["status", "eq.Expired"]]),
-    countRows(env, "members", [["owner_user_id", ownerFilter(user)], ["payment_status", "eq.Pending"]]),
-    countRows(env, "members", [["owner_user_id", ownerFilter(user)], ["payment_status", "eq.Partially Paid"]]),
+    countRows(env, "members", [["owner_user_id", ownerFilter(user)], ["status", "neq.Deleted"], ["payment_status", "eq.Pending"]]),
+    countRows(env, "members", [["owner_user_id", ownerFilter(user)], ["status", "neq.Deleted"], ["payment_status", "eq.Partially Paid"]]),
     countRows(env, "members", [
       ["owner_user_id", ownerFilter(user)],
       ["status", "eq.Active"],
       ["membership_due", `gte.${today}`],
       ["membership_due", `lte.${weekEnd}`],
     ]),
-    countRows(env, "members", [["owner_user_id", ownerFilter(user)], ["created_at", `gte.${monthStart}`]]),
+    countRows(env, "members", [["owner_user_id", ownerFilter(user)], ["status", "neq.Deleted"], ["created_at", `gte.${monthStart}`]]),
   ]);
 
   return {
@@ -980,11 +1124,24 @@ function isMemberPlanLessThanOneMonth(member) {
 }
 
 async function runSmsReminder(env) {
-  const hasSms = Boolean(env.FAST2SMS_API_KEY);
+  const settings = await getSystemSettings(env);
+  const fast2SmsKey = settings.fast2sms_api_key || env.FAST2SMS_API_KEY;
+  const waInstanceId = settings.whatsapp_instance_id || env.WHATSAPP_INSTANCE_ID;
+  const waToken = settings.whatsapp_token || env.WHATSAPP_TOKEN;
+  const waGatewayUrl = settings.whatsapp_gateway_url || env.WHATSAPP_GATEWAY_URL;
+  const waGatewayToken = settings.whatsapp_gateway_token || env.WHATSAPP_GATEWAY_TOKEN;
+
+  const smsEnabled = settings.sms_enabled !== "false";
+  const whatsappEnabled = settings.whatsapp_enabled !== "false";
+
+  const smsAutoPaused = settings.sms_auto_reminder_paused === "true";
+  const whatsappAutoPaused = settings.whatsapp_auto_reminder_paused === "true";
+
+  const hasSms = Boolean(fast2SmsKey) && smsEnabled && !smsAutoPaused;
   const hasWhatsApp = Boolean(
-    (env.WHATSAPP_INSTANCE_ID && env.WHATSAPP_TOKEN) ||
-    (env.WHATSAPP_INSTANCE_ID === "self_hosted" && env.WHATSAPP_GATEWAY_URL)
-  );
+    (waInstanceId && waToken) ||
+    (waInstanceId === "self_hosted" && waGatewayUrl)
+  ) && whatsappEnabled && !whatsappAutoPaused;
 
   let sent = 0;
 
@@ -1091,7 +1248,13 @@ async function keepSupabaseAlive(env) {
 }
 
 async function sendSms(env, phone, message) {
-  if (!env.FAST2SMS_API_KEY) {
+  const settings = await getSystemSettings(env);
+  if (settings.sms_enabled === "false") {
+    logInfo("sms_disabled_skipping", { phone });
+    return "skipped_disabled";
+  }
+  const fast2SmsKey = settings.fast2sms_api_key || env.FAST2SMS_API_KEY;
+  if (!fast2SmsKey) {
     throw new ApiError(503, "SMS_NOT_CONFIGURED", "Fast2SMS API key is not configured");
   }
 
@@ -1132,19 +1295,32 @@ async function sendSms(env, phone, message) {
 }
 
 async function sendWhatsApp(env, phone, message) {
-  const isSelfHosted = env.WHATSAPP_INSTANCE_ID === "self_hosted";
+  const settings = await getSystemSettings(env);
+  if (settings.whatsapp_enabled === "false") {
+    logInfo("whatsapp_disabled_skipping", { phone });
+    return "skipped_disabled";
+  }
+  
+  const provider = settings.whatsapp_provider || (env.WHATSAPP_INSTANCE_ID === "self_hosted" ? "self_hosted" : env.WHATSAPP_INSTANCE_ID ? "ultramsg" : "none");
+  if (provider === "none") {
+    throw new ApiError(503, "WHATSAPP_NOT_CONFIGURED", "WhatsApp alerts are disabled or not configured");
+  }
+  
   const formattedPhone = phone.startsWith("91") && phone.length === 12 ? phone : `91${phone}`;
 
-  if (isSelfHosted) {
-    if (!env.WHATSAPP_GATEWAY_URL || !env.WHATSAPP_GATEWAY_TOKEN) {
+  if (provider === "self_hosted") {
+    const waGatewayUrl = settings.whatsapp_gateway_url || env.WHATSAPP_GATEWAY_URL;
+    const waGatewayToken = settings.whatsapp_gateway_token || env.WHATSAPP_GATEWAY_TOKEN;
+    
+    if (!waGatewayUrl || !waGatewayToken) {
       throw new ApiError(503, "WHATSAPP_NOT_CONFIGURED", "Self-hosted WhatsApp URL or Token is not configured");
     }
 
-    const response = await fetch(`${env.WHATSAPP_GATEWAY_URL.replace(/\/$/, "")}/send`, {
+    const response = await fetch(`${waGatewayUrl.replace(/\/$/, "")}/send`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${env.WHATSAPP_GATEWAY_TOKEN}`
+        "Authorization": `Bearer ${waGatewayToken}`
       },
       body: JSON.stringify({
         to: formattedPhone,
@@ -1162,18 +1338,20 @@ async function sendWhatsApp(env, phone, message) {
   }
 
   // Fallback to UltraMsg
-  if (!env.WHATSAPP_INSTANCE_ID || !env.WHATSAPP_TOKEN) {
+  const waInstanceId = settings.whatsapp_instance_id || env.WHATSAPP_INSTANCE_ID;
+  const waToken = settings.whatsapp_token || env.WHATSAPP_TOKEN;
+  if (!waInstanceId || !waToken) {
     throw new ApiError(503, "WHATSAPP_NOT_CONFIGURED", "WhatsApp instance ID or token is not configured");
   }
 
   const params = new URLSearchParams({
-    token: env.WHATSAPP_TOKEN,
+    token: waToken,
     to: formattedPhone,
     body: message,
     priority: "10"
   });
 
-  const response = await fetch(`https://api.ultramsg.com/${env.WHATSAPP_INSTANCE_ID}/messages/chat`, {
+  const response = await fetch(`https://api.ultramsg.com/${waInstanceId}/messages/chat`, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded"
@@ -1192,6 +1370,54 @@ async function sendWhatsApp(env, phone, message) {
 
 function createReminderText(member) {
   return `Hi ${member.name}, your Fitness World membership expires in 3 days on ${member.membershipDue}. Please renew to continue. - Fitness World`;
+}
+
+async function sendReceiptWhatsApp(env, member, receipt) {
+  try {
+    const amount = receipt.amount;
+    const receiptNo = receipt.receiptNo;
+    const dateObj = new Date(receipt.paidOn);
+    const dateFormatted = !isNaN(dateObj.getTime())
+      ? dateObj.toLocaleDateString("en-IN", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric"
+        })
+      : receipt.paidOn;
+
+    const method = receipt.method;
+    const note = receipt.note || "";
+    const balance = member.balanceAmount ?? 0;
+    
+    const dueObj = member.membershipDue ? new Date(member.membershipDue) : null;
+    const dueFormatted = dueObj && !isNaN(dueObj.getTime())
+      ? dueObj.toLocaleDateString("en-IN", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric"
+        })
+      : member.membershipDue || "N/A";
+
+    const message = `💪 *FITNESS WORLD* 🧾
+Unisex Gym & Fitness Center
+
+Dear *${member.name}*,
+Thank you for your payment! Here is your payment receipt:
+
+🧾 *Receipt No:* ${receiptNo}
+📅 *Date:* ${dateFormatted}
+💰 *Amount Paid:* ₹${amount}
+💳 *Method:* ${method}
+📅 *Membership Due:* ${dueFormatted}
+💵 *Pending Balance:* ₹${balance}
+${note ? `📝 *Note:* ${note}\n` : ""}
+Thank you for training with us! Keep up the hard work! 💪🔥`;
+
+    await sendWhatsApp(env, member.phone, message);
+    logInfo("receipt_whatsapp_sent", { memberId: member.id, receiptNo });
+  } catch (error) {
+    logError("receipt_whatsapp_send_failed", error, { memberId: member?.id, receiptNo: receipt?.receiptNo });
+  }
 }
 
 async function countRows(env, table, filters = []) {
@@ -1760,4 +1986,88 @@ function logError(event, error, details = {}) {
     }),
   );
   addLog("error", event, message, details);
+}
+
+async function getSystemSettings(env) {
+  try {
+    const rows = await supabaseJson(env, "/system_settings?select=*");
+    const settings = {};
+    if (rows && Array.isArray(rows)) {
+      for (const row of rows) {
+        settings[row.key] = row.value;
+      }
+      return settings;
+    }
+  } catch (error) {
+    logWarn("get_system_settings_failed_trying_fallback", { message: error instanceof Error ? error.message : "Unknown error" });
+  }
+
+  // Fallback to whatsapp_sessions table
+  try {
+    const rows = await supabaseJson(env, "/whatsapp_sessions?key=eq.system_config_settings&select=value");
+    if (rows && rows[0] && rows[0].value) {
+      return typeof rows[0].value === 'string' ? JSON.parse(rows[0].value) : rows[0].value;
+    }
+  } catch (err) {
+    logError("get_system_settings_fallback_failed", err);
+  }
+  return {};
+}
+
+async function saveSystemSettings(env, settings) {
+  const keys = [
+    "sms_enabled",
+    "whatsapp_enabled",
+    "whatsapp_provider",
+    "whatsapp_gateway_url",
+    "whatsapp_gateway_token",
+    "whatsapp_instance_id",
+    "whatsapp_token",
+    "fast2sms_api_key",
+    "db_keep_alive_enabled",
+    "sms_auto_reminder_paused",
+    "whatsapp_auto_reminder_paused",
+  ];
+
+  let useFallback = false;
+  try {
+    // Probe if system_settings is accessible
+    await supabaseJson(env, "/system_settings?select=key&limit=1");
+  } catch (e) {
+    useFallback = true;
+  }
+
+  if (!useFallback) {
+    for (const key of keys) {
+      if (settings[key] !== undefined) {
+        await supabaseJson(env, `/system_settings?key=eq.${encodeURIComponent(key)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ key, value: String(settings[key]) })
+        });
+      }
+    }
+    return;
+  }
+
+  // Fallback: save to whatsapp_sessions table under 'system_config_settings'
+  const currentSettings = await getSystemSettings(env);
+  const updatedSettings = { ...currentSettings };
+  for (const key of keys) {
+    if (settings[key] !== undefined) {
+      updatedSettings[key] = String(settings[key]);
+    }
+  }
+
+  await supabaseJson(env, "/whatsapp_sessions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Prefer": "resolution=merge-duplicates"
+    },
+    body: JSON.stringify({
+      key: "system_config_settings",
+      value: updatedSettings
+    })
+  });
 }

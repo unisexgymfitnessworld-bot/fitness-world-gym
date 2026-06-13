@@ -9,6 +9,7 @@ import { supabase, isSupabaseConfigured } from "../../lib/supabase";
 import { initials } from "../../lib/utils";
 import { passwordChangeSchema } from "../../lib/validations";
 import { compressImage } from "../../lib/imageCompression";
+import { api } from "../../lib/api";
 import type { Trainer } from "../../types";
 
 interface SettingsModalProps {
@@ -22,12 +23,65 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
   const pushToast = useAppStore((state) => state.pushToast);
 
   const [name, setName] = useState(trainer.name);
+  const [email, setEmail] = useState(trainer.email);
   const [avatar, setAvatar] = useState(trainer.avatar ?? "");
   const [saving, setSaving] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
+
+  // WhatsApp Gateway states
+  const [gatewayStatus, setGatewayStatus] = useState<string>("checking");
+  const [gatewayUrl, setGatewayUrl] = useState<string>("");
+  const [loadingGateway, setLoadingGateway] = useState<boolean>(false);
+  const [resettingGateway, setResettingGateway] = useState<boolean>(false);
+  const [iframeKey, setIframeKey] = useState<number>(0);
+
+  async function fetchGatewayStatus() {
+    setLoadingGateway(true);
+    try {
+      const res = await api.getWhatsAppGatewayStatus();
+      if (res && res.status) {
+        setGatewayStatus(res.status);
+      }
+      if (res && res.gatewayUrl) {
+        setGatewayUrl(res.gatewayUrl);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch WhatsApp gateway status:", err);
+      setGatewayStatus("unavailable");
+    } finally {
+      setLoadingGateway(false);
+    }
+  }
+
+  async function handleResetGateway() {
+    if (!window.confirm("Are you sure you want to disconnect the current WhatsApp session? This will force a new QR code scan.")) {
+      return;
+    }
+    setResettingGateway(true);
+    try {
+      await api.resetWhatsAppGateway();
+      pushToast({
+        title: "Session Disconnected",
+        message: "WhatsApp session cleared. Scan the new QR code to reconnect.",
+        tone: "success",
+      });
+      setIframeKey(prev => prev + 1);
+      setTimeout(() => {
+        void fetchGatewayStatus();
+      }, 1000);
+    } catch (err) {
+      pushToast({
+        title: "Disconnect Failed",
+        message: err instanceof Error ? err.message : "Unable to reset WhatsApp gateway.",
+        tone: "error",
+      });
+    } finally {
+      setResettingGateway(false);
+    }
+  }
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -52,11 +106,14 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
   // Sync state with prop updates
   useEffect(() => {
     setName(trainer.name);
+    setEmail(trainer.email);
     setAvatar(trainer.avatar ?? "");
   }, [trainer]);
 
   useEffect(() => {
-    if (!open) {
+    if (open) {
+      void fetchGatewayStatus();
+    } else {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
@@ -72,16 +129,32 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
       });
       return;
     }
+    if (!email.trim() || !email.includes("@")) {
+      pushToast({
+        title: "Validation Error",
+        message: "Please enter a valid email address.",
+        tone: "error",
+      });
+      return;
+    }
 
     setSaving(true);
     try {
+      let emailChangeTriggered = false;
       if (isSupabaseConfigured && supabase) {
-        const { error } = await supabase.auth.updateUser({
+        const updatePayload: any = {
           data: {
             name: name.trim(),
             avatar: avatar || null,
           },
-        });
+        };
+
+        if (email.trim().toLowerCase() !== trainer.email.toLowerCase()) {
+          updatePayload.email = email.trim().toLowerCase();
+          emailChangeTriggered = true;
+        }
+
+        const { error } = await supabase.auth.updateUser(updatePayload);
         if (error) {
           throw new Error(error.message);
         }
@@ -90,12 +163,15 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
       setTrainer({
         ...trainer,
         name: name.trim(),
+        email: email.trim().toLowerCase(),
         avatar: avatar || undefined,
       });
 
       pushToast({
         title: "Settings Saved",
-        message: "Your profile details have been successfully updated.",
+        message: emailChangeTriggered 
+          ? "Profile updated. Please verify the confirmation link sent to your new email."
+          : "Your profile details have been successfully updated.",
         tone: "success",
       });
       onClose();
@@ -259,6 +335,16 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
               disabled={saving}
               placeholder="e.g. Trainer Name"
             />
+            <Input
+              label="Email Address"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={saving}
+              placeholder="trainer@fitnessworld.in"
+            />
+            <p className="text-[11px] font-semibold text-text-secondary leading-normal italic px-1">
+              Note: Changing your email will send a verification link to confirm the new address before it updates.
+            </p>
             <Button
               className="mt-1 w-full bg-gradient-to-r from-brand-primary to-[#F0447D] text-white font-bold shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200"
               disabled={saving}
@@ -315,6 +401,77 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
               Change Password
             </Button>
           </div>
+        </section>
+
+        {/* WhatsApp Gateway Session Card */}
+        <section className="rounded-xl bg-surface-raised/80 p-5 border border-border-default/60 grid gap-4 hover:border-brand-primary/20 transition-all duration-300 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
+          <h3 className="text-[13px] font-black uppercase tracking-wider text-text-muted flex items-center gap-2">
+            <span className="p-1 rounded-md bg-brand-primary/10 text-brand-primary">
+              <Camera size={14} />
+            </span>
+            <span>WhatsApp Device Connection</span>
+          </h3>
+
+          <p className="text-[12px] text-text-secondary leading-relaxed font-semibold">
+            Scan the QR code below to connect your gym's WhatsApp. Connected devices can automatically dispatch renewal reminders.
+          </p>
+
+          {gatewayStatus === "unavailable" ? (
+            <div className="rounded-lg border border-red-200 bg-red-50/50 p-4 text-center text-status-expired text-[12px] font-bold">
+              WhatsApp Gateway URL is not configured or not running.
+            </div>
+          ) : (
+            <div className="grid gap-4 items-center justify-center text-center">
+              {gatewayUrl && (
+                <div className="relative border border-border-default/80 rounded-xl overflow-hidden bg-white shadow-sm mx-auto" style={{ width: '280px', height: '320px' }}>
+                  <iframe
+                    key={iframeKey}
+                    src={gatewayUrl}
+                    title="WhatsApp QR Scanner"
+                    className="w-full h-full border-0"
+                    sandbox="allow-scripts allow-same-origin"
+                  />
+                </div>
+              )}
+
+              <div className="flex flex-col items-center gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-[12px] font-bold text-text-secondary">Gateway Status:</span>
+                  <span className={`text-[11px] font-black uppercase tracking-wider border rounded-full px-2 py-0.5 ${
+                    gatewayStatus === "connected" 
+                      ? "bg-green-100 border-green-200 text-status-active" 
+                      : "bg-amber-100 border-amber-200 text-status-active"
+                  }`}>
+                    {gatewayStatus}
+                  </span>
+                </div>
+
+                <div className="flex gap-2 mt-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="h-8 text-[11px] font-black cursor-pointer"
+                    onClick={() => {
+                      setIframeKey(prev => prev + 1);
+                      void fetchGatewayStatus();
+                    }}
+                    disabled={loadingGateway || resettingGateway}
+                  >
+                    Refresh Status
+                  </Button>
+                  
+                  <Button
+                    type="button"
+                    className="h-8 text-[11px] font-black bg-status-expired text-white hover:bg-status-expired/90 cursor-pointer"
+                    onClick={handleResetGateway}
+                    disabled={loadingGateway || resettingGateway}
+                  >
+                    {resettingGateway ? "Disconnecting..." : "Disconnect WhatsApp"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </section>
 
         {/* Notification Gateways Configuration status */}

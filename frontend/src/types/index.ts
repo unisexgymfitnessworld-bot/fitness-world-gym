@@ -3,7 +3,7 @@ export const goalOptions = ["Weight Loss", "Weight Gain", "Muscle Gain", "Genera
 export const planOptions = ["1 Month", "3 Months", "6 Months", "1 Year", "Custom"] as const;
 export const paymentOptions = ["Paid", "Pending", "Partially Paid"] as const;
 export const paymentMethodOptions = ["Cash", "UPI", "Card", "Bank Transfer", "Other"] as const;
-export const statusOptions = ["Active", "Expired", "Suspended"] as const;
+export const statusOptions = ["Active", "Expired", "Suspended", "Deleted"] as const;
 export const trainingTypeOptions = ["Personal", "General", "Couple"] as const;
 
 export type Gender = (typeof genderOptions)[number];
@@ -67,6 +67,20 @@ export interface TrainerAccount {
   currentUser: boolean;
 }
 
+export interface SystemConfigSettings {
+  sms_enabled: string;
+  whatsapp_enabled: string;
+  whatsapp_provider: "none" | "ultramsg" | "self_hosted";
+  whatsapp_gateway_url: string;
+  whatsapp_gateway_token: string;
+  whatsapp_instance_id: string;
+  whatsapp_token: string;
+  fast2sms_api_key: string;
+  db_keep_alive_enabled: string;
+  sms_auto_reminder_paused: string;
+  whatsapp_auto_reminder_paused: string;
+}
+
 export interface DeveloperDiagnostics {
   api: "ok";
   supabase: "ok" | "error";
@@ -87,6 +101,7 @@ export interface DeveloperDiagnostics {
   checkedAt: string;
   totalMembers?: number;
   totalAttendance?: number;
+  settings?: SystemConfigSettings;
 }
 
 export interface LogEntry {
