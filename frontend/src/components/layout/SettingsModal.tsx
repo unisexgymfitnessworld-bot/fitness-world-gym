@@ -450,9 +450,21 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
                   <span className={`text-[11px] font-black uppercase tracking-wider border rounded-full px-2 py-0.5 ${
                     gatewayStatus === "connected" 
                       ? "bg-green-100 border-green-200 text-status-active" 
-                      : "bg-amber-100 border-amber-200 text-status-active"
+                      : gatewayStatus === "qr_ready"
+                      ? "bg-blue-100 border-blue-200 text-blue-600"
+                      : "bg-amber-100 border-amber-200 text-amber-600"
                   }`}>
-                    {gatewayStatus}
+                    {gatewayStatus === "connected"
+                      ? "Connected"
+                      : gatewayStatus === "qr_ready"
+                      ? "Ready to Link"
+                      : gatewayStatus === "connecting"
+                      ? "Connecting..."
+                      : gatewayStatus === "disconnected"
+                      ? "Disconnected"
+                      : gatewayStatus === "unavailable"
+                      ? "Offline"
+                      : gatewayStatus}
                   </span>
                 </div>
 
@@ -507,11 +519,8 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
                 </span>
               </div>
               <p className="text-[12px] text-text-secondary leading-relaxed font-semibold mt-1">
-                Automated SMS alerts sent 3 days before renewal. Requires a Fast2SMS API Key and wallet balance.
+                Automated SMS alerts sent 3 days before renewal.
               </p>
-              <div className="mt-2 border-t border-border-default/60 pt-2 text-[11px] text-text-muted font-semibold">
-                To configure, set the <code>FAST2SMS_API_KEY</code> secret in the Cloudflare Worker.
-              </div>
             </div>
 
             {/* UltraMsg WhatsApp */}
@@ -527,11 +536,8 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
                 </span>
               </div>
               <p className="text-[12px] text-text-secondary leading-relaxed font-semibold mt-1">
-                Automated WhatsApp reminders sent by scanning a QR Code. Flat monthly fee, unlimited messages.
+                Automated WhatsApp reminders sent 3 days before renewal and on the due date.
               </p>
-              <div className="mt-2 border-t border-border-default/60 pt-2 text-[11px] text-text-muted font-semibold">
-                To configure, set <code>WHATSAPP_INSTANCE_ID</code> & <code>WHATSAPP_TOKEN</code> secrets.
-              </div>
             </div>
           </div>
         </section>

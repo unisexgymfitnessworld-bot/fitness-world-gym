@@ -394,52 +394,52 @@ app.get("/", async (req, res) => {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>GymOS WhatsApp Gateway</title>
+          <title>Link GymOS WhatsApp</title>
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <style>
             body {
               font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-              background: #121214;
-              color: #e1e1e6;
+              background: transparent;
+              color: #334155;
               text-align: center;
               margin: 0;
-              padding: 12px;
+              padding: 8px;
               display: flex;
+              flex-direction: column;
               align-items: center;
               justify-content: center;
               min-height: 100vh;
               box-sizing: border-box;
+              overflow: hidden;
             }
-            .card {
-              background: #202024;
-              border-radius: 12px;
-              padding: 24px 16px;
+            .container {
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
               width: 100%;
-              max-width: 280px;
-              box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-              border: 1px solid #323238;
-              box-sizing: border-box;
             }
-            h1 { font-size: 18px; margin: 0 0 4px 0; font-weight: 800; color: #fff; }
-            p { font-size: 13px; margin: 4px 0; color: #a8a8b3; line-height: 1.4; }
+            h1 { font-size: 14px; margin: 0 0 2px 0; font-weight: 800; color: #0f172a; }
+            p { font-size: 10px; margin: 1px 0; color: #64748b; line-height: 1.3; }
             .status-badge {
-              background: #04d361;
-              color: #121214;
-              padding: 6px 12px;
+              background: #e6fcf5;
+              color: #0ca678;
+              border: 1px solid #c3fae8;
+              padding: 4px 10px;
               border-radius: 20px;
               font-weight: 800;
-              font-size: 12px;
+              font-size: 10px;
               display: inline-block;
-              margin: 16px 0;
+              margin: 8px 0;
             }
           </style>
         </head>
         <body>
-          <div class="card">
+          <div class="container">
             <h1>Fitness World</h1>
-            <p>WhatsApp Gateway Service</p>
+            <p>WhatsApp Dispatch Gateway</p>
             <div class="status-badge">🟢 Connected & Active</div>
-            <p style="color: #a8a8b3; font-size: 11px;">Your gym phone is successfully linked. You can close this tab now.</p>
+            <p style="color: #64748b; font-size: 9px;">The linked device is ready to send notifications.</p>
           </div>
         </body>
       </html>
@@ -459,48 +459,50 @@ app.get("/", async (req, res) => {
             <style>
               body {
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                background: #121214;
-                color: #e1e1e6;
+                background: transparent;
+                color: #334155;
                 text-align: center;
                 margin: 0;
-                padding: 12px;
+                padding: 8px;
                 display: flex;
+                flex-direction: column;
                 align-items: center;
                 justify-content: center;
                 min-height: 100vh;
                 box-sizing: border-box;
+                overflow: hidden;
               }
               .card {
-                background: #202024;
-                border-radius: 12px;
-                padding: 20px 16px;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
                 width: 100%;
-                max-width: 280px;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-                border: 1px solid #323238;
-                box-sizing: border-box;
               }
-              h1 { font-size: 18px; margin: 0 0 4px 0; font-weight: 800; color: #fff; }
-              p { font-size: 12px; margin: 4px 0; color: #a8a8b3; line-height: 1.4; }
+              h1 { font-size: 14px; margin: 0 0 2px 0; font-weight: 800; color: #0f172a; }
+              p { font-size: 10px; margin: 1px 0; color: #64748b; line-height: 1.3; }
               img {
                 background: white;
-                padding: 10px;
-                border-radius: 8px;
-                margin: 12px auto;
+                padding: 6px;
+                border-radius: 6px;
+                margin: 6px auto;
                 display: block;
-                max-width: 160px;
+                max-width: 130px;
+                width: 100%;
                 height: auto;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+                border: 1px solid #e2e8f0;
               }
-              .retry-info { color: #8257e5; font-size: 10px; margin-top: 8px; font-weight: bold; }
+              .retry-info { color: #8257e5; font-size: 9px; margin-top: 4px; font-weight: bold; }
             </style>
           </head>
           <body>
             <div class="card">
-              <h1>Link GymOS</h1>
+              <h1>Link GymOS WhatsApp</h1>
               <p>Scan this QR code with your gym's WhatsApp application:</p>
               <img src="${qrImageBase64}" alt="WhatsApp QR Code" />
-              <p style="color: #a8a8b3; font-size: 11px; font-weight: 500;">Settings > Linked Devices > Link a Device.</p>
-              <p class="retry-info">QR Code updates every 10 seconds.</p>
+              <p style="color: #64748b; font-size: 9px; font-weight: 500;">Open WhatsApp > Settings > Linked Devices > Link a Device.</p>
+              <p class="retry-info">QR attempt ${qrRetries}/${MAX_QR_RETRIES} — Refreshing page every 10 seconds.</p>
             </div>
           </body>
         </html>
@@ -520,48 +522,46 @@ app.get("/", async (req, res) => {
         <style>
           body {
             font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-            background: #121214;
-            color: #e1e1e6;
+            background: transparent;
+            color: #334155;
             text-align: center;
             margin: 0;
-            padding: 12px;
+            padding: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
             min-height: 100vh;
             box-sizing: border-box;
+            overflow: hidden;
           }
           .card {
-            background: #202024;
-            border-radius: 12px;
-            padding: 24px 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
             width: 100%;
-            max-width: 280px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            border: 1px solid #323238;
-            box-sizing: border-box;
           }
           .spinner {
             display: inline-block;
-            width: 32px;
-            height: 32px;
-            border: 3px solid #323238;
+            width: 28px;
+            height: 28px;
+            border: 3px solid #e2e8f0;
             border-top: 3px solid #8257e5;
             border-radius: 50%;
             animation: spin 1s linear infinite;
-            margin-bottom: 16px;
+            margin-bottom: 12px;
           }
           @keyframes spin { to { transform: rotate(360deg); } }
-          h1 { font-size: 18px; margin: 0 0 6px 0; font-weight: 800; color: #fff; }
-          p { font-size: 12px; margin: 4px 0; color: #a8a8b3; }
+          h1 { font-size: 14px; margin: 0 0 2px 0; font-weight: 800; color: #0f172a; }
+          p { font-size: 10px; margin: 1px 0; color: #64748b; }
         </style>
       </head>
       <body>
         <div class="card">
           <div class="spinner"></div>
           <h1>Initializing Service...</h1>
-          <p>Connecting to WhatsApp. Please wait...</p>
-          <p style="color: #8257e5; font-size: 11px; margin-top: 8px; font-weight: bold;">Status: ${connectionStatus}</p>
+          <p>Connecting to WhatsApp servers. Please wait...</p>
+          <p style="color: #8257e5; font-size: 9px; margin-top: 4px; font-weight: bold;">Status: ${connectionStatus}</p>
         </div>
       </body>
     </html>
