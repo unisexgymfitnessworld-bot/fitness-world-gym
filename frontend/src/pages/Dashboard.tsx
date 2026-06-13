@@ -232,7 +232,7 @@ export function Dashboard() {
     } catch (error) {
       pushToast({
         title: "SMS failed",
-        message: error instanceof Error ? error.message : "Fast2SMS API failed to send SMS",
+        message: error instanceof Error ? error.message : "SMS text message could not be sent",
         tone: "error",
       });
       throw error;
@@ -661,7 +661,7 @@ export function Dashboard() {
       <ConfirmModal
         open={confirmingDeleteId !== null}
         title="Delete Member"
-        message={`Are you sure you want to delete ${confirmingDeleteMember?.name ?? "this member"}? This will soft-delete the member and keep their history in the database. They can be viewed by selecting the "Deleted" status filter.`}
+        message={`Are you sure you want to delete ${confirmingDeleteMember?.name ?? "this member"}? This will soft-delete the member and keep their history in the system. They can be viewed by selecting the "Deleted" status filter.`}
         confirmText="Delete"
         variant="danger"
         onConfirm={async () => {
