@@ -114,7 +114,7 @@ async function deleteSessionFromDb(key) {
 async function clearDbSession() {
   if (!useDbSession) return;
   try {
-    const url = `${SUPABASE_URL}/rest/v1/whatsapp_sessions`;
+    const url = `${SUPABASE_URL}/rest/v1/whatsapp_sessions?key=neq.system_config_settings`;
     const response = await fetch(url, {
       method: "DELETE",
       headers: {
@@ -207,11 +207,17 @@ async function startWhatsApp() {
     ? await useSupabaseAuthState()
     : await useMultiFileAuthState(AUTH_DIR);
 
-  // Always dynamically fetch the latest WhatsApp Web version for compatibility
+  // Always dynamically fetch the latest WhatsApp Web version for compatibility (with a 5s timeout)
   let version;
   try {
-    const { version: latestVersion, isLatest } =
-      await fetchLatestWaWebVersion({});
+    const versionPromise = fetchLatestWaWebVersion({});
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Timeout")), 5000)
+    );
+    const { version: latestVersion, isLatest } = await Promise.race([
+      versionPromise,
+      timeoutPromise,
+    ]);
     console.log(
       `[gateway] Using WA Web version: ${latestVersion.join(".")}, isLatest: ${isLatest}`
     );
@@ -249,8 +255,15 @@ async function startWhatsApp() {
         console.log(
           `[gateway] QR code expired ${MAX_QR_RETRIES} times. Clearing auth and restarting...`
         );
-        sock?.end(undefined);
-        sock = null;
+        if (sock) {
+          try {
+            sock.ev.removeAllListeners();
+          } catch (e) {}
+          try {
+            sock.end(undefined);
+          } catch (e) {}
+          sock = null;
+        }
         clearAuthDir();
         setTimeout(startWhatsApp, 3000);
         return;
@@ -468,7 +481,12 @@ app.post("/reset", verifyToken, async (req, res) => {
   console.log("[gateway] Reset requested. Clearing auth and restarting...");
   try {
     if (sock) {
-      sock.end(undefined);
+      try {
+        sock.ev.removeAllListeners();
+      } catch (e) {}
+      try {
+        sock.end(undefined);
+      } catch (e) {}
       sock = null;
     }
     clearAuthDir();
