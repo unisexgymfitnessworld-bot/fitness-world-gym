@@ -37,6 +37,7 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
   const [loadingGateway, setLoadingGateway] = useState<boolean>(false);
   const [resettingGateway, setResettingGateway] = useState<boolean>(false);
   const [iframeKey, setIframeKey] = useState<number>(0);
+  const [qrZoom, setQrZoom] = useState<number>(0.85);
 
   async function fetchGatewayStatus() {
     setLoadingGateway(true);
@@ -433,20 +434,64 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
           ) : (
             <div className="grid gap-4 items-center justify-center text-center">
               {gatewayUrl && (
-                <div className="relative border border-border-default/80 rounded-xl overflow-hidden bg-white shadow-sm mx-auto" style={{ width: '300px', height: '350px' }}>
-                  <iframe
-                    key={iframeKey}
-                    src={gatewayUrl}
-                    title="WhatsApp QR Scanner"
-                    className="border-0"
-                    style={{
-                      width: '118%',
-                      height: '118%',
-                      transform: 'scale(0.85)',
-                      transformOrigin: 'top left',
-                    }}
-                    sandbox="allow-scripts allow-same-origin"
-                  />
+                <div className="flex flex-col items-center">
+                  <div className="relative border border-border-default/80 rounded-xl overflow-hidden bg-white shadow-sm mx-auto mb-2" style={{ width: '300px', height: '350px' }}>
+                    <iframe
+                      key={iframeKey}
+                      src={gatewayUrl}
+                      title="WhatsApp QR Scanner"
+                      className="border-0"
+                      style={{
+                        width: `${100 / qrZoom}%`,
+                        height: `${100 / qrZoom}%`,
+                        transform: `scale(${qrZoom})`,
+                        transformOrigin: 'top left',
+                      }}
+                      sandbox="allow-scripts allow-same-origin"
+                    />
+                  </div>
+                  <div className="flex flex-col items-center gap-1.5 mb-3 w-full max-w-[280px]">
+                    <div className="flex items-center justify-between w-full text-[11px] font-bold text-text-secondary">
+                      <span>Zoom / Adjust View:</span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setQrZoom(prev => Math.max(0.5, Number((prev - 0.05).toFixed(2))))}
+                          className="w-5 h-5 flex items-center justify-center rounded border border-border-default bg-brand-white hover:bg-surface-raised active:bg-border-default transition-all font-black cursor-pointer"
+                          title="Zoom Out"
+                        >
+                          －
+                        </button>
+                        <span className="min-w-[28px] text-center font-extrabold text-text-primary text-[10px]">
+                          {Math.round(qrZoom * 100)}%
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setQrZoom(prev => Math.min(1.5, Number((prev + 0.05).toFixed(2))))}
+                          className="w-5 h-5 flex items-center justify-center rounded border border-border-default bg-brand-white hover:bg-surface-raised active:bg-border-default transition-all font-black cursor-pointer"
+                          title="Zoom In"
+                        >
+                          ＋
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setQrZoom(0.85)}
+                          className="px-1.5 py-0.5 rounded border border-border-default bg-brand-white hover:bg-surface-raised active:bg-border-default text-[9px] font-bold text-text-muted hover:text-text-primary transition-all ml-1 cursor-pointer"
+                        >
+                          Reset
+                        </button>
+                      </div>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.5"
+                      max="1.5"
+                      step="0.05"
+                      value={qrZoom}
+                      onChange={(e) => setQrZoom(Number(e.target.value))}
+                      className="w-full h-1 bg-border-default rounded-lg appearance-none cursor-pointer accent-brand-primary"
+                    />
+                  </div>
                 </div>
               )}
 
