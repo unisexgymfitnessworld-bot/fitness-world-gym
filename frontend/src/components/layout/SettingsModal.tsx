@@ -438,7 +438,13 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
                     key={iframeKey}
                     src={gatewayUrl}
                     title="WhatsApp QR Scanner"
-                    className="w-full h-full border-0"
+                    className="border-0"
+                    style={{
+                      width: '118%',
+                      height: '118%',
+                      transform: 'scale(0.85)',
+                      transformOrigin: 'top left',
+                    }}
                     sandbox="allow-scripts allow-same-origin"
                   />
                 </div>

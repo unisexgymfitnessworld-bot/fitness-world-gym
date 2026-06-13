@@ -819,7 +819,13 @@ export function DeveloperDashboard() {
                           key={iframeKey}
                           src={gatewayUrl}
                           title="WhatsApp QR Scanner Developer"
-                          className="w-full h-full border-0"
+                          className="border-0"
+                          style={{
+                            width: '125%',
+                            height: '125%',
+                            transform: 'scale(0.8)',
+                            transformOrigin: 'top left',
+                          }}
                           sandbox="allow-scripts allow-same-origin"
                         />
                       </div>
