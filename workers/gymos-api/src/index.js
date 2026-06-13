@@ -95,7 +95,7 @@ async function handleRequest(request, env) {
     try {
       const response = await fetch(`${waGatewayUrl.replace(/\/$/, "")}/status`);
       const data = await response.json();
-      return jsonResponse(request, env, { success: true, data, gatewayUrl: waGatewayUrl });
+      return jsonResponse(request, env, { success: true, data: { ...data, gatewayUrl: waGatewayUrl } });
     } catch (err) {
       return jsonResponse(request, env, { success: false, error: "Unable to reach WhatsApp gateway service. Make sure it is running." }, 502);
     }
