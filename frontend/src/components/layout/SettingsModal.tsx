@@ -468,7 +468,7 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
                   </span>
                 </div>
 
-                <div className="flex gap-2 mt-2">
+                <div className="flex flex-wrap gap-2 mt-2 justify-center">
                   <Button
                     type="button"
                     variant="secondary"
@@ -481,6 +481,17 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
                   >
                     Refresh Status
                   </Button>
+
+                  {gatewayUrl && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="h-8 text-[11px] font-black cursor-pointer bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100"
+                      onClick={() => window.open(gatewayUrl, "_blank")}
+                    >
+                      Open in New Tab
+                    </Button>
+                  )}
                   
                   <Button
                     type="button"

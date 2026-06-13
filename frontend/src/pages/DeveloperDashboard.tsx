@@ -837,7 +837,7 @@ export function DeveloperDashboard() {
                         </span>
                       </div>
 
-                      <div className="flex gap-2 mt-2">
+                      <div className="flex flex-wrap gap-2 mt-2 justify-center">
                         <Button
                           type="button"
                           variant="secondary"
@@ -850,6 +850,17 @@ export function DeveloperDashboard() {
                         >
                           {loadingGateway ? <Loader2 size={12} className="animate-spin" /> : "Refresh"}
                         </Button>
+
+                        {gatewayUrl && (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className="h-8 text-[11px] font-bold bg-white/5 border border-white/10 text-[#38BDF8] hover:bg-white/10"
+                            onClick={() => window.open(gatewayUrl, "_blank")}
+                          >
+                            Open in New Tab
+                          </Button>
+                        )}
                         
                         <Button
                           type="button"
