@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Loader2, Save, ShieldCheck, Trash2, UserPlus, Wrench, Terminal, Cpu, Database, RefreshCw, MessageCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, Save, ShieldCheck, Trash2, UserPlus, Wrench, Terminal, Cpu, Database, RefreshCw, MessageCircle, Maximize2, Minimize2 } from "lucide-react";
 import { motion } from "motion/react";
 import { SettingsModal } from "../components/layout/SettingsModal";
 import { Toast } from "../components/layout/Toast";
@@ -67,6 +67,7 @@ export function DeveloperDashboard() {
   const [resettingGateway, setResettingGateway] = useState<boolean>(false);
   const [iframeKey, setIframeKey] = useState<number>(0);
   const [qrZoom, setQrZoom] = useState<number>(0.8);
+  const [isQrExpanded, setIsQrExpanded] = useState<boolean>(false);
 
   async function fetchGatewayStatus() {
     setLoadingGateway(true);
@@ -821,7 +822,7 @@ export function DeveloperDashboard() {
                             key={iframeKey}
                             src={gatewayUrl}
                             title="WhatsApp QR Scanner Developer"
-                            className="border-0"
+                            className="border-0 w-full h-full"
                             style={{
                               width: `${100 / qrZoom}%`,
                               height: `${100 / qrZoom}%`,
@@ -830,6 +831,18 @@ export function DeveloperDashboard() {
                             }}
                             sandbox="allow-scripts allow-same-origin"
                           />
+                          {/* Hoverable Maximize Button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setQrZoom(1.0);
+                              setIsQrExpanded(true);
+                            }}
+                            className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/80 hover:bg-black/95 text-white/90 hover:text-white transition-all shadow-md hover:scale-105 cursor-pointer z-10 border border-white/10"
+                            title="Maximize QR Code"
+                          >
+                            <Maximize2 size={13} />
+                          </button>
                         </div>
                         <div className="flex flex-col items-center gap-1.5 mb-3 w-full max-w-[200px]">
                           <div className="flex items-center justify-between w-full text-[10px] font-bold text-white/60">
@@ -903,14 +916,28 @@ export function DeveloperDashboard() {
                         </Button>
 
                         {gatewayUrl && (
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            className="h-8 text-[11px] font-bold bg-white/5 border border-white/10 text-[#38BDF8] hover:bg-white/10"
-                            onClick={() => window.open(gatewayUrl, "_blank")}
-                          >
-                            Open in New Tab
-                          </Button>
+                          <>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              className="h-8 text-[11px] font-bold bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500/20"
+                              onClick={() => {
+                                setQrZoom(1.0);
+                                setIsQrExpanded(true);
+                              }}
+                            >
+                              <Maximize2 size={12} className="mr-1 inline-block" />
+                              Maximize
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              className="h-8 text-[11px] font-bold bg-white/5 border border-white/10 text-[#38BDF8] hover:bg-white/10"
+                              onClick={() => window.open(gatewayUrl, "_blank")}
+                            >
+                              Open in New Tab
+                            </Button>
+                          </>
                         )}
                         
                         <Button
@@ -1141,6 +1168,122 @@ export function DeveloperDashboard() {
         onConfirm={() => void confirmDeleteAccount()}
         onClose={() => setDeleteAccount(null)}
       />
+
+      {/* Full-Screen QR Lightbox Overlay */}
+      {isQrExpanded && gatewayUrl && (
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 p-4 backdrop-blur-md animate-fade-in">
+          <div className="relative w-full max-w-lg rounded-2xl border border-white/10 bg-[#090A16] p-6 text-white shadow-2xl flex flex-col items-center">
+            
+            <header className="w-full flex items-center justify-between border-b border-white/10 pb-3.5 mb-5">
+              <div className="flex items-center gap-2">
+                <MessageCircle size={20} className="text-brand-primary-light" />
+                <h3 className="text-lg font-black tracking-wide">Scan WhatsApp QR Code</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsQrExpanded(false)}
+                className="p-1.5 rounded-lg hover:bg-white/10 text-white/70 hover:text-white transition-all cursor-pointer"
+                title="Close Expand"
+              >
+                <Minimize2 size={20} />
+              </button>
+            </header>
+
+            <div className="relative border-2 border-brand-primary/30 rounded-2xl overflow-hidden bg-white shadow-2xl mb-5 flex items-center justify-center p-3" style={{ width: '380px', height: '380px', maxWidth: '100%' }}>
+              <iframe
+                key={`${iframeKey}-large`}
+                src={gatewayUrl}
+                title="WhatsApp QR Scanner Large"
+                className="border-0 w-full h-full rounded-lg"
+                style={{
+                  width: `${100 / qrZoom}%`,
+                  height: `${100 / qrZoom}%`,
+                  transform: `scale(${qrZoom})`,
+                  transformOrigin: 'top left',
+                }}
+                sandbox="allow-scripts allow-same-origin"
+              />
+            </div>
+
+            <div className="flex flex-col items-center gap-2 mb-5 w-full max-w-[320px]">
+              <div className="flex items-center justify-between w-full text-[12px] font-bold text-white/60">
+                <span>Adjust Code Size:</span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setQrZoom(prev => Math.max(0.4, Number((prev - 0.05).toFixed(2))))}
+                    className="w-6 h-6 flex items-center justify-center rounded border border-white/15 bg-white/5 hover:bg-white/10 transition-all font-black text-white cursor-pointer"
+                  >
+                    －
+                  </button>
+                  <span className="min-w-[32px] text-center font-mono font-extrabold text-white text-[11px]">
+                    {Math.round(qrZoom * 100)}%
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setQrZoom(prev => Math.min(1.5, Number((prev + 0.05).toFixed(2))))}
+                    className="w-6 h-6 flex items-center justify-center rounded border border-white/15 bg-white/5 hover:bg-white/10 transition-all font-black text-white cursor-pointer"
+                  >
+                    ＋
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQrZoom(1.0)}
+                    className="px-2 py-0.5 rounded border border-white/15 bg-white/5 hover:bg-white/10 text-[10px] font-bold text-white/50 transition-all cursor-pointer"
+                  >
+                    Reset
+                  </button>
+                </div>
+              </div>
+              <input
+                type="range"
+                min="0.4"
+                max="1.5"
+                step="0.05"
+                value={qrZoom}
+                onChange={(e) => setQrZoom(Number(e.target.value))}
+                className="w-full h-1.5 bg-white/15 rounded-lg appearance-none cursor-pointer accent-blue-500"
+              />
+            </div>
+
+            <div className="flex flex-col gap-3.5 w-full">
+              <div className="flex items-center justify-between border-t border-b border-white/5 py-2.5 px-1">
+                <span className="text-[12px] font-bold text-white/50">WhatsApp Status</span>
+                <span className={`text-[11px] font-black uppercase tracking-wider border rounded-full px-2.5 py-0.5 ${
+                  gatewayStatus === "connected" 
+                    ? "bg-green-500/10 border-green-500/20 text-green-400" 
+                    : "bg-blue-500/10 border-blue-500/20 text-blue-400 animate-pulse"
+                }`}>
+                  {gatewayStatus === "connected" ? "Linked & Active" : "Ready to Link"}
+                </span>
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="flex-1 bg-white/5 border border-white/10 text-white hover:bg-white/10 cursor-pointer text-[12px] font-bold"
+                  onClick={() => {
+                    setIframeKey(prev => prev + 1);
+                    void fetchGatewayStatus();
+                  }}
+                >
+                  Refresh QR
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="flex-1 bg-blue-500/20 border border-blue-500/30 text-blue-300 hover:bg-blue-500/30 cursor-pointer text-[12px] font-bold"
+                  onClick={() => setIsQrExpanded(false)}
+                >
+                  Done
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Toast toast={toast} />
     </>
   );
