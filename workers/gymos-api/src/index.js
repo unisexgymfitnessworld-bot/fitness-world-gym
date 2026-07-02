@@ -372,7 +372,7 @@ async function handleScheduled(controller, env) {
   const startedAt = new Date().toISOString();
   try {
     if (controller.cron === "*/30 * * * *" || controller.cron === "*/10 * * * *") {
-      await keepSupabaseAlive(env);
+      await keepSupabaseAlive(env, true);
       logInfo("scheduled_keep_alive_complete", { startedAt });
       return;
     }
@@ -1150,6 +1150,14 @@ async function runSmsReminder(env) {
     (whatsappProvider === "ultramsg" && waInstanceId && waToken)
   ) && whatsappEnabled && !whatsappAutoPaused;
 
+  // 0. Ensure WhatsApp Gateway is awake before we start sending reminders
+  if (hasWhatsApp && whatsappProvider === "self_hosted") {
+    try {
+      const pingUrl = `${waGatewayUrl.replace(/\/$/, "")}/status`;
+      await fetch(pingUrl).catch(() => {});
+    } catch (_) {}
+  }
+
   let sent = 0;
 
   // 1. Process 3-Day Alerts (SMS + WhatsApp)
@@ -1250,7 +1258,7 @@ async function markReminderSent(env, memberId) {
   });
 }
 
-async function keepSupabaseAlive(env) {
+async function keepSupabaseAlive(env, wait = false) {
   // Ping Supabase
   try {
     await supabaseJson(env, "/members?select=id&limit=1");
@@ -1258,15 +1266,18 @@ async function keepSupabaseAlive(env) {
     logWarn("keep_supabase_alive_failed", { error: err instanceof Error ? err.message : String(err) });
   }
 
-  // Ping WhatsApp Gateway asynchronously so we do not block any API requests
+  // Ping WhatsApp Gateway asynchronously so we do not block any API requests unless wait is true
   try {
     const settings = await getSystemSettings(env);
     const waGatewayUrl = settings.whatsapp_gateway_url || env.WHATSAPP_GATEWAY_URL;
     if (waGatewayUrl) {
       const pingUrl = `${waGatewayUrl.replace(/\/$/, "")}/status`;
-      fetch(pingUrl).catch(err => {
+      const promise = fetch(pingUrl).catch(err => {
         logWarn("keep_whatsapp_gateway_alive_fetch_failed", { error: err.message });
       });
+      if (wait) {
+        await promise;
+      }
     }
   } catch (err) {
     logWarn("keep_whatsapp_gateway_alive_failed", { error: err instanceof Error ? err.message : String(err) });
