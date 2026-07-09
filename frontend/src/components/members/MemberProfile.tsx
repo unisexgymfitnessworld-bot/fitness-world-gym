@@ -3,7 +3,7 @@ import { motion } from "motion/react";
 import { useMemo, useState, type FormEvent } from "react";
 import { buildAttendanceInsights, buildProgressPoints, summarizeRenewalHistory } from "../../lib/memberInsights";
 import { calculateDueDate, createWhatsAppLink, formatCurrency, formatDisplayDate, formatPhone, getMemberActionDueDate, getMemberDueKind, todayISO, isPlanLessThanOneMonth, calculateNextRenewalStart } from "../../lib/utils";
-import { paymentMethodOptions, type AttendanceEntry, type Member, type PaymentMethod, type PaymentReceipt, type PaymentReceiptInput, type RenewalHistoryEntry, type PlanType } from "../../types";
+import { paymentMethodOptions, type AttendanceEntry, type Member, type PaymentMethod, type PaymentReceipt, type PaymentReceiptInput, type PaymentStatus, type RenewalHistoryEntry, type PlanType } from "../../types";
 import { AttendanceTable } from "../attendance/AttendanceTable";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
@@ -16,7 +16,7 @@ interface MemberProfileProps {
   onBack: () => void;
   onEdit: (memberId: string) => void;
   onSms: (memberId: string) => void;
-  onRenew: (memberId: string, start: string, due: string, feesAmount: number, planType: PlanType) => Promise<void>;
+  onRenew: (memberId: string, start: string, due: string, feesAmount: number, planType: PlanType, paymentStatus: PaymentStatus, partialPaidAmount: number) => Promise<void>;
   onAddVisit: (memberId: string, visitDate: string, weightKg?: number) => void;
   paymentReceipts: PaymentReceipt[];
   renewalHistory: RenewalHistoryEntry[];

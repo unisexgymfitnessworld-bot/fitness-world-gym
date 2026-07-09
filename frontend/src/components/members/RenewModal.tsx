@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Member, PlanType } from "../../types";
+import type { Member, PaymentStatus, PlanType } from "../../types";
 import { calculateDueDate, calculateNextRenewalStart, cn } from "../../lib/utils";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
@@ -9,7 +9,7 @@ interface RenewModalProps {
   open: boolean;
   member: Member;
   onClose: () => void;
-  onConfirm: (memberId: string, start: string, due: string, feesAmount: number, planType: PlanType) => Promise<void>;
+  onConfirm: (memberId: string, start: string, due: string, feesAmount: number, planType: PlanType, paymentStatus: PaymentStatus, partialPaidAmount: number) => Promise<void>;
 }
 
 const planOptions: PlanType[] = ["1 Month", "3 Months", "6 Months", "1 Year", "Custom"];
@@ -30,6 +30,8 @@ export function RenewModal({ open, member, onClose, onConfirm }: RenewModalProps
     calculateDueDate(calculateNextRenewalStart(member), member.planType)
   );
   const [feesAmount, setFeesAmount] = useState<number>(member.feesAmount);
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("Paid");
+  const [partialPaidAmount, setPartialPaidAmount] = useState<number>(0);
   const [loading, setLoading] = useState(false);
 
   // Auto-calculate due date when start date or plan type changes
@@ -39,6 +41,13 @@ export function RenewModal({ open, member, onClose, onConfirm }: RenewModalProps
     }
   }, [membershipStart, planType]);
 
+  // Reset partial amount when payment status changes away from Partially Paid
+  useEffect(() => {
+    if (paymentStatus !== "Partially Paid") {
+      setPartialPaidAmount(0);
+    }
+  }, [paymentStatus]);
+
   // Only set default fees when the modal first opens (not on every plan change)
   // This prevents overwriting custom amounts trainers have entered
 
@@ -46,7 +55,15 @@ export function RenewModal({ open, member, onClose, onConfirm }: RenewModalProps
     e.preventDefault();
     setLoading(true);
     try {
-      await onConfirm(member.id, membershipStart, membershipDue, feesAmount, planType);
+      await onConfirm(
+        member.id,
+        membershipStart,
+        membershipDue,
+        feesAmount,
+        planType,
+        paymentStatus,
+        paymentStatus === "Partially Paid" ? partialPaidAmount : 0
+      );
       onClose();
     } catch (err) {
       console.error(err);
@@ -56,6 +73,7 @@ export function RenewModal({ open, member, onClose, onConfirm }: RenewModalProps
   }
 
   const isCustomPlan = planType === "Custom";
+  const isPartiallyPaid = paymentStatus === "Partially Paid";
 
   return (
     <Modal open={open} title="Renew Membership" onClose={onClose}>
@@ -125,6 +143,40 @@ export function RenewModal({ open, member, onClose, onConfirm }: RenewModalProps
             value={feesAmount}
             onChange={(e) => setFeesAmount(Number(e.target.value))}
           />
+
+          {/* ── Payment Status ── Trainer must explicitly select; no longer auto-set to Paid */}
+          <label className="grid gap-2 text-[14px] font-semibold lg:text-[15px] text-text-primary sm:col-span-2">
+            Payment Status
+            <select
+              className="studio-input w-full px-3 py-2.5 lg:px-4 lg:py-3"
+              value={paymentStatus}
+              onChange={(e) => setPaymentStatus(e.target.value as PaymentStatus)}
+            >
+              <option value="Paid">✅ Paid – Member has paid in full</option>
+              <option value="Pending">⏳ Pending – Payment not yet collected</option>
+              <option value="Partially Paid">💰 Partially Paid – Member paid part of the fees</option>
+            </select>
+            {paymentStatus === "Pending" && (
+              <p className="text-[12px] font-normal text-amber-600 mt-1">
+                ⚠️ Status will be saved as <strong>Pending</strong>. Update once the member pays.
+              </p>
+            )}
+          </label>
+
+          {/* ── Partial amount input (only shown when Partially Paid) ── */}
+          {isPartiallyPaid && (
+            <Input
+              label={`Amount Collected (₹) — Remaining Balance: ₹${Math.max(feesAmount - partialPaidAmount, 0)}`}
+              type="number"
+              required
+              min="1"
+              max={feesAmount - 1}
+              step="1"
+              value={partialPaidAmount || ""}
+              onChange={(e) => setPartialPaidAmount(Number(e.target.value))}
+              className="sm:col-span-2"
+            />
+          )}
         </div>
 
         <div className="mt-4 flex justify-end gap-3 border-t border-border-default pt-4">

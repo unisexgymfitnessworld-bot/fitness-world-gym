@@ -122,8 +122,8 @@ membersRouter.patch("/:id/payment", validateBody(paymentSchema), async (req, res
 
 membersRouter.patch("/:id/renew", validateBody(renewSchema), async (req, res, next) => {
   try {
-    const body = req.body as { membershipStart: string; membershipDue: string; feesAmount: number; planType?: PlanType };
-    res.json({ success: true, data: await renewMember(memberIdParam(req), body.membershipStart, body.membershipDue, body.feesAmount, body.planType) });
+    const body = req.body as { membershipStart: string; membershipDue: string; feesAmount: number; planType?: PlanType; paymentStatus?: PaymentStatus; partialPaidAmount?: number };
+    res.json({ success: true, data: await renewMember(memberIdParam(req), body.membershipStart, body.membershipDue, body.feesAmount, body.planType, body.paymentStatus, body.partialPaidAmount) });
   } catch (error) {
     next(error);
   }

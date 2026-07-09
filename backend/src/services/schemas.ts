@@ -72,6 +72,8 @@ export const renewSchema = z.object({
   membershipDue: isoDate,
   feesAmount: z.coerce.number().min(0),
   planType: z.enum(["1 Month", "3 Months", "6 Months", "1 Year", "Custom"]).optional(),
+  paymentStatus: z.enum(["Paid", "Pending", "Partially Paid"]).default("Pending"),
+  partialPaidAmount: z.coerce.number().min(0).default(0),
 }).superRefine((value, ctx) => {
   if (value.membershipDue < value.membershipStart) {
     ctx.addIssue({
@@ -79,6 +81,26 @@ export const renewSchema = z.object({
       path: ["membershipDue"],
       message: "Due date must be on or after the start date",
     });
+  }
+
+  if (value.paymentStatus === "Partially Paid") {
+    if (value.partialPaidAmount < 1) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["partialPaidAmount"],
+        message: "Partial amount must be at least 1",
+      });
+    } else if (value.partialPaidAmount >= value.feesAmount) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["partialPaidAmount"],
+        message: "Partial amount must be less than total fees (use 'Paid' if fully paid)",
+      });
+    }
+  }
+
+  if (value.paymentStatus === "Paid" && value.feesAmount > 0) {
+    // Treat as fully paid — partialPaidAmount will equal feesAmount
   }
 });
 

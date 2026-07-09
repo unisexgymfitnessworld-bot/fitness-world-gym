@@ -146,7 +146,7 @@ export async function updatePayment(memberId: string, paymentStatus: PaymentStat
   return mapMember(data as DbMember);
 }
 
-export async function renewMember(memberId: string, membershipStart: string, membershipDue: string, feesAmount: number, planType?: PlanType): Promise<Member> {
+export async function renewMember(memberId: string, membershipStart: string, membershipDue: string, feesAmount: number, planType?: PlanType, paymentStatus: PaymentStatus = "Pending", partialPaidAmount: number = 0): Promise<Member> {
   const { data: currentRow, error: currentError } = await getSupabaseAdmin().from("members").select("*").eq("id", memberId).single();
   if (currentError || !currentRow) {
     throw new HttpError(404, "MEMBER_NOT_FOUND", "Member not found");
@@ -155,12 +155,27 @@ export async function renewMember(memberId: string, membershipStart: string, mem
   const currentMember = mapMember(currentRow as DbMember);
   const newPlan = planType ?? currentMember.planType;
 
+  // Derive partial/balance amounts based on what the trainer actually collected
+  let safePartial: number;
+  let balanceAmount: number;
+  if (paymentStatus === "Paid") {
+    safePartial = feesAmount;
+    balanceAmount = 0;
+  } else if (paymentStatus === "Partially Paid") {
+    safePartial = Math.min(Math.max(partialPaidAmount, 0), feesAmount);
+    balanceAmount = Math.max(feesAmount - safePartial, 0);
+  } else {
+    // Pending — no money collected yet
+    safePartial = 0;
+    balanceAmount = feesAmount;
+  }
+
   await recordRenewalHistory({
     oldMember: currentMember,
     newStartDate: membershipStart,
     newDueDate: membershipDue,
     amount: feesAmount,
-    paymentStatus: "Paid",
+    paymentStatus,
     ownerUserId: memberOwnerUserId(currentRow as DbMember),
     newPlanType: newPlan,
   });
@@ -172,9 +187,9 @@ export async function renewMember(memberId: string, membershipStart: string, mem
       membership_due: membershipDue,
       fees_amount: feesAmount,
       plan_type: newPlan,
-      payment_status: "Paid",
-      partial_paid_amount: feesAmount,
-      balance_amount: 0,
+      payment_status: paymentStatus,
+      partial_paid_amount: safePartial,
+      balance_amount: balanceAmount,
       status: "Active",
       sms_sent_3days: false,
     })

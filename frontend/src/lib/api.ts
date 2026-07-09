@@ -119,10 +119,10 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(input),
     }),
-  renewMember: (id: string, membershipStart: string, membershipDue: string, feesAmount: number, planType?: string) =>
+  renewMember: (id: string, membershipStart: string, membershipDue: string, feesAmount: number, planType?: string, paymentStatus?: string, partialPaidAmount?: number) =>
     request<Member>(`/members/${id}/renew`, {
       method: "PATCH",
-      body: JSON.stringify({ membershipStart, membershipDue, feesAmount, planType }),
+      body: JSON.stringify({ membershipStart, membershipDue, feesAmount, planType, paymentStatus, partialPaidAmount }),
     }),
   paymentReceipts: (memberId: string) => request<PaymentReceipt[]>(`/members/${memberId}/payments`),
   allPaymentReceipts: () => request<PaymentReceipt[]>("/members/payments/all"),
@@ -152,6 +152,11 @@ export const api = {
   sendSms: (memberId: string, message: string) =>
     request<{ requestId: string }>("/sms/send", {
       method: "POST",
-      body: JSON.stringify({ member_id: memberId, message }),
+      body: JSON.stringify({ member_id: memberId, message, type: "sms" }),
+    }),
+  sendWhatsApp: (memberId: string, message: string) =>
+    request<{ requestId: string }>("/sms/send", {
+      method: "POST",
+      body: JSON.stringify({ member_id: memberId, message, type: "whatsapp" }),
     }),
 };

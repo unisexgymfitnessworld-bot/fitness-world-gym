@@ -15,7 +15,7 @@ interface MembersState {
   upsertMembers: (inputs: MemberInput[]) => Promise<Member[]>;
   suspendMember: (memberId: string) => Promise<void>;
   deleteMember: (memberId: string) => Promise<void>;
-  renewMember: (memberId: string, start: string, due: string, feesAmount: number, planType?: PlanType) => Promise<void>;
+  renewMember: (memberId: string, start: string, due: string, feesAmount: number, planType?: PlanType, paymentStatus?: PaymentStatus, partialPaidAmount?: number) => Promise<void>;
   addVisit: (memberId: string, visitDate: string, weightKg?: number) => Promise<void>;
   addPaymentReceipt: (memberId: string, input: PaymentReceiptInput) => Promise<PaymentReceipt>;
   markSmsSent: (memberId: string) => Promise<void>;
@@ -194,9 +194,9 @@ export function useMembers(): MembersState {
     );
   }
 
-  async function renewMember(memberId: string, start: string, due: string, feesAmount: number, planType?: PlanType): Promise<void> {
+  async function renewMember(memberId: string, start: string, due: string, feesAmount: number, planType?: PlanType, paymentStatus: PaymentStatus = "Pending", partialPaidAmount: number = 0): Promise<void> {
     if (isApiConfigured) {
-      const renewed = await api.renewMember(memberId, start, due, feesAmount, planType);
+      const renewed = await api.renewMember(memberId, start, due, feesAmount, planType, paymentStatus, partialPaidAmount);
       setMembers((current) => current.map((member) => (member.id === memberId ? renewed : member)));
       try {
         const [updatedHistory, updatedReceipts] = await Promise.all([
@@ -216,6 +216,20 @@ export function useMembers(): MembersState {
       throw new Error("Member not found");
     }
 
+    // Derive local partial/balance amounts matching the backend logic
+    let safePartial: number;
+    let balanceAmount: number;
+    if (paymentStatus === "Paid") {
+      safePartial = feesAmount;
+      balanceAmount = 0;
+    } else if (paymentStatus === "Partially Paid") {
+      safePartial = Math.min(Math.max(partialPaidAmount, 0), feesAmount);
+      balanceAmount = Math.max(feesAmount - safePartial, 0);
+    } else {
+      safePartial = 0;
+      balanceAmount = feesAmount;
+    }
+
     const renewalEntry: RenewalHistoryEntry = {
       id: crypto.randomUUID(),
       memberId,
@@ -226,7 +240,7 @@ export function useMembers(): MembersState {
       newStartDate: start,
       newDueDate: due,
       amount: feesAmount,
-      paymentStatus: "Paid",
+      paymentStatus,
       renewedOn: start,
       createdAt: new Date().toISOString(),
     };
@@ -236,7 +250,7 @@ export function useMembers(): MembersState {
       memberId,
       receiptNo: generateLocalReceiptNo(),
       paidOn: start,
-      amount: feesAmount,
+      amount: safePartial,
       method: "Cash",
       note: `Membership Renewal: ${planType ?? oldMember.planType} plan (${start} to ${due})`,
       createdAt: new Date().toISOString(),
@@ -251,9 +265,9 @@ export function useMembers(): MembersState {
               membershipStart: start,
               membershipDue: due,
               feesAmount,
-              paymentStatus: "Paid",
-              partialPaidAmount: feesAmount,
-              balanceAmount: 0,
+              paymentStatus,
+              partialPaidAmount: safePartial,
+              balanceAmount,
               status: "Active",
               smsSent3days: false,
               updatedAt: new Date().toISOString(),
@@ -262,7 +276,9 @@ export function useMembers(): MembersState {
       ),
     );
     setRenewalHistory((current) => [renewalEntry, ...current]);
-    setPaymentReceipts((current) => [receiptEntry, ...current]);
+    if (safePartial > 0) {
+      setPaymentReceipts((current) => [receiptEntry, ...current]);
+    }
   }
 
   async function addVisit(memberId: string, visitDate: string, weightKg?: number): Promise<void> {
