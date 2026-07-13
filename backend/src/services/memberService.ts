@@ -138,8 +138,24 @@ export async function getMember(memberId: string): Promise<Member> {
   return mapMember(data as DbMember);
 }
 
+function deriveMembershipStatus(dueDate: string, paymentStatus?: string): string {
+  const today = format(new Date(), "yyyy-MM-dd");
+  if (dueDate < today) {
+    return "Expired";
+  }
+  if (dueDate === today && (paymentStatus === "Pending" || paymentStatus === "Partially Paid")) {
+    return "Expired";
+  }
+  return "Active";
+}
+
 export async function createMember(input: MemberInput): Promise<Member> {
-  const { data, error } = await getSupabaseAdmin().from("members").insert(memberInputToDb(normalizeMembershipDates(input))).select("*").single();
+  const normalized = normalizeMembershipDates(input);
+  const dbData = {
+    ...memberInputToDb(normalized),
+    status: deriveMembershipStatus(normalized.membershipDue, normalized.paymentStatus)
+  };
+  const { data, error } = await getSupabaseAdmin().from("members").insert(dbData).select("*").single();
   if (error || !data) {
     throw new HttpError(500, "MEMBER_CREATE_FAILED", error?.message ?? "Unable to create member");
   }
@@ -147,7 +163,12 @@ export async function createMember(input: MemberInput): Promise<Member> {
 }
 
 export async function updateMember(memberId: string, input: MemberInput): Promise<Member> {
-  const { data, error } = await getSupabaseAdmin().from("members").update(memberInputToDb(normalizeMembershipDates(input))).eq("id", memberId).select("*").single();
+  const normalized = normalizeMembershipDates(input);
+  const dbData = {
+    ...memberInputToDb(normalized),
+    status: deriveMembershipStatus(normalized.membershipDue, normalized.paymentStatus)
+  };
+  const { data, error } = await getSupabaseAdmin().from("members").update(dbData).eq("id", memberId).select("*").single();
   if (error || !data) {
     throw new HttpError(500, "MEMBER_UPDATE_FAILED", error?.message ?? "Unable to update member");
   }
@@ -155,7 +176,9 @@ export async function updateMember(memberId: string, input: MemberInput): Promis
 }
 
 export async function updatePayment(memberId: string, paymentStatus: PaymentStatus): Promise<Member> {
-  const { data, error } = await getSupabaseAdmin().from("members").update({ payment_status: paymentStatus }).eq("id", memberId).select("*").single();
+  const member = await getMember(memberId);
+  const nextStatus = deriveMembershipStatus(member.membershipDue, paymentStatus);
+  const { data, error } = await getSupabaseAdmin().from("members").update({ payment_status: paymentStatus, status: nextStatus }).eq("id", memberId).select("*").single();
   if (error || !data) {
     throw new HttpError(500, "PAYMENT_UPDATE_FAILED", error?.message ?? "Unable to update payment");
   }

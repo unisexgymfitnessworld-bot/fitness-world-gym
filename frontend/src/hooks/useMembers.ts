@@ -146,6 +146,7 @@ export function useMembers(): MembersState {
         ...existing,
         ...input,
         bmi: toMember(input, current).bmi,
+        status: existing.status === "Suspended" ? "Suspended" : getMembershipStatus(input.membershipDue, input.paymentStatus),
         smsSent3days: existing.membershipDue === input.membershipDue ? existing.smsSent3days : false,
         updatedAt: new Date().toISOString(),
       };
