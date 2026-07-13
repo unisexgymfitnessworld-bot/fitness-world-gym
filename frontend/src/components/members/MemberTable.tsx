@@ -263,9 +263,23 @@ export function MemberTable({
         header: "Status",
         cell: (info) => {
           const status = info.getValue();
+          const member = info.row.original;
+          const today = new Date().toISOString().slice(0, 10);
+          
+          let displayStatus = status;
+          if (status === "Active") {
+            const isDueTodayOrPast = member.membershipDue <= today;
+            const isUnpaid = member.paymentStatus === "Pending" || member.paymentStatus === "Partially Paid";
+            if (isDueTodayOrPast && isUnpaid) {
+              displayStatus = "Expired";
+            } else if (member.membershipDue < today) {
+              displayStatus = "Expired";
+            }
+          }
+          
           return (
-            <Badge tone={status === "Active" ? "active" : status === "Expired" ? "expired" : "neutral"}>
-              {status}
+            <Badge tone={displayStatus === "Active" ? "active" : displayStatus === "Expired" ? "expired" : "neutral"}>
+              {displayStatus}
             </Badge>
           );
         },

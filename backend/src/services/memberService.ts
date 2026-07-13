@@ -101,17 +101,33 @@ export async function listMembers(options: ListMembersOptions = {}): Promise<Mem
 
 export async function autoExpireMembers(): Promise<number> {
   const today = format(new Date(), "yyyy-MM-dd");
-  const { data, error } = await getSupabaseAdmin()
+  
+  // 1. Expire members whose plan ended before today
+  const { data: expiredPlans, error: err1 } = await getSupabaseAdmin()
     .from("members")
     .update({ status: "Expired" })
     .eq("status", "Active")
     .lt("membership_due", today)
     .select("*");
 
-  if (error) {
-    throw new HttpError(500, "AUTO_EXPIRE_FAILED", error.message);
+  if (err1) {
+    throw new HttpError(500, "AUTO_EXPIRE_FAILED", err1.message);
   }
-  return data ? data.length : 0;
+
+  // 2. Expire members whose plan ends today and payment is NOT fully Paid
+  const { data: unpaidDues, error: err2 } = await getSupabaseAdmin()
+    .from("members")
+    .update({ status: "Expired" })
+    .eq("status", "Active")
+    .eq("membership_due", today)
+    .in("payment_status", ["Pending", "Partially Paid"])
+    .select("*");
+
+  if (err2) {
+    throw new HttpError(500, "AUTO_EXPIRE_FAILED", err2.message);
+  }
+
+  return (expiredPlans ? expiredPlans.length : 0) + (unpaidDues ? unpaidDues.length : 0);
 }
 
 export async function getMember(memberId: string): Promise<Member> {

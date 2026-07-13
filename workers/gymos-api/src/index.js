@@ -1119,12 +1119,22 @@ async function getDashboardStats(env, user) {
 
 async function runExpireStatus(env) {
   const today = isoDateInTimeZone();
-  const rows = await supabaseJson(env, `/members?status=eq.Active&membership_due=lt.${today}&select=id`, {
+  
+  // 1. Expire plan ended yesterday or earlier
+  const rows1 = await supabaseJson(env, `/members?status=eq.Active&membership_due=lt.${today}&select=id`, {
     method: "PATCH",
     headers: { Prefer: "return=representation" },
     body: JSON.stringify({ status: "Expired" }),
   });
-  return rows.length;
+  
+  // 2. Expire plan ending today with unpaid status
+  const rows2 = await supabaseJson(env, `/members?status=eq.Active&membership_due=eq.${today}&payment_status=in.(Pending,Partially Paid)&select=id`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({ status: "Expired" }),
+  });
+  
+  return rows1.length + rows2.length;
 }
 
 function isMemberPlanLessThanOneMonth(member) {

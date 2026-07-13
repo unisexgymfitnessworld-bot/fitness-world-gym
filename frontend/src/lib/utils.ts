@@ -41,8 +41,15 @@ export function calculateDueDate(startDate: string, planType: PlanType): string 
   }
 }
 
-export function getMembershipStatus(dueDate: string): MemberStatus {
-  return isAfter(parseISO(dueDate), addDays(new Date(), -1)) ? "Active" : "Expired";
+export function getMembershipStatus(dueDate: string, paymentStatus?: string): MemberStatus {
+  const today = format(new Date(), "yyyy-MM-dd");
+  if (dueDate < today) {
+    return "Expired";
+  }
+  if (dueDate === today && (paymentStatus === "Pending" || paymentStatus === "Partially Paid")) {
+    return "Expired";
+  }
+  return "Active";
 }
 
 type DueAwareMember = Pick<Member, "membershipStart" | "membershipDue" | "paymentStatus" | "planType" | "status">;
@@ -204,7 +211,7 @@ export function toMember(input: MemberInput, members: Array<Pick<Member, "regNo"
     id: crypto.randomUUID(),
     regNo: nextRegNo(members),
     bmi: calculateBmi(input.weightKg, input.heightCm),
-    status: getMembershipStatus(input.membershipDue),
+    status: getMembershipStatus(input.membershipDue, input.paymentStatus),
     smsSent3days: false,
     createdAt: now,
     updatedAt: now,
