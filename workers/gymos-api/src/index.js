@@ -330,28 +330,32 @@ async function handleRequest(request, env) {
     const waToken = settings.whatsapp_token || env.WHATSAPP_TOKEN;
     const waGatewayUrl = settings.whatsapp_gateway_url || env.WHATSAPP_GATEWAY_URL;
     const waGatewayToken = settings.whatsapp_gateway_token || env.WHATSAPP_GATEWAY_TOKEN;
+    const whatsappProvider = settings.whatsapp_provider || (env.WHATSAPP_INSTANCE_ID === "self_hosted" ? "self_hosted" : env.WHATSAPP_INSTANCE_ID ? "ultramsg" : "none");
 
     const smsEnabled = settings.sms_enabled !== "false";
     const whatsappEnabled = settings.whatsapp_enabled !== "false";
 
-    if (fast2SmsKey && smsEnabled) {
+    const sendSmsChannel = body.type === "both" || body.type === "sms";
+    const sendWaChannel = body.type === "both" || body.type === "whatsapp";
+
+    if (sendSmsChannel && fast2SmsKey && smsEnabled) {
       requestId = await sendSms(env, member.phone, body.message);
       sentSMS = true;
     }
 
     const isWhatsAppConfigured = Boolean(
-      (waInstanceId && waToken) ||
-      (waInstanceId === "self_hosted" && waGatewayUrl)
+      (whatsappProvider === "self_hosted" && waGatewayUrl) ||
+      (whatsappProvider === "ultramsg" && waInstanceId && waToken)
     );
 
-    if (isWhatsAppConfigured && whatsappEnabled) {
+    if (sendWaChannel && isWhatsAppConfigured && whatsappEnabled) {
       const waId = await sendWhatsApp(env, member.phone, body.message);
       if (!sentSMS || requestId === "skipped_disabled") requestId = waId;
       sentWA = true;
     }
 
     if (!sentSMS && !sentWA) {
-      throw new ApiError(503, "NOTIFICATIONS_NOT_CONFIGURED", "Neither SMS nor WhatsApp is configured or enabled");
+      throw new ApiError(503, "NOTIFICATIONS_NOT_CONFIGURED", "Neither SMS nor WhatsApp is configured or enabled for this type");
     }
 
     await markReminderSent(env, member.id);
@@ -1306,7 +1310,7 @@ async function sendSms(env, phone, message) {
   const response = await fetch("https://www.fast2sms.com/dev/bulkV2", {
     method: "POST",
     headers: {
-      authorization: env.FAST2SMS_API_KEY,
+      authorization: fast2SmsKey,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -1352,6 +1356,12 @@ async function sendWhatsApp(env, phone, message) {
     if (!waGatewayUrl || !waGatewayToken) {
       throw new ApiError(503, "WHATSAPP_NOT_CONFIGURED", "Self-hosted WhatsApp URL or Token is not configured");
     }
+
+    // Wake up gateway if asleep by pinging status first
+    try {
+      const pingUrl = `${waGatewayUrl.replace(/\/$/, "")}/status`;
+      await fetch(pingUrl).catch(() => {});
+    } catch (_) {}
 
     const response = await fetch(`${waGatewayUrl.replace(/\/$/, "")}/send`, {
       method: "POST",
@@ -1699,9 +1709,14 @@ function validateSmsInput(body) {
   if (message.length < 12 || message.length > 320) {
     throw new ApiError(400, "INVALID_SMS_MESSAGE", "SMS message must be 12 to 320 characters");
   }
+  const type = body.type;
+  if (type && type !== "sms" && type !== "whatsapp" && type !== "both") {
+    throw new ApiError(400, "INVALID_MESSAGE_TYPE", "Type must be sms, whatsapp or both");
+  }
   return {
     memberId: assertUuid(body.memberId ?? body.member_id, "member id"),
     message,
+    type: type || "both",
   };
 }
 
