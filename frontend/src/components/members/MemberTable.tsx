@@ -11,7 +11,7 @@ import {
 import { Eye, MessageCircle, MessageSquare, Pencil, UserX, SearchX, Plus, Download, UserCheck, Trash2 } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
-import { compareRegistrationNumbers, createWhatsAppLink, formatDisplayDate, formatPhone, getDueTone, getMemberActionDueDate, getMemberDueKind, isPlanLessThanOneMonth } from "../../lib/utils";
+import { compareRegistrationNumbers, createWhatsAppLink, formatDisplayDate, formatPhone, getDueTone, getMemberActionDueDate, getMemberDueKind, isPlanLessThanOneMonth, formatCurrency } from "../../lib/utils";
 import type { Member } from "../../types";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
@@ -163,7 +163,7 @@ export function MemberTable({
               <div className="flex flex-col">
                 <span className="font-semibold text-text-primary">{info.getValue()}</span>
                 <span className="text-[11px] font-medium text-text-muted mt-0.5">
-                  {member.trainingType || "General"} · {member.planType}
+                  {member.trainingType || "General"} · {member.planType} · <span className="font-bold text-brand-primary">{formatCurrency(member.feesAmount)}</span>
                 </span>
               </div>
             </div>
@@ -292,29 +292,16 @@ export function MemberTable({
               </motion.button>
               {!isShortTerm && (
                 <>
-                  <motion.a
+                  <motion.button
                     className="focus-ring flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-100 bg-emerald-50/50 text-emerald-700 transition hover:bg-emerald-600 hover:text-white"
-                    href={createWhatsAppLink(member)}
-                    target="_blank"
-                    rel="noreferrer"
-                    title="Send WhatsApp renewal reminder"
-                    aria-label={`Send WhatsApp renewal reminder to ${member.name}`}
+                    onClick={() => onSms(member.id)}
+                    title="Send WhatsApp/SMS renewal reminder"
+                    aria-label={`Send WhatsApp/SMS renewal reminder to ${member.name}`}
                     whileHover={{ scale: 1.12, y: -1 }}
                     whileTap={{ scale: 0.9 }}
                     transition={{ type: "spring", stiffness: 500, damping: 20 }}
                   >
                     <MessageCircle size={15} />
-                  </motion.a>
-                  <motion.button
-                    className="focus-ring flex h-9 w-9 items-center justify-center rounded-lg border border-violet-100 bg-violet-50/50 text-violet-700 transition hover:bg-violet-600 hover:text-white"
-                    onClick={() => onSms(member.id)}
-                    title="Send SMS renewal reminder"
-                    aria-label={`Send SMS renewal reminder to ${member.name}`}
-                    whileHover={{ scale: 1.12, y: -1 }}
-                    whileTap={{ scale: 0.9 }}
-                    transition={{ type: "spring", stiffness: 500, damping: 20 }}
-                  >
-                    <MessageSquare size={15} />
                   </motion.button>
                 </>
               )}
@@ -568,29 +555,16 @@ export function MemberTable({
                 </motion.button>
                 {!isShortTerm && (
                   <>
-                    <motion.a
+                    <motion.button
                       className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-emerald-100 bg-emerald-50/50 text-emerald-700 transition"
-                      href={createWhatsAppLink(member)}
-                      target="_blank"
-                      rel="noreferrer"
-                      title="Send WhatsApp renewal reminder"
-                      aria-label={`Send WhatsApp renewal reminder to ${member.name}`}
+                      onClick={() => onSms(member.id)}
+                      title="Send WhatsApp/SMS renewal reminder"
+                      aria-label={`Send WhatsApp/SMS renewal reminder to ${member.name}`}
                       whileHover={{ scale: 1.12 }}
                       whileTap={{ scale: 0.9 }}
                       transition={{ type: "spring", stiffness: 500, damping: 20 }}
                     >
                       <MessageCircle size={14} />
-                    </motion.a>
-                    <motion.button
-                      className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-violet-100 bg-violet-50/50 text-violet-700 transition"
-                      onClick={() => onSms(member.id)}
-                      title="Send SMS renewal reminder"
-                      aria-label={`Send SMS renewal reminder to ${member.name}`}
-                      whileHover={{ scale: 1.12 }}
-                      whileTap={{ scale: 0.9 }}
-                      transition={{ type: "spring", stiffness: 500, damping: 20 }}
-                    >
-                      <MessageSquare size={14} />
                     </motion.button>
                   </>
                 )}
