@@ -13,7 +13,7 @@ interface SmsModalProps {
   open: boolean;
   initialTemplate?: MessageTemplateId;
   onClose: () => void;
-  onSend: (memberId: string, message: string) => Promise<void> | void;
+  onSend: (memberId: string, message: string, type: "sms" | "whatsapp") => Promise<void> | void;
 }
 
 export function SmsModal({ member, open, initialTemplate, onClose, onSend }: SmsModalProps) {
@@ -21,9 +21,10 @@ export function SmsModal({ member, open, initialTemplate, onClose, onSend }: Sms
   const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  const [sentType, setSentType] = useState<"sms" | "whatsapp" | null>(null);
   const [sending, setSending] = useState(false);
-  const memberId = member?.id ?? null;
-  const whatsAppHref = member ? `https://wa.me/91${member.phone}?text=${encodeURIComponent(message)}` : "#";
+  const cleanPhone = member ? member.phone.replace(/\D/g, "") : "";
+  const whatsAppHref = member ? `https://wa.me/91${cleanPhone.slice(-10)}?text=${encodeURIComponent(message)}` : "#";
 
   useEffect(() => {
     if (!member) {
@@ -35,8 +36,9 @@ export function SmsModal({ member, open, initialTemplate, onClose, onSend }: Sms
     setMessage(createMessageForTemplate(member, nextTemplate));
     setError(null);
     setSent(false);
+    setSentType(null);
     setSending(false);
-  }, [initialTemplate, member, memberId, open]);
+  }, [initialTemplate, member, member?.id, open]);
 
   function chooseTemplate(nextTemplate: MessageTemplateId): void {
     setTemplateId(nextTemplate);
@@ -47,22 +49,23 @@ export function SmsModal({ member, open, initialTemplate, onClose, onSend }: Sms
     setSent(false);
   }
 
-  async function submit(): Promise<void> {
+  async function submit(type: "sms" | "whatsapp"): Promise<void> {
     if (!member) {
       return;
     }
     const parsed = smsSchema.safeParse({ message });
     if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? "Check the SMS message");
+      setError(parsed.error.issues[0]?.message ?? "Check the message");
       return;
     }
     setSending(true);
     setError(null);
     try {
-      await onSend(member.id, parsed.data.message);
+      await onSend(member.id, parsed.data.message, type);
+      setSentType(type);
       setSent(true);
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Unable to send SMS";
+      const message = caught instanceof Error ? caught.message : `Unable to send ${type}`;
       setError(message);
     } finally {
       setSending(false);
@@ -109,23 +112,32 @@ export function SmsModal({ member, open, initialTemplate, onClose, onSend }: Sms
           {sent ? (
             <motion.div className="flex items-center gap-3 rounded-card bg-green-50 p-4 text-status-active" initial={{ scale: 0 }} animate={{ scale: [0, 1.2, 1] }} transition={{ duration: 0.3 }}>
               <CheckCircle2 size={22} />
-              <span className="text-[15px] font-bold">SMS Sent</span>
+              <span className="text-[15px] font-bold">Message sent via {sentType === "whatsapp" ? "WhatsApp Gateway" : "SMS Fast2SMS"}</span>
             </motion.div>
           ) : null}
 
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-2 grid-cols-1 sm:grid-cols-3">
             <a
-              className="focus-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-[var(--radius-card)] border border-green-200 bg-green-50 px-4 py-2.5 text-[15px] font-semibold text-status-active transition-all hover:border-green-300 hover:bg-green-100"
+              className="focus-ring inline-flex min-h-11 items-center justify-center gap-1.5 rounded-[var(--radius-card)] border border-green-200 bg-green-50 px-2 text-[13px] font-bold text-status-active transition-all hover:border-green-300 hover:bg-green-100"
               href={whatsAppHref}
               target="_blank"
               rel="noreferrer"
             >
-              <MessageCircle size={20} />
-              Open WhatsApp
+              <MessageCircle size={16} />
+              Open WA (Manual)
             </a>
-            <Button onClick={() => void submit()} disabled={sent || sending}>
-              <Send size={20} />
-              {sending ? "Sending SMS" : "Send SMS"}
+            <Button
+              variant="secondary"
+              className="!border-emerald-200 !bg-emerald-50/50 !text-emerald-700 hover:!bg-emerald-100 px-2 text-[13px] font-bold"
+              onClick={() => void submit("whatsapp")}
+              disabled={sent || sending}
+            >
+              <MessageCircle size={16} />
+              {sending ? "Sending..." : "Send WA Gateway"}
+            </Button>
+            <Button onClick={() => void submit("sms")} disabled={sent || sending} className="px-2 text-[13px] font-bold">
+              <Send size={16} />
+              {sending ? "Sending..." : "Send SMS"}
             </Button>
           </div>
         </div>
