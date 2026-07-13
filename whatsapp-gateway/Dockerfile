@@ -8,9 +8,8 @@ RUN npm ci --omit=dev
 
 COPY . .
 
-# Expose port 7860 (Hugging Face Spaces default container port)
-EXPOSE 7860
+EXPOSE 8000
 
-ENV PORT=7860
+ENV PORT=8000
 
 CMD ["node", "index.js"]
