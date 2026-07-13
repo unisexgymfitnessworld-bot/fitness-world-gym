@@ -593,6 +593,10 @@ async function developerDiagnostics(env) {
       db_keep_alive_enabled: settings.db_keep_alive_enabled ?? "false",
       sms_auto_reminder_paused: settings.sms_auto_reminder_paused ?? "false",
       whatsapp_auto_reminder_paused: settings.whatsapp_auto_reminder_paused ?? "false",
+      sms_provider: settings.sms_provider ?? "fast2sms",
+      twilio_account_sid: settings.twilio_account_sid ?? (env.TWILIO_ACCOUNT_SID ?? ""),
+      twilio_auth_token: settings.twilio_auth_token ?? (env.TWILIO_AUTH_TOKEN ?? ""),
+      twilio_from_number: settings.twilio_from_number ?? (env.TWILIO_FROM_NUMBER ?? ""),
     },
     checkedAt: new Date().toISOString(),
   };
@@ -1288,51 +1292,130 @@ async function keepSupabaseAlive(env, wait = false) {
   }
 }
 
+async function sendTwilioSms(accountSid, authToken, fromNumber, targetPhone, message) {
+  let formattedPhone = targetPhone.replace(/\D/g, "");
+  if (!formattedPhone.startsWith("+")) {
+    if (formattedPhone.length === 10) {
+      formattedPhone = "+91" + formattedPhone;
+    } else {
+      formattedPhone = "+" + formattedPhone;
+    }
+  }
+
+  const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
+  const formData = new URLSearchParams();
+  formData.append("From", fromNumber);
+  formData.append("To", formattedPhone);
+  formData.append("Body", message);
+
+  const authHeader = "Basic " + btoa(`${accountSid}:${authToken}`);
+
+  const response = await fetch(twilioUrl, {
+    method: "POST",
+    headers: {
+      "Authorization": authHeader,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: formData.toString(),
+  });
+
+  const payload = await safeJson(response);
+  if (!response.ok) {
+    const errorMsg = payload?.message || `Twilio request failed (Status: ${response.status})`;
+    throw new Error(errorMsg);
+  }
+
+  return payload.sid ?? "sent";
+}
+
 async function sendSms(env, phone, message) {
   const settings = await getSystemSettings(env);
   if (settings.sms_enabled === "false") {
     logInfo("sms_disabled_skipping", { phone });
     return "skipped_disabled";
   }
+
+  const smsProvider = settings.sms_provider || "fast2sms";
   const fast2SmsKey = settings.fast2sms_api_key || env.FAST2SMS_API_KEY;
-  if (!fast2SmsKey) {
-    throw new ApiError(503, "SMS_NOT_CONFIGURED", "Fast2SMS API key is not configured");
+  const twilioSid = settings.twilio_account_sid || env.TWILIO_ACCOUNT_SID;
+  const twilioToken = settings.twilio_auth_token || env.TWILIO_AUTH_TOKEN;
+  const twilioFrom = settings.twilio_from_number || env.TWILIO_FROM_NUMBER;
+
+  const hasFast2Sms = Boolean(fast2SmsKey);
+  const hasTwilio = Boolean(twilioSid && twilioToken && twilioFrom);
+
+  if (!hasFast2Sms && !hasTwilio) {
+    throw new ApiError(503, "SMS_NOT_CONFIGURED", "Neither Fast2SMS nor Twilio is configured.");
   }
 
-  // Clean phone number: remove all non-digits and keep the last 10 digits
   const cleanPhone = phone.replace(/\D/g, "");
   const targetPhone = cleanPhone.slice(-10);
-
   if (targetPhone.length !== 10) {
     throw new ApiError(400, "INVALID_PHONE", `Phone number must be a valid 10-digit number (got: ${phone})`);
   }
 
-  const response = await fetch("https://www.fast2sms.com/dev/bulkV2", {
-    method: "POST",
-    headers: {
-      authorization: fast2SmsKey,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      route: "q",
-      message,
-      language: "english",
-      numbers: targetPhone,
-      flash: 0,
-    }),
-  });
+  // Helper to send via Fast2SMS
+  const tryFast2Sms = async () => {
+    if (!hasFast2Sms) throw new Error("Fast2SMS not configured");
+    const response = await fetch("https://www.fast2sms.com/dev/bulkV2", {
+      method: "POST",
+      headers: {
+        authorization: fast2SmsKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        route: "q",
+        message,
+        language: "english",
+        numbers: targetPhone,
+        flash: 0,
+      }),
+    });
 
-  const payload = await safeJson(response);
-  if (!response.ok || payload?.return !== true) {
-    const errorMsg = typeof payload?.message === "string"
-      ? payload.message
-      : Array.isArray(payload?.message)
-        ? payload.message.join(", ")
-        : `Fast2SMS request failed (Status: ${response.status})`;
-    throw new ApiError(502, "FAST2SMS_FAILED", errorMsg);
+    const payload = await safeJson(response);
+    if (!response.ok || payload?.return !== true) {
+      const errorMsg = typeof payload?.message === "string"
+        ? payload.message
+        : Array.isArray(payload?.message)
+          ? payload.message.join(", ")
+          : `Fast2SMS request failed (Status: ${response.status})`;
+      throw new Error(errorMsg);
+    }
+    return payload.request_id ?? "sent";
+  };
+
+  // Helper to send via Twilio
+  const tryTwilio = async () => {
+    if (!hasTwilio) throw new Error("Twilio not configured");
+    return await sendTwilioSms(twilioSid, twilioToken, twilioFrom, targetPhone, message);
+  };
+
+  if (smsProvider === "twilio") {
+    try {
+      return await tryTwilio();
+    } catch (err) {
+      logError("twilio_sms_failed_trying_fast2sms", err);
+      if (hasFast2Sms) {
+        return await tryFast2Sms();
+      }
+      throw new ApiError(502, "SMS_SEND_FAILED", `Twilio failed: ${err.message}`);
+    }
+  } else {
+    // Default to Fast2SMS with Twilio as fallback
+    try {
+      return await tryFast2Sms();
+    } catch (err) {
+      logError("fast2sms_failed_trying_twilio", err);
+      if (hasTwilio) {
+        try {
+          return await tryTwilio();
+        } catch (twilioErr) {
+          throw new ApiError(502, "SMS_SEND_FAILED", `Fast2SMS failed (${err.message}) and Twilio fallback also failed (${twilioErr.message})`);
+        }
+      }
+      throw new ApiError(502, "SMS_SEND_FAILED", `Fast2SMS failed: ${err.message}`);
+    }
   }
-
-  return payload.request_id ?? "sent";
 }
 
 async function sendWhatsApp(env, phone, message) {
@@ -2065,6 +2148,10 @@ async function saveSystemSettings(env, settings) {
     "db_keep_alive_enabled",
     "sms_auto_reminder_paused",
     "whatsapp_auto_reminder_paused",
+    "sms_provider",
+    "twilio_account_sid",
+    "twilio_auth_token",
+    "twilio_from_number",
   ];
 
   const currentSettings = await getSystemSettings(env);
