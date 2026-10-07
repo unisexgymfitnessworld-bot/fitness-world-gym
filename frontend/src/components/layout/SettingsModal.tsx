@@ -128,6 +128,16 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
     }
   }, [open]);
 
+  // Auto‑poll the gateway status until it becomes "connected"
+  useEffect(() => {
+    if (open && gatewayStatus !== "connected") {
+      const interval = setInterval(() => {
+        void fetchGatewayStatus();
+      }, 5000); // poll every 5 seconds
+      return () => clearInterval(interval);
+    }
+  }, [open, gatewayStatus]);
+
   async function handleSave() {
     if (!name.trim()) {
       pushToast({
