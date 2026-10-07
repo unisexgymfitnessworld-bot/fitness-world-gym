@@ -37,7 +37,7 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
 
   // WhatsApp Gateway states
   const [gatewayStatus, setGatewayStatus] = useState<string>("checking");
-  const [gatewayUrl, setGatewayUrl] = useState<string>("");
+  const [gatewayUrl, setGatewayUrl] = useState<string>("https://gymos-whatsapp-gateway.onrender.com");
   const [loadingGateway, setLoadingGateway] = useState<boolean>(false);
   const [resettingGateway, setResettingGateway] = useState<boolean>(false);
   const [iframeKey, setIframeKey] = useState<number>(0);
@@ -50,12 +50,15 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
       if (res && res.status) {
         setGatewayStatus(res.status);
       }
-      if (res && res.gatewayUrl) {
+      if (res && res.gatewayUrl && !res.gatewayUrl.includes("railway.app")) {
         setGatewayUrl(res.gatewayUrl);
+      } else {
+        setGatewayUrl("https://gymos-whatsapp-gateway.onrender.com");
       }
     } catch (err) {
       console.warn("Failed to fetch WhatsApp gateway status:", err);
       setGatewayStatus("unavailable");
+      setGatewayUrl("https://gymos-whatsapp-gateway.onrender.com");
     } finally {
       setLoadingGateway(false);
     }
@@ -255,12 +258,12 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
   return (
     <Modal open={open} title="Fitness World Settings" onClose={onClose}>
       {/* Premium Tabbed Navigation */}
-      <div className="sticky top-0 bg-brand-white z-20 flex border-b border-border-default/60 mb-5 pb-0 pt-1">
+      <div className="sticky top-0 bg-brand-white z-20 flex overflow-x-auto scrollbar-hide flex-nowrap border-b border-border-default/60 mb-5 pb-0 pt-1 -mx-6 px-6">
 
         <button
           type="button"
           onClick={() => setActiveTab("profile")}
-          className={`flex items-center gap-1.5 px-4 py-2 text-[12px] font-black uppercase tracking-wider transition-all border-b-2 cursor-pointer ${
+          className={`flex items-center gap-1.5 px-4 py-2 text-[12px] font-black uppercase tracking-wider transition-all border-b-2 cursor-pointer shrink-0 ${
             activeTab === "profile"
               ? "border-brand-primary text-brand-primary font-black"
               : "border-transparent text-text-secondary/80 hover:text-text-primary"
@@ -272,7 +275,7 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
         <button
           type="button"
           onClick={() => setActiveTab("whatsapp")}
-          className={`flex items-center gap-1.5 px-4 py-2 text-[12px] font-black uppercase tracking-wider transition-all border-b-2 cursor-pointer ${
+          className={`flex items-center gap-1.5 px-4 py-2 text-[12px] font-black uppercase tracking-wider transition-all border-b-2 cursor-pointer shrink-0 ${
             activeTab === "whatsapp"
               ? "border-brand-primary text-brand-primary font-black"
               : "border-transparent text-text-secondary/80 hover:text-text-primary"
@@ -284,7 +287,7 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
         <button
           type="button"
           onClick={() => setActiveTab("status")}
-          className={`flex items-center gap-1.5 px-4 py-2 text-[12px] font-black uppercase tracking-wider transition-all border-b-2 cursor-pointer ${
+          className={`flex items-center gap-1.5 px-4 py-2 text-[12px] font-black uppercase tracking-wider transition-all border-b-2 cursor-pointer shrink-0 ${
             activeTab === "status"
               ? "border-brand-primary text-brand-primary font-black"
               : "border-transparent text-text-secondary/80 hover:text-text-primary"

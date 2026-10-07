@@ -77,12 +77,15 @@ export function DeveloperDashboard() {
       if (res && res.status) {
         setGatewayStatus(res.status);
       }
-      if (res && res.gatewayUrl) {
+      if (res && res.gatewayUrl && !res.gatewayUrl.includes("railway.app")) {
         setGatewayUrl(res.gatewayUrl);
+      } else {
+        setGatewayUrl("https://gymos-whatsapp-gateway.onrender.com");
       }
     } catch (err) {
       console.warn("Failed to fetch WhatsApp gateway status:", err);
       setGatewayStatus("unavailable");
+      setGatewayUrl("https://gymos-whatsapp-gateway.onrender.com");
     } finally {
       setLoadingGateway(false);
     }

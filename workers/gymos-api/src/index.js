@@ -85,16 +85,25 @@ async function handleRequest(request, env) {
     return jsonResponse(request, env, { success: true, data: { message: "Logged out" } });
   }
 
+function resolveWaGatewayUrl(settings = {}, env = {}) {
+  const url = settings.whatsapp_gateway_url || env.WHATSAPP_GATEWAY_URL;
+  if (!url || url.includes("railway.app")) {
+    return "https://gymos-whatsapp-gateway.onrender.com";
+  }
+  return url.replace(/\/$/, "");
+}
+
+function resolveWaGatewayToken(settings = {}, env = {}) {
+  return settings.whatsapp_gateway_token || env.WHATSAPP_GATEWAY_TOKEN || "fitness-world-secret-token-2026";
+}
+
   if (path === "/whatsapp-gateway/status" && method === "GET") {
     assertTrainerAllowed(env, authUser);
     const settings = await getSystemSettings(env);
-    const waGatewayUrl = settings.whatsapp_gateway_url || env.WHATSAPP_GATEWAY_URL;
-    const waGatewayToken = settings.whatsapp_gateway_token || env.WHATSAPP_GATEWAY_TOKEN;
-    if (!waGatewayUrl) {
-      return jsonResponse(request, env, { success: false, error: "WhatsApp Gateway URL is not configured. Please check developer settings." }, 400);
-    }
+    const waGatewayUrl = resolveWaGatewayUrl(settings, env);
+    const waGatewayToken = resolveWaGatewayToken(settings, env);
     try {
-      const response = await fetch(`${waGatewayUrl.replace(/\/$/, "")}/status`);
+      const response = await fetch(`${waGatewayUrl}/status`);
       const data = await response.json();
       return jsonResponse(request, env, { success: true, data: { ...data, gatewayUrl: waGatewayUrl } });
     } catch (err) {
@@ -113,13 +122,10 @@ async function handleRequest(request, env) {
   if (path === "/whatsapp-gateway/reset" && method === "POST") {
     assertTrainerAllowed(env, authUser);
     const settings = await getSystemSettings(env);
-    const waGatewayUrl = settings.whatsapp_gateway_url || env.WHATSAPP_GATEWAY_URL;
-    const waGatewayToken = settings.whatsapp_gateway_token || env.WHATSAPP_GATEWAY_TOKEN;
-    if (!waGatewayUrl || !waGatewayToken) {
-      return jsonResponse(request, env, { success: false, error: "WhatsApp Gateway URL or Access Token is not configured." }, 400);
-    }
+    const waGatewayUrl = resolveWaGatewayUrl(settings, env);
+    const waGatewayToken = resolveWaGatewayToken(settings, env);
     try {
-      const response = await fetch(`${waGatewayUrl.replace(/\/$/, "")}/reset`, {
+      const response = await fetch(`${waGatewayUrl}/reset`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${waGatewayToken}`
@@ -328,9 +334,9 @@ async function handleRequest(request, env) {
     const fast2SmsKey = settings.fast2sms_api_key || env.FAST2SMS_API_KEY;
     const waInstanceId = settings.whatsapp_instance_id || env.WHATSAPP_INSTANCE_ID;
     const waToken = settings.whatsapp_token || env.WHATSAPP_TOKEN;
-    const waGatewayUrl = settings.whatsapp_gateway_url || env.WHATSAPP_GATEWAY_URL;
-    const waGatewayToken = settings.whatsapp_gateway_token || env.WHATSAPP_GATEWAY_TOKEN;
-    const whatsappProvider = settings.whatsapp_provider || (env.WHATSAPP_INSTANCE_ID === "self_hosted" ? "self_hosted" : env.WHATSAPP_INSTANCE_ID ? "ultramsg" : "none");
+    const waGatewayUrl = resolveWaGatewayUrl(settings, env);
+    const waGatewayToken = resolveWaGatewayToken(settings, env);
+    const whatsappProvider = settings.whatsapp_provider || (env.WHATSAPP_INSTANCE_ID === "self_hosted" ? "self_hosted" : env.WHATSAPP_INSTANCE_ID ? "ultramsg" : "self_hosted");
 
     const smsEnabled = settings.sms_enabled !== "false";
     const whatsappEnabled = settings.whatsapp_enabled !== "false";
@@ -552,14 +558,14 @@ async function developerDiagnostics(env) {
   const fast2SmsKey = settings.fast2sms_api_key || env.FAST2SMS_API_KEY;
   const waInstanceId = settings.whatsapp_instance_id || env.WHATSAPP_INSTANCE_ID;
   const waToken = settings.whatsapp_token || env.WHATSAPP_TOKEN;
-  const waGatewayUrl = settings.whatsapp_gateway_url || env.WHATSAPP_GATEWAY_URL;
-  const waGatewayToken = settings.whatsapp_gateway_token || env.WHATSAPP_GATEWAY_TOKEN;
+  const waGatewayUrl = resolveWaGatewayUrl(settings, env);
+  const waGatewayToken = resolveWaGatewayToken(settings, env);
 
   const smsEnabled = settings.sms_enabled !== "false";
   const whatsappEnabled = settings.whatsapp_enabled !== "false";
   const whatsAppConfigured = Boolean(
     (waInstanceId && waToken) ||
-    (waInstanceId === "self_hosted" && waGatewayUrl)
+    (waGatewayUrl)
   );
 
   return {
@@ -1152,8 +1158,8 @@ async function runSmsReminder(env) {
   const fast2SmsKey = settings.fast2sms_api_key || env.FAST2SMS_API_KEY;
   const waInstanceId = settings.whatsapp_instance_id || env.WHATSAPP_INSTANCE_ID;
   const waToken = settings.whatsapp_token || env.WHATSAPP_TOKEN;
-  const waGatewayUrl = settings.whatsapp_gateway_url || env.WHATSAPP_GATEWAY_URL;
-  const waGatewayToken = settings.whatsapp_gateway_token || env.WHATSAPP_GATEWAY_TOKEN;
+  const waGatewayUrl = resolveWaGatewayUrl(settings, env);
+  const waGatewayToken = resolveWaGatewayToken(settings, env);
 
   const smsEnabled = settings.sms_enabled !== "false";
   const whatsappEnabled = settings.whatsapp_enabled !== "false";
@@ -1162,7 +1168,7 @@ async function runSmsReminder(env) {
   const whatsappAutoPaused = settings.whatsapp_auto_reminder_paused === "true";
 
   const hasSms = Boolean(fast2SmsKey) && smsEnabled && !smsAutoPaused;
-  const whatsappProvider = settings.whatsapp_provider || (env.WHATSAPP_INSTANCE_ID === "self_hosted" ? "self_hosted" : env.WHATSAPP_INSTANCE_ID ? "ultramsg" : "none");
+  const whatsappProvider = settings.whatsapp_provider || (env.WHATSAPP_INSTANCE_ID === "self_hosted" ? "self_hosted" : env.WHATSAPP_INSTANCE_ID ? "ultramsg" : "self_hosted");
   const hasWhatsApp = (
     (whatsappProvider === "self_hosted" && waGatewayUrl) ||
     (whatsappProvider === "ultramsg" && waInstanceId && waToken)
@@ -1171,7 +1177,7 @@ async function runSmsReminder(env) {
   // 0. Ensure WhatsApp Gateway is awake before we start sending reminders
   if (hasWhatsApp && whatsappProvider === "self_hosted") {
     try {
-      const pingUrl = `${waGatewayUrl.replace(/\/$/, "")}/status`;
+      const pingUrl = `${waGatewayUrl}/status`;
       await fetch(pingUrl).catch(() => {});
     } catch (_) {}
   }
@@ -1287,9 +1293,9 @@ async function keepSupabaseAlive(env, wait = false) {
   // Ping WhatsApp Gateway asynchronously so we do not block any API requests unless wait is true
   try {
     const settings = await getSystemSettings(env);
-    const waGatewayUrl = settings.whatsapp_gateway_url || env.WHATSAPP_GATEWAY_URL;
+    const waGatewayUrl = resolveWaGatewayUrl(settings, env);
     if (waGatewayUrl) {
-      const pingUrl = `${waGatewayUrl.replace(/\/$/, "")}/status`;
+      const pingUrl = `${waGatewayUrl}/status`;
       const promise = fetch(pingUrl).catch(err => {
         logWarn("keep_whatsapp_gateway_alive_fetch_failed", { error: err.message });
       });
@@ -1443,8 +1449,8 @@ async function sendWhatsApp(env, phone, message) {
   const formattedPhone = phone.startsWith("91") && phone.length === 12 ? phone : `91${phone}`;
 
   if (provider === "self_hosted") {
-    const waGatewayUrl = settings.whatsapp_gateway_url || env.WHATSAPP_GATEWAY_URL;
-    const waGatewayToken = settings.whatsapp_gateway_token || env.WHATSAPP_GATEWAY_TOKEN;
+    const waGatewayUrl = resolveWaGatewayUrl(settings, env);
+    const waGatewayToken = resolveWaGatewayToken(settings, env);
     
     if (!waGatewayUrl || !waGatewayToken) {
       throw new ApiError(503, "WHATSAPP_NOT_CONFIGURED", "Self-hosted WhatsApp URL or Token is not configured");
@@ -1452,11 +1458,11 @@ async function sendWhatsApp(env, phone, message) {
 
     // Wake up gateway if asleep by pinging status first
     try {
-      const pingUrl = `${waGatewayUrl.replace(/\/$/, "")}/status`;
+      const pingUrl = `${waGatewayUrl}/status`;
       await fetch(pingUrl).catch(() => {});
     } catch (_) {}
 
-    const response = await fetch(`${waGatewayUrl.replace(/\/$/, "")}/send`, {
+    const response = await fetch(`${waGatewayUrl}/send`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
