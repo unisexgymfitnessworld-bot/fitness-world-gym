@@ -483,6 +483,39 @@ app.get("/", async (req, res) => {
     }
   }
 
+  if (connectionStatus === "disconnected") {
+    return res.send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Connection Failed</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <meta http-equiv="refresh" content="5">
+          <style>
+            html, body {
+              margin: 0; padding: 0; width: 100%; height: 100%;
+              background: transparent; font-family: -apple-system, sans-serif;
+              display: flex; align-items: center; justify-content: center;
+              overflow: hidden;
+            }
+            .card {
+              background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c;
+              padding: 16px; border-radius: 12px; text-align: center; max-width: 260px;
+            }
+            h4 { margin: 0 0 8px 0; font-size: 14px; }
+            p { margin: 0; font-size: 12px; font-weight: 500; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <h4>⚠️ Connection Failed</h4>
+            <p>If your phone said "failed to link", we are generating a new QR code. Please wait a moment...</p>
+          </div>
+        </body>
+      </html>
+    `);
+  }
+
   res.send(`
     <!DOCTYPE html>
     <html>

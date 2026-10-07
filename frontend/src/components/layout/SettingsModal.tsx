@@ -535,12 +535,18 @@ export function SettingsModal({ open, trainer, onClose }: SettingsModalProps) {
                         : gatewayStatus === "connecting"
                         ? "Connecting..."
                         : gatewayStatus === "disconnected"
-                        ? "Disconnected"
+                        ? "Connection Failed"
                         : gatewayStatus === "unavailable"
                         ? "Offline"
                         : gatewayStatus}
                     </span>
                   </div>
+                  
+                  {gatewayStatus === "disconnected" && (
+                    <p className="text-[11px] text-red-500/80 font-bold max-w-[280px] text-center mt-1">
+                      If your phone says "failed to link", please click "Disconnect WhatsApp" below and scan the new QR code.
+                    </p>
+                  )}
 
                   <div className="flex flex-wrap gap-2 mt-2 justify-center">
                     <Button
