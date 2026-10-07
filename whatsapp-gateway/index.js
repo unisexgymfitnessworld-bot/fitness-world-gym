@@ -114,9 +114,9 @@ async function deleteSessionFromDb(key) {
 async function clearDbSession() {
   if (!useDbSession) return;
   try {
-    const url = `${SUPABASE_URL}/rest/v1/whatsapp_sessions?key=neq.system_config_settings`;
+    const url = `${SUPABASE_URL}/rest/v1/whatsapp_sessions?select=key`;
     const response = await fetch(url, {
-      method: "DELETE",
+      method: "GET",
       headers: {
         "apikey": SUPABASE_SERVICE_ROLE_KEY,
         "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
@@ -124,8 +124,16 @@ async function clearDbSession() {
       }
     });
     if (!response.ok) {
-      throw new Error(`REST error: ${response.statusText}`);
+      throw new Error(`REST error fetching keys: ${response.statusText}`);
     }
+    const rows = await response.json();
+    const tasks = [];
+    for (const row of rows) {
+      if (row.key && row.key !== "system_config_settings") {
+        tasks.push(deleteSessionFromDb(row.key));
+      }
+    }
+    await Promise.all(tasks);
     console.log("[gateway] Database session cleared.");
   } catch (err) {
     console.error("[gateway] Error clearing database session:", err.message);
