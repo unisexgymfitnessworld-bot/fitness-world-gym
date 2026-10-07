@@ -1,6 +1,6 @@
 {
   "name": "whatsapp-gateway",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Free self-hosted WhatsApp Gateway API for GymOS",
   "main": "index.js",
   "type": "module",
@@ -8,9 +8,13 @@
     "start": "node index.js"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "^7.0.0-rc13",
+    "@whiskeysockets/baileys": "7.0.0-rc14",
     "@hapi/boom": "^10.0.1",
     "express": "^4.19.2",
-    "qrcode": "^1.5.3"
+    "qrcode": "^1.5.3",
+    "pino": "^9.0.0"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
