@@ -1,4 +1,4 @@
-const CACHE_NAME = "fitness-world-gymos-v2";
+const CACHE_NAME = "fitness-world-gymos-v3";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/favicon.svg", "/icons/icon-192.png", "/icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -32,32 +32,16 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (request.mode === "navigate") {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put("/", copy));
-          return response;
-        })
-        .catch(() => caches.match("/")),
-    );
-    return;
-  }
-
+  // Network-first strategy for navigation and assets to avoid stale UI
   event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) {
-        return cached;
-      }
-
-      return fetch(request).then((response) => {
+    fetch(request)
+      .then((response) => {
         if (response.ok) {
           const copy = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
         }
         return response;
-      });
-    }),
+      })
+      .catch(() => caches.match(request).then((cached) => cached || caches.match("/")))
   );
 });
