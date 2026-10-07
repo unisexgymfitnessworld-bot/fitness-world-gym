@@ -28,6 +28,7 @@ let qrCodeData = null;
 let connectionStatus = "connecting"; // 'connecting', 'qr_ready', 'connected', 'disconnected'
 let qrRetries = 0;
 const MAX_QR_RETRIES = 5;
+let authRetries401 = 0; // Track consecutive 401 errors before wiping session
 
 // Ensure auth directory exists
 const AUTH_DIR = path.join(__dirname, "auth_info");
@@ -191,7 +192,7 @@ async function useSupabaseAuthState() {
   };
 }
 
-function clearAuthDir() {
+async function clearAuthDir() {
   try {
     if (fs.existsSync(AUTH_DIR)) {
       fs.rmSync(AUTH_DIR, { recursive: true, force: true });
@@ -199,7 +200,7 @@ function clearAuthDir() {
       console.log("[gateway] Auth directory cleared for fresh login.");
     }
     if (useDbSession) {
-      clearDbSession();
+      await clearDbSession();
     }
   } catch (err) {
     console.error("[gateway] Failed to clear auth directory:", err);
@@ -316,8 +317,9 @@ async function startWhatsApp() {
 
         case DisconnectReason.connectionLost:
         case DisconnectReason.timedOut:
-          // Network issues — retry with delay
+          // Network issues — retry with delay (keep session!)
           console.log("[gateway] Connection lost/timed out. Retrying in 5s...");
+          authRetries401 = 0; // reset 401 counter on normal network issues
           setTimeout(startWhatsApp, 5000);
           break;
 
@@ -336,10 +338,18 @@ async function startWhatsApp() {
           break;
 
         case 401:
-          // Unauthorized — session invalid, clean up and restart
-          console.log("[gateway] 401 Unauthorized. Clearing session...");
-          clearAuthDir();
-          setTimeout(startWhatsApp, 3000);
+          // 401 can be transient during Render cold-starts — retry 3 times
+          // before clearing the session
+          authRetries401++;
+          if (authRetries401 >= 3) {
+            console.log("[gateway] 401 Unauthorized after 3 retries. Session is truly invalid — clearing...");
+            authRetries401 = 0;
+            clearAuthDir();
+            setTimeout(startWhatsApp, 3000);
+          } else {
+            console.log(`[gateway] 401 Unauthorized (attempt ${authRetries401}/3). Retrying in ${authRetries401 * 5}s without clearing session...`);
+            setTimeout(startWhatsApp, authRetries401 * 5000);
+          }
           break;
 
         case 405:
@@ -352,7 +362,7 @@ async function startWhatsApp() {
           break;
 
         default:
-          // Unknown error — attempt reconnect with back-off
+          // Unknown error — attempt reconnect with back-off (keep session!)
           console.log(
             `[gateway] Unknown disconnect (code: ${reason}). Retrying in 5s...`
           );
@@ -364,6 +374,7 @@ async function startWhatsApp() {
       connectionStatus = "connected";
       qrCodeData = null;
       qrRetries = 0;
+      authRetries401 = 0; // reset 401 counter on successful connection
     }
   });
 }
