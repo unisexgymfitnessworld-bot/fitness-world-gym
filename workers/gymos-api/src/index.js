@@ -1456,31 +1456,46 @@ async function sendWhatsApp(env, phone, message) {
       throw new ApiError(503, "WHATSAPP_NOT_CONFIGURED", "Self-hosted WhatsApp URL or Token is not configured");
     }
 
-    // Wake up gateway if asleep by pinging status first
+    // Wake up gateway if asleep (Render free tier sleeps after 15 min)
     try {
-      const pingUrl = `${waGatewayUrl}/status`;
-      await fetch(pingUrl).catch(() => {});
+      await fetch(`${waGatewayUrl}/status`).catch(() => {});
     } catch (_) {}
 
-    const response = await fetch(`${waGatewayUrl}/send`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${waGatewayToken}`
-      },
-      body: JSON.stringify({
-        to: formattedPhone,
-        message: message
-      })
-    });
+    // Retry up to 3 times with increasing delays to let the gateway cold-start
+    const MAX_RETRIES = 3;
+    const sendBody = JSON.stringify({ to: formattedPhone, message: message });
+    let lastError = "Self-hosted WhatsApp request failed";
 
-    const payload = await safeJson(response);
-    if (!response.ok || payload?.success !== true) {
-      const errorMsg = payload?.error ?? "Self-hosted WhatsApp request failed";
-      throw new ApiError(502, "WHATSAPP_SEND_FAILED", errorMsg);
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const response = await fetch(`${waGatewayUrl}/send`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${waGatewayToken}`
+          },
+          body: sendBody
+        });
+
+        const payload = await safeJson(response);
+        if (response.ok && payload?.success === true) {
+          return payload.messageId ?? "sent";
+        }
+
+        lastError = payload?.error ?? `Gateway returned HTTP ${response.status}`;
+        logInfo("whatsapp_send_attempt_failed", { attempt, status: response.status, error: lastError });
+      } catch (fetchErr) {
+        lastError = fetchErr?.message ?? "Network error reaching WhatsApp gateway";
+        logInfo("whatsapp_send_attempt_error", { attempt, error: lastError });
+      }
+
+      // Wait before retrying (3s, then 6s) — gives Render time to cold-start
+      if (attempt < MAX_RETRIES) {
+        await new Promise(r => setTimeout(r, attempt * 3000));
+      }
     }
 
-    return payload.messageId ?? "sent";
+    throw new ApiError(502, "WHATSAPP_SEND_FAILED", lastError);
   }
 
   // Fallback to UltraMsg
