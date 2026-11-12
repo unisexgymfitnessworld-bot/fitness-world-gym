@@ -1,0 +1,575 @@
+import { useState } from "react";
+import { ArrowRight, CalendarClock, CheckCircle2, Download, Eye, EyeOff, Loader2, MessageCircle, Search, Share2, ShieldCheck, Smartphone } from "lucide-react";
+import { motion } from "motion/react";
+import { FwMark } from "../components/layout/FwMark";
+import { friendlyAuthError } from "../lib/authMessages";
+import { isSupabaseConfigured } from "../lib/supabase";
+import { useAuth } from "../hooks/useAuth";
+import { usePwaInstall } from "../hooks/usePwaInstall";
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.12, delayChildren: 0.2 },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.45, ease: "easeOut" as const } },
+};
+
+export function Login() {
+  const { signIn, sendPasswordReset, verifyRecoveryCode, clearError, loading, error } = useAuth();
+  const { canInstall, install, isIos, isMacSafari, isStandalone } = usePwaInstall();
+  const [mode, setMode] = useState<"signin" | "forgot" | "verify_reset">("signin");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [resetNotice, setResetNotice] = useState<string | null>(null);
+  const [installStatus, setInstallStatus] = useState<"idle" | "installed" | "dismissed">("idle");
+  const [slowSignIn, setSlowSignIn] = useState(false);
+
+  function submit(event: React.FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    if (mode === "forgot") {
+      void submitPasswordReset();
+      return;
+    }
+    if (mode === "verify_reset") {
+      void submitVerifyReset();
+      return;
+    }
+    // Show connection warning hint after 8s if sign-in is slow (Supabase cold start)
+    const slowTimer = window.setTimeout(() => setSlowSignIn(true), 8000);
+    void signIn({ email, password }).finally(() => {
+      window.clearTimeout(slowTimer);
+      setSlowSignIn(false);
+    });
+  }
+
+  async function submitPasswordReset(): Promise<void> {
+    const targetEmail = (resetEmail || email).trim();
+    setResetLoading(true);
+    setResetError(null);
+    setResetNotice(null);
+    try {
+      await sendPasswordReset(targetEmail);
+      setMode("verify_reset");
+      setResetNotice(`Security code sent to ${targetEmail}. Enter the 6-digit code and your new password below.`);
+    } catch (caught) {
+      setResetError(friendlyAuthError(caught));
+    } finally {
+      setResetLoading(false);
+    }
+  }
+
+  async function submitVerifyReset(): Promise<void> {
+    const targetEmail = (resetEmail || email).trim();
+    if (newPassword !== confirmPassword) {
+      setResetError("Passwords do not match");
+      return;
+    }
+    setResetLoading(true);
+    setResetError(null);
+    setResetNotice(null);
+    try {
+      await verifyRecoveryCode(targetEmail, code, newPassword);
+      setResetNotice("Password reset successfully! Please sign in with your new password.");
+      setMode("signin");
+      setCode("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setPassword("");
+    } catch (caught) {
+      setResetError(friendlyAuthError(caught));
+    } finally {
+      setResetLoading(false);
+    }
+  }
+
+  function switchMode(nextMode: "signin" | "forgot" | "verify_reset"): void {
+    setMode(nextMode);
+    clearError();
+    setResetError(null);
+    setResetNotice(null);
+    if (nextMode === "forgot" && !resetEmail) {
+      setResetEmail(email);
+    }
+  }
+
+  async function installApp(): Promise<void> {
+    const accepted = await install();
+    setInstallStatus(accepted ? "installed" : "dismissed");
+  }
+
+  return (
+    <main className="studio-shell animated-grid relative min-h-screen overflow-hidden px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
+      <section className="relative mx-auto grid min-h-[calc(100vh-32px)] w-full max-w-[1120px] content-center lg:min-h-[calc(100vh-48px)]">
+        <motion.div
+          className="studio-card grid overflow-hidden rounded-[var(--radius-panel)] lg:grid-cols-[minmax(0,1fr)_420px]"
+          initial={{ opacity: 0, scale: 0.96, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+        >
+          {/* Left Dark Panel */}
+          <motion.div
+            className="studio-dark order-2 grid content-between gap-6 p-5 lg:order-1 lg:min-h-[620px] lg:gap-10 lg:p-8"
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+          >
+            <motion.div className="flex flex-wrap items-center justify-between gap-4" variants={itemVariants}>
+              <FwMark />
+              <div className="rounded-full border border-white/[0.14] bg-white/[0.08] px-3 py-1.5 text-[12px] font-bold uppercase tracking-wider text-white/70">
+                Unisex Gym
+              </div>
+            </motion.div>
+
+            <motion.div variants={itemVariants}>
+              <h1 className="max-w-[560px] text-[32px] font-black leading-[1.04] text-brand-white sm:text-[48px] lg:text-[64px]">
+                Trainer desk, built for{" "}
+                <span className="text-[#FF6B9D]">
+                  real gym hours.
+                </span>
+              </h1>
+              <p className="mt-4 max-w-[520px] text-[15px] font-semibold leading-7 text-white/68 lg:mt-5 lg:text-[17px]">
+                Manage members, track dues, and send reminders quickly on tablet without making the trainer think about software.
+              </p>
+              <motion.div
+                className="mt-6 grid gap-2 sm:grid-cols-3 lg:mt-8 lg:gap-3"
+                variants={containerVariants}
+              >
+                <SignalCard icon={Search} label="Find" value="Instant search" index={0} />
+                <SignalCard icon={CalendarClock} label="Dues" value="Renewal view" index={1} />
+                <SignalCard icon={MessageCircle} label="Reach" value="SMS reminders" index={2} />
+              </motion.div>
+            </motion.div>
+
+            <motion.div className="grid gap-3 lg:gap-4" variants={itemVariants}>
+              <div className="brand-photo-frame hidden rounded-[var(--radius-card)] p-2 lg:block">
+                <img className="w-full rounded-lg object-contain" src="/brand/fitness-world-banner.jpeg" alt="Fitness World gym banner" />
+              </div>
+              <div className="grid grid-cols-3 gap-2 lg:gap-3">
+                <MiniMetric value="09" label="AM Reminders" />
+                <MiniMetric value="FW" label="Member IDs" />
+                <MiniMetric value="PDF" label="Gym Reports" />
+              </div>
+            </motion.div>
+          </motion.div>
+
+          {/* Right Form Panel */}
+          <motion.form
+            className="order-1 grid content-center gap-5 bg-brand-white p-5 sm:p-6 lg:order-2 lg:gap-6 lg:p-10"
+            onSubmit={submit}
+            initial={{ opacity: 0, x: 40 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <div className="grid gap-4 lg:gap-5">
+              <div className="grid h-24 w-24 place-items-center overflow-hidden rounded-full border border-border-default bg-brand-white shadow-sm lg:h-28 lg:w-28">
+                <img className="safe-logo-img h-full w-full object-contain p-2 rounded-full" src="/brand/fitness-world-logo-tight.png" alt="Fitness World logo" />
+              </div>
+              <div>
+                <h2 className="text-[28px] font-black leading-tight text-text-primary lg:text-[32px]">
+                  {mode === "signin" ? "Sign in" : mode === "forgot" ? "Reset password" : "Enter code"}
+                </h2>
+                <p className="mt-1.5 text-[14px] font-semibold text-text-secondary lg:mt-2 lg:text-[15px]">
+                  {mode === "signin"
+                    ? "Open the Fitness World trainer workspace."
+                    : mode === "forgot"
+                    ? "Send a secure 6-digit reset code to a trainer email."
+                    : "Enter the 6-digit code and choose a new password."}
+                </p>
+                {!isSupabaseConfigured ? (
+                  <p className="mt-2 rounded-[var(--radius-card)] border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-bold text-amber-800">
+                    Demo mode — sign in with any email and password to explore the UI.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+
+            {mode !== "verify_reset" ? (
+              <label className="grid gap-1.5 lg:gap-2">
+                <span className="text-[12px] font-bold uppercase tracking-wider text-text-muted">Email</span>
+                <input
+                  className="studio-input min-h-12 rounded-[var(--radius-card)] px-4 text-[16px] font-semibold lg:min-h-14"
+                  value={mode === "signin" ? email : resetEmail}
+                  onChange={(event) => {
+                    if (mode === "signin") {
+                      setEmail(event.target.value);
+                    } else {
+                      setResetEmail(event.target.value);
+                    }
+                  }}
+                  autoComplete="email"
+                  placeholder="trainer@fitnessworld.in"
+                />
+              </label>
+            ) : (
+              <div className="flex items-center justify-between rounded-[var(--radius-card)] border border-border-default bg-surface-raised px-4 py-2 text-[14px] font-semibold text-text-secondary">
+                <span>Sending to: <strong>{resetEmail || email}</strong></span>
+                <button
+                  type="button"
+                  className="text-brand-primary font-bold hover:underline"
+                  onClick={() => switchMode("forgot")}
+                >
+                  Change
+                </button>
+              </div>
+            )}
+
+            {mode === "verify_reset" ? (
+              <>
+                <label className="grid gap-1.5 lg:gap-2">
+                  <span className="text-[12px] font-bold uppercase tracking-wider text-text-muted">Security Code (6-digits)</span>
+                  <input
+                    className="studio-input min-h-12 rounded-[var(--radius-card)] px-4 text-[16px] font-semibold lg:min-h-14"
+                    value={code}
+                    onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="123456"
+                    maxLength={6}
+                    autoFocus
+                  />
+                </label>
+
+                <label className="grid gap-1.5 lg:gap-2">
+                  <span className="text-[12px] font-bold uppercase tracking-wider text-text-muted">New Password</span>
+                  <div className="relative w-full">
+                    <input
+                      className="studio-input min-h-12 w-full rounded-[var(--radius-card)] pl-4 pr-10 text-[16px] font-semibold lg:min-h-14"
+                      type={showNewPassword ? "text" : "password"}
+                      value={newPassword}
+                      onChange={(event) => setNewPassword(event.target.value)}
+                      placeholder="At least 12 characters"
+                    />
+                    <button
+                      type="button"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center p-1 rounded-full text-text-muted hover:text-text-primary hover:bg-black/5 transition-colors focus:outline-none"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      aria-label={showNewPassword ? "Hide password" : "Show password"}
+                    >
+                      {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </label>
+
+                <label className="grid gap-1.5 lg:gap-2">
+                  <span className="text-[12px] font-bold uppercase tracking-wider text-text-muted">Confirm Password</span>
+                  <div className="relative w-full">
+                    <input
+                      className="studio-input min-h-12 w-full rounded-[var(--radius-card)] pl-4 pr-10 text-[16px] font-semibold lg:min-h-14"
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={confirmPassword}
+                      onChange={(event) => setConfirmPassword(event.target.value)}
+                      placeholder="Re-enter new password"
+                    />
+                    <button
+                      type="button"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center p-1 rounded-full text-text-muted hover:text-text-primary hover:bg-black/5 transition-colors focus:outline-none"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                    >
+                      {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </label>
+              </>
+            ) : null}
+
+            {mode === "signin" ? (
+              <label className="grid gap-1.5 lg:gap-2">
+                <span className="text-[12px] font-bold uppercase tracking-wider text-text-muted">Password</span>
+                <div className="relative w-full">
+                  <input
+                    className="studio-input min-h-12 w-full rounded-[var(--radius-card)] pl-4 pr-10 text-[16px] font-semibold lg:min-h-14"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    autoComplete="current-password"
+                    placeholder="Enter password"
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center p-1 rounded-full text-text-muted hover:text-text-primary hover:bg-black/5 transition-colors focus:outline-none"
+                    onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </label>
+            ) : null}
+
+            {mode === "signin" ? (
+              <div className="-mt-2 flex justify-end">
+                <button
+                  type="button"
+                  className="text-[13px] font-black text-brand-primary transition hover:text-brand-primary-hover"
+                  onClick={() => switchMode("forgot")}
+                >
+                  Forgot password?
+                </button>
+              </div>
+            ) : null}
+
+            {(mode === "signin" ? error : resetError) ? (
+              <motion.p
+                className="rounded-[var(--radius-card)] border border-red-100 bg-red-50 px-4 py-3 text-[14px] font-semibold text-status-expired"
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                {mode === "signin" ? error : resetError}
+              </motion.p>
+            ) : null}
+
+            {resetNotice ? (
+              <motion.p
+                className="rounded-[var(--radius-card)] border border-green-100 bg-green-50 px-4 py-3 text-[14px] font-semibold text-status-active"
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                {resetNotice}
+              </motion.p>
+            ) : null}
+
+            <motion.button
+              type="submit"
+              disabled={mode === "signin" ? loading : resetLoading}
+              className="focus-ring inline-flex min-h-12 w-full items-center justify-center gap-3 rounded-[var(--radius-card)] bg-brand-primary px-5 py-3 text-[16px] font-black text-brand-white shadow-[0_2px_8px_rgba(26,26,46,0.16)] transition-colors hover:bg-brand-primary-hover disabled:cursor-not-allowed disabled:opacity-60 lg:min-h-14"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              {(mode === "signin" ? loading : resetLoading) ? (
+                <>
+                  <Loader2 size={20} className="animate-spin" />
+                  {mode === "signin" ? "Signing In" : mode === "forgot" ? "Sending Code" : "Saving Password"}
+                </>
+              ) : mode === "forgot" ? (
+                <>
+                  Send Code
+                  <ArrowRight size={20} />
+                </>
+              ) : mode === "verify_reset" ? (
+                <>
+                  Save New Password
+                  <ArrowRight size={20} />
+                </>
+              ) : (
+                <>
+                  Open Trainer Desk
+                  <ArrowRight size={20} />
+                </>
+              )}
+            </motion.button>
+
+            {mode === "signin" && loading && slowSignIn && (
+              <motion.p
+                className="rounded-[var(--radius-card)] border border-amber-100 bg-amber-50 px-4 py-3 text-[13px] font-semibold text-amber-700"
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                Optimizing secure connection — please hold on, this might take a moment...
+              </motion.p>
+            )}
+
+            {mode === "forgot" ? (
+              <button
+                type="button"
+                className="text-center text-[13px] font-black text-text-secondary transition hover:text-brand-primary"
+                onClick={() => switchMode("signin")}
+              >
+                Back to sign in
+              </button>
+            ) : null}
+
+            {mode === "verify_reset" ? (
+              <div className="flex justify-between items-center text-[13px] font-black">
+                <button
+                  type="button"
+                  className="text-text-secondary transition hover:text-brand-primary"
+                  onClick={() => switchMode("forgot")}
+                >
+                  Resend Code
+                </button>
+                <button
+                  type="button"
+                  className="text-text-secondary transition hover:text-brand-primary"
+                  onClick={() => switchMode("signin")}
+                >
+                  Back to sign in
+                </button>
+              </div>
+            ) : null}
+
+            <div className="flex items-center gap-2 text-[12px] font-semibold text-text-muted lg:text-[13px]">
+              <ShieldCheck size={16} className="text-status-active" />
+              Secure trainer access for shared gym data.
+            </div>
+
+            <AppInstallPanel
+              canInstall={canInstall}
+              installStatus={installStatus}
+              isIos={isIos}
+              isMacSafari={isMacSafari}
+              isStandalone={isStandalone}
+              onInstall={() => void installApp()}
+            />
+          </motion.form>
+        </motion.div>
+      </section>
+    </main>
+  );
+}
+
+interface AppInstallPanelProps {
+  canInstall: boolean;
+  installStatus: "idle" | "installed" | "dismissed";
+  isIos: boolean;
+  isMacSafari: boolean;
+  isStandalone: boolean;
+  onInstall: () => void;
+}
+
+function AppInstallPanel({ canInstall, installStatus, isIos, isMacSafari, isStandalone, onInstall }: AppInstallPanelProps) {
+  if (isStandalone || installStatus === "installed") {
+    return (
+      <div className="mt-2 flex items-center gap-3 rounded-[var(--radius-card)] border border-green-100 bg-green-50 px-4 py-3 text-[13px] font-bold text-status-active">
+        <CheckCircle2 size={18} />
+        GymOS is ready as an installed app.
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 flex flex-col gap-2 border-t border-border-default pt-4">
+      <p className="text-[12px] font-bold uppercase tracking-wider text-text-muted">Mobile & Tablet App</p>
+      {canInstall ? (
+        <button
+          type="button"
+          className="focus-ring inline-flex min-h-11 items-center justify-center gap-2.5 rounded-[var(--radius-card)] border border-border-default bg-surface-raised px-4 py-2 text-[14px] font-bold text-text-primary shadow-sm transition-all hover:border-brand-primary/40 hover:bg-brand-white"
+          onClick={onInstall}
+        >
+          <Download size={18} className="text-brand-primary" />
+          Install GymOS
+        </button>
+      ) : isIos ? (
+        <div className="rounded-[var(--radius-card)] border border-brand-primary/20 bg-surface-raised/40 p-4 shadow-sm">
+          <div className="flex items-center gap-2 text-[14px] font-extrabold text-brand-primary">
+            <Smartphone size={18} />
+            Install on iPhone / iPad
+          </div>
+          <p className="mt-1.5 text-[12px] font-semibold leading-5 text-text-secondary">
+            Apple iOS requires you to add web apps manually to your home screen:
+          </p>
+          <div className="mt-3.5 space-y-3">
+            <div className="flex items-start gap-3 text-[13px]">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-primary/10 text-[11px] font-bold text-brand-primary">1</span>
+              <p className="font-semibold text-text-primary leading-5">
+                Tap the <span className="inline-flex items-center gap-1 rounded bg-brand-primary/5 px-1.5 py-0.5 font-bold text-brand-primary">Share <Share2 size={13} /></span> button in Safari (at the bottom or top of your screen).
+              </p>
+            </div>
+            <div className="flex items-start gap-3 text-[13px]">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-primary/10 text-[11px] font-bold text-brand-primary">2</span>
+              <p className="font-semibold text-text-primary leading-5">
+                Scroll down the menu list and tap <span className="font-bold text-brand-primary">Add to Home Screen</span>.
+              </p>
+            </div>
+            <div className="flex items-start gap-3 text-[13px]">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-primary/10 text-[11px] font-bold text-brand-primary">3</span>
+              <p className="font-semibold text-text-primary leading-5">
+                Tap <span className="font-bold text-brand-primary">Add</span> in the top-right corner to finish.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : isMacSafari ? (
+        <div className="rounded-[var(--radius-card)] border border-brand-primary/20 bg-surface-raised/40 p-4 shadow-sm">
+          <div className="flex items-center gap-2 text-[14px] font-extrabold text-brand-primary">
+            <Smartphone size={18} />
+            Install on Mac (Safari)
+          </div>
+          <p className="mt-1.5 text-[12px] font-semibold leading-5 text-text-secondary">
+            To install GymOS as a standalone desktop app on macOS Safari:
+          </p>
+          <div className="mt-3.5 space-y-3">
+            <div className="flex items-start gap-3 text-[13px]">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-primary/10 text-[11px] font-bold text-brand-primary">1</span>
+              <p className="font-semibold text-text-primary leading-5">
+                Click the <span className="inline-flex items-center gap-1 rounded bg-brand-primary/5 px-1.5 py-0.5 font-bold text-brand-primary">Share <Share2 size={13} /></span> button in the top-right corner of Safari.
+              </p>
+            </div>
+            <div className="flex items-start gap-3 text-[13px]">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-primary/10 text-[11px] font-bold text-brand-primary">2</span>
+              <p className="font-semibold text-text-primary leading-5">
+                Select <span className="font-bold text-brand-primary">Add to Dock</span> from the list.
+              </p>
+            </div>
+            <div className="flex items-start gap-3 text-[13px]">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-primary/10 text-[11px] font-bold text-brand-primary">3</span>
+              <p className="font-semibold text-text-primary leading-5">
+                Click <span className="font-bold text-brand-primary">Add</span> to place the GymOS desktop app directly in your Dock!
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-[var(--radius-card)] border border-border-default bg-surface-raised px-4 py-3">
+          <div className="flex items-center gap-2.5 text-[14px] font-bold text-text-primary">
+            <Smartphone size={18} className="text-brand-primary" />
+            Install GymOS from browser menu
+          </div>
+          <p className="mt-1 text-[12px] font-semibold leading-5 text-text-muted">
+            After deploy, supported browsers show the install option automatically.
+          </p>
+        </div>
+      )}
+      {installStatus === "dismissed" ? <p className="text-[12px] font-semibold text-text-muted">Install skipped. You can add GymOS later from the browser menu.</p> : null}
+    </div>
+  );
+}
+
+interface SignalCardProps {
+  icon: typeof Search;
+  label: string;
+  value: string;
+  index: number;
+}
+
+function SignalCard({ icon: Icon, label, value }: SignalCardProps) {
+  return (
+    <motion.div
+      className="card-hover rounded-[var(--radius-card)] border border-white/[0.12] bg-white/[0.08] p-3"
+      variants={itemVariants}
+    >
+      <span className="grid h-9 w-9 place-items-center rounded-lg bg-white/[0.10] text-brand-primary-light lg:h-10 lg:w-10">
+        <Icon size={17} />
+      </span>
+      <span className="mt-3 block text-[11px] font-bold uppercase tracking-wider text-white/48 lg:mt-4 lg:text-[12px]">{label}</span>
+      <span className="mt-0.5 block text-[14px] font-black text-brand-white lg:mt-1 lg:text-[15px]">{value}</span>
+    </motion.div>
+  );
+}
+
+interface MiniMetricProps {
+  value: string;
+  label: string;
+}
+
+function MiniMetric({ value, label }: MiniMetricProps) {
+  return (
+    <div className="rounded-[var(--radius-card)] border border-white/[0.12] bg-white/[0.08] p-2.5 lg:p-3">
+      <p className="font-mono text-[20px] font-black leading-none text-brand-white lg:text-[22px]">{value}</p>
+      <p className="mt-0.5 text-[11px] font-bold uppercase tracking-wider text-white/48 lg:mt-1 lg:text-[12px]">{label}</p>
+    </div>
+  );
+}
