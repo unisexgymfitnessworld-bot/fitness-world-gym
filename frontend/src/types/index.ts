@@ -69,23 +69,19 @@ export interface TrainerAccount {
 
 export interface SystemConfigSettings {
   sms_enabled: string;
-  whatsapp_enabled: string;
-  whatsapp_provider: "none" | "ultramsg" | "self_hosted";
-  whatsapp_gateway_url: string;
-  whatsapp_gateway_token: string;
-  whatsapp_instance_id: string;
-  whatsapp_token: string;
-  fast2sms_api_key: string;
+  smsgate_username: string;
+  smsgate_password: string;
+  smsgate_device_id: string;
+  smsgate_sim_number: string;
   db_keep_alive_enabled: string;
   sms_auto_reminder_paused: string;
-  whatsapp_auto_reminder_paused: string;
 }
 
 export interface DeveloperDiagnostics {
   api: "ok";
   supabase: "ok" | "error";
   smsConfigured: boolean;
-  whatsAppConfigured?: boolean;
+  smsgateConfigured: boolean;
   memberOwnershipReady: boolean;
   orphanMembers: number;
   expiredActiveMembers: number;
@@ -102,6 +98,22 @@ export interface DeveloperDiagnostics {
   totalMembers?: number;
   totalAttendance?: number;
   settings?: SystemConfigSettings;
+}
+
+export interface SmsSettingsState {
+  sms_enabled: string;
+  smsgate_username: string;
+  smsgate_password: string;
+  smsgate_device_id: string;
+  smsgate_sim_number: string;
+  sms_auto_reminder_paused: string;
+}
+
+export interface SmsStatus {
+  smsEnabled: boolean;
+  smsConfigured: boolean;
+  smsgateConfigured: boolean;
+  settings: SmsSettingsState;
 }
 
 export interface LogEntry {

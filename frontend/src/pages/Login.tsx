@@ -3,6 +3,7 @@ import { ArrowRight, CalendarClock, CheckCircle2, Download, Eye, EyeOff, Loader2
 import { motion } from "motion/react";
 import { FwMark } from "../components/layout/FwMark";
 import { friendlyAuthError } from "../lib/authMessages";
+import { isSupabaseConfigured } from "../lib/supabase";
 import { useAuth } from "../hooks/useAuth";
 import { usePwaInstall } from "../hooks/usePwaInstall";
 
@@ -137,7 +138,7 @@ export function Login() {
             <motion.div variants={itemVariants}>
               <h1 className="max-w-[560px] text-[32px] font-black leading-[1.04] text-brand-white sm:text-[48px] lg:text-[64px]">
                 Trainer desk, built for{" "}
-                <span className="bg-gradient-to-r from-[#FF6B9D] via-[#F0447D] to-[#E8175D] bg-clip-text text-transparent">
+                <span className="text-[#FF6B9D]">
                   real gym hours.
                 </span>
               </h1>
@@ -150,7 +151,7 @@ export function Login() {
               >
                 <SignalCard icon={Search} label="Find" value="Instant search" index={0} />
                 <SignalCard icon={CalendarClock} label="Dues" value="Renewal view" index={1} />
-                <SignalCard icon={MessageCircle} label="Reach" value="SMS + WhatsApp" index={2} />
+                <SignalCard icon={MessageCircle} label="Reach" value="SMS reminders" index={2} />
               </motion.div>
             </motion.div>
 
@@ -159,9 +160,9 @@ export function Login() {
                 <img className="w-full rounded-lg object-contain" src="/brand/fitness-world-banner.jpeg" alt="Fitness World gym banner" />
               </div>
               <div className="grid grid-cols-3 gap-2 lg:gap-3">
-                <MiniMetric value="09" label="AM SMS" />
-                <MiniMetric value="FW" label="Reg ID" />
-                <MiniMetric value="2" label="Trainers" />
+                <MiniMetric value="09" label="AM Reminders" />
+                <MiniMetric value="FW" label="Member IDs" />
+                <MiniMetric value="PDF" label="Gym Reports" />
               </div>
             </motion.div>
           </motion.div>
@@ -183,12 +184,17 @@ export function Login() {
                   {mode === "signin" ? "Sign in" : mode === "forgot" ? "Reset password" : "Enter code"}
                 </h2>
                 <p className="mt-1.5 text-[14px] font-semibold text-text-secondary lg:mt-2 lg:text-[15px]">
-                  {mode === "signin" 
-                    ? "Open the Fitness World trainer workspace." 
-                    : mode === "forgot" 
-                    ? "Send a secure 6-digit reset code to a trainer email." 
+                  {mode === "signin"
+                    ? "Open the Fitness World trainer workspace."
+                    : mode === "forgot"
+                    ? "Send a secure 6-digit reset code to a trainer email."
                     : "Enter the 6-digit code and choose a new password."}
                 </p>
+                {!isSupabaseConfigured ? (
+                  <p className="mt-2 rounded-[var(--radius-card)] border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-bold text-amber-800">
+                    Demo mode — sign in with any email and password to explore the UI.
+                  </p>
+                ) : null}
               </div>
             </div>
 
@@ -339,7 +345,7 @@ export function Login() {
             <motion.button
               type="submit"
               disabled={mode === "signin" ? loading : resetLoading}
-              className="focus-ring inline-flex min-h-12 w-full items-center justify-center gap-3 rounded-[var(--radius-card)] bg-gradient-to-r from-brand-primary to-[#F0447D] px-5 py-3 text-[16px] font-black text-brand-white shadow-[0_14px_34px_rgba(232,23,93,0.26)] transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_40px_rgba(232,23,93,0.32)] disabled:cursor-not-allowed disabled:opacity-60 lg:min-h-14"
+              className="focus-ring inline-flex min-h-12 w-full items-center justify-center gap-3 rounded-[var(--radius-card)] bg-brand-primary px-5 py-3 text-[16px] font-black text-brand-white shadow-[0_2px_8px_rgba(26,26,46,0.16)] transition-colors hover:bg-brand-primary-hover disabled:cursor-not-allowed disabled:opacity-60 lg:min-h-14"
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
             >
@@ -372,7 +378,7 @@ export function Login() {
                 initial={{ opacity: 0, y: -8 }}
                 animate={{ opacity: 1, y: 0 }}
               >
-                ⏳ Optimizing secure connection — please hold on, this might take a moment...
+                Optimizing secure connection — please hold on, this might take a moment...
               </motion.p>
             )}
 

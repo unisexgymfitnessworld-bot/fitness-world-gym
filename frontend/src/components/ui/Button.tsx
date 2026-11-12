@@ -11,11 +11,11 @@ interface ButtonProps extends HTMLMotionProps<"button"> {
 }
 
 const variants: Record<ButtonVariant, string> = {
-  primary: "relative overflow-hidden bg-gradient-to-r from-brand-primary to-[#F0447D] text-brand-white hover:from-brand-primary-hover hover:to-brand-primary shadow-[0_10px_28px_rgba(232,23,93,0.28)] active:shadow-[0_4px_12px_rgba(232,23,93,0.20)]",
-  secondary: "relative overflow-hidden border border-border-default bg-surface-base text-text-primary hover:border-brand-primary hover:text-brand-primary hover:bg-brand-primary-light/30 hover:shadow-[0_4px_12px_rgba(232,23,93,0.08)] active:bg-brand-primary-light/50",
-  ghost: "relative overflow-hidden text-text-secondary hover:bg-surface-overlay hover:text-text-primary active:bg-surface-overlay/80",
-  danger: "relative overflow-hidden bg-status-expired text-brand-white hover:bg-red-700 shadow-[0_8px_20px_rgba(220,38,38,0.2)] active:shadow-[0_2px_8px_rgba(220,38,38,0.15)]",
-  icon: "relative overflow-hidden border border-border-default bg-surface-base text-text-secondary hover:border-brand-primary hover:text-brand-primary hover:shadow-[0_4px_12px_rgba(232,23,93,0.08)] active:bg-brand-primary-light/30",
+  primary: "bg-brand-primary text-brand-white hover:bg-brand-primary-hover shadow-[0_2px_8px_rgba(26,26,46,0.16)] active:shadow-none",
+  secondary: "border border-border-default bg-surface-base text-text-primary hover:border-brand-primary hover:text-brand-primary hover:bg-brand-primary-light/30 active:bg-brand-primary-light/50",
+  ghost: "text-text-secondary hover:bg-surface-overlay hover:text-text-primary active:bg-surface-overlay/80",
+  danger: "bg-status-expired text-brand-white hover:bg-red-700 shadow-[0_2px_8px_rgba(26,26,46,0.16)] active:shadow-none",
+  icon: "border border-border-default bg-surface-base text-text-secondary hover:border-brand-primary hover:text-brand-primary active:bg-brand-primary-light/30",
 };
 
 export function Button({ className, variant = "primary", children, type = "button", ...props }: ButtonProps) {
@@ -28,9 +28,9 @@ export function Button({ className, variant = "primary", children, type = "butto
         variants[variant],
         className,
       )}
-      whileHover={{ scale: 1.04, y: -1.5 }}
-      whileTap={{ scale: 0.94, y: 0 }}
-      transition={{ type: "spring", stiffness: 500, damping: 20 }}
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.97 }}
+      transition={{ type: "spring", stiffness: 500, damping: 25 }}
       {...props}
     >
       {children}

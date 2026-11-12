@@ -28,8 +28,15 @@ function safeAmount(value: number | undefined): number {
 }
 
 function memberTouchesPeriod(member: Member, start: Date, end: Date): boolean {
-  const interval = { start, end };
-  return [member.joinDate, member.membershipStart].some((date) => isWithinInterval(parseISO(date), interval));
+  try {
+    const interval = { start, end };
+    return [member.joinDate, member.membershipStart].some((date) => {
+      const parsed = parseISO(date);
+      return !Number.isNaN(parsed.getTime()) && isWithinInterval(parsed, interval);
+    });
+  } catch {
+    return false;
+  }
 }
 
 export function splitAmountForCouple(amount: number): [number, number] {

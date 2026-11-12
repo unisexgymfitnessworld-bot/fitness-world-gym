@@ -27,6 +27,9 @@ function lastVisitDate(memberId: string, attendance: AttendanceEntry[]): string 
 export function buildTodayFollowUps(members: Member[], attendance: AttendanceEntry[], now = new Date()): FollowUpItem[] {
   const items = members
     .map((member): FollowUpItem | null => {
+      if (member.status === "Deleted") {
+        return null;
+      }
       const dueDate = getMemberActionDueDate(member);
       const dueInDays = daysUntil(dueDate);
       const pendingAmount = getMemberPendingAmount(member);
@@ -87,14 +90,16 @@ export function buildTodayFollowUps(members: Member[], attendance: AttendanceEnt
       }
 
       const lastVisit = lastVisitDate(member.id, attendance);
-      const inactiveDays = lastVisit ? differenceInCalendarDays(now, parseISO(lastVisit)) : null;
-      if (member.status === "Active" && inactiveDays !== null && inactiveDays >= 7) {
+      const inactiveDays = lastVisit
+        ? differenceInCalendarDays(now, parseISO(lastVisit))
+        : differenceInCalendarDays(now, parseISO(member.joinDate));
+      if (member.status === "Active" && inactiveDays >= 7) {
         return {
           id: `${member.id}-inactive`,
           member,
           kind: "inactive",
           title: "No recent check-in",
-          detail: `${inactiveDays} days since last visit.`,
+          detail: lastVisit ? `${inactiveDays} days since last visit.` : `Joined ${inactiveDays} days ago, no check-in yet.`,
           badge: "Inactive",
           template: "inactive-member",
           priority: 5,

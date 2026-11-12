@@ -1,8 +1,8 @@
-import { ArrowLeft, Banknote, CalendarCheck, MessageCircle, MessageSquare, Pencil, ReceiptText, RefreshCcw, Scale, TrendingUp, Printer } from "lucide-react";
+import { ArrowLeft, Banknote, CalendarCheck, MessageSquare, Pencil, ReceiptText, RefreshCcw, Scale, TrendingUp, Printer } from "lucide-react";
 import { motion } from "motion/react";
 import { useMemo, useState, type FormEvent } from "react";
 import { buildAttendanceInsights, buildProgressPoints, summarizeRenewalHistory } from "../../lib/memberInsights";
-import { calculateDueDate, createWhatsAppLink, formatCurrency, formatDisplayDate, formatPhone, getMemberActionDueDate, getMemberDueKind, todayISO, isPlanLessThanOneMonth, calculateNextRenewalStart } from "../../lib/utils";
+import { bmiCategory, daysUntil, displayGoal, dueCountdown, formatCurrency, formatDisplayDate, formatPhone, getMemberActionDueDate, getMemberDueKind, todayISO, isPlanLessThanOneMonth, initials } from "../../lib/utils";
 import { paymentMethodOptions, type AttendanceEntry, type Member, type PaymentMethod, type PaymentReceipt, type PaymentReceiptInput, type PaymentStatus, type RenewalHistoryEntry, type PlanType } from "../../types";
 import { AttendanceTable } from "../attendance/AttendanceTable";
 import { Badge } from "../ui/Badge";
@@ -18,23 +18,23 @@ interface MemberProfileProps {
   onSms: (memberId: string) => void;
   onRenew: (memberId: string, start: string, due: string, feesAmount: number, planType: PlanType, paymentStatus: PaymentStatus, partialPaidAmount: number) => Promise<void>;
   onAddVisit: (memberId: string, visitDate: string, weightKg?: number) => void;
+  onDeleteVisit: (attendanceId: string) => void;
   paymentReceipts: PaymentReceipt[];
   renewalHistory: RenewalHistoryEntry[];
   onAddPaymentReceipt: (memberId: string, input: PaymentReceiptInput) => Promise<void>;
 }
 
-export function MemberProfile({ member, attendance, paymentReceipts, renewalHistory, onBack, onEdit, onSms, onRenew, onAddVisit, onAddPaymentReceipt }: MemberProfileProps) {
+export function MemberProfile({ member, attendance, paymentReceipts, renewalHistory, onBack, onEdit, onSms, onRenew, onAddVisit, onDeleteVisit, onAddPaymentReceipt }: MemberProfileProps) {
   const [isRenewOpen, setIsRenewOpen] = useState(false);
-  const nextStart = calculateNextRenewalStart(member);
-  // For Custom plans, preserve the current plan's duration when suggesting next renewal end date
-  const nextDue = member.planType === "Custom"
-    ? member.membershipDue  // Keep existing date for custom plans
-    : calculateDueDate(nextStart, member.planType);
   const actionDueDate = getMemberActionDueDate(member);
   const actionDueKind = getMemberDueKind(member);
   const memberAttendance = useMemo(() => attendance.filter((entry) => entry.memberId === member.id), [attendance, member.id]);
   const memberRenewals = useMemo(() => renewalHistory.filter((entry) => entry.memberId === member.id), [member.id, renewalHistory]);
   const isShortTerm = isPlanLessThanOneMonth(member);
+  const isDeleted = member.status === "Deleted";
+  const countdown = dueCountdown(member);
+  const remainingDays = isShortTerm ? null : daysUntil(member.membershipDue);
+  const countdownTone = remainingDays === null ? "" : remainingDays < 0 ? "text-red-300" : remainingDays <= 3 ? "text-amber-300" : "text-green-300";
 
   return (
     <main className="studio-shell animated-grid relative min-h-screen overflow-hidden">
@@ -54,33 +54,32 @@ export function MemberProfile({ member, attendance, paymentReceipts, renewalHist
             <Printer size={18} />
             <span className="hidden sm:inline">Print / PDF</span>
           </Button>
-          <Button variant="secondary" onClick={() => onEdit(member.id)}>
-            <Pencil size={18} />
-            <span className="hidden sm:inline">Edit</span>
-          </Button>
-          {!isShortTerm && (
+          {isDeleted ? null : (
             <>
-              <Button variant="secondary" onClick={() => onSms(member.id)}>
-                <MessageSquare size={18} />
-                <span className="hidden sm:inline">SMS</span>
+              <Button variant="secondary" onClick={() => onEdit(member.id)}>
+                <Pencil size={18} />
+                <span className="hidden sm:inline">Edit</span>
               </Button>
-              <a
-                className="focus-ring inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-[var(--radius-card)] border border-green-200 bg-green-50 px-3 py-2 text-[15px] font-semibold text-status-active lg:px-4 lg:py-3"
-                href={createWhatsAppLink(member)}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <MessageCircle size={18} />
-                <span className="hidden sm:inline">WhatsApp</span>
-              </a>
+              {!isShortTerm && (
+                <Button variant="secondary" onClick={() => onSms(member.id)}>
+                  <MessageSquare size={18} />
+                  <span className="hidden sm:inline">SMS</span>
+                </Button>
+              )}
+              <Button onClick={() => setIsRenewOpen(true)}>
+                <RefreshCcw size={18} />
+                Renew
+              </Button>
             </>
           )}
-          <Button onClick={() => setIsRenewOpen(true)}>
-            <RefreshCcw size={18} />
-            Renew
-          </Button>
         </div>
       </motion.div>
+
+      {isDeleted ? (
+        <div className="rounded-[var(--radius-card)] border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] font-bold text-amber-800 print:hidden">
+          This member is deleted. Restore them from the members list to edit, message, or renew.
+        </div>
+      ) : null}
 
       <motion.section
         className="studio-card overflow-hidden rounded-[var(--radius-card)]"
@@ -90,11 +89,11 @@ export function MemberProfile({ member, attendance, paymentReceipts, renewalHist
       >
         <div className="studio-dark grid gap-4 p-4 text-brand-white lg:min-h-56 lg:grid-cols-[1fr_280px] lg:gap-6 lg:p-6">
           <div className="flex items-start gap-4 lg:gap-5">
-            <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full border-2 border-white/20 bg-brand-white/10 flex items-center justify-center shadow-[0_18px_40px_rgba(232,23,93,0.34)] lg:h-20 lg:w-20">
+            <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full border-2 border-white/20 bg-brand-white/10 flex items-center justify-center shadow-[0_8px_20px_rgba(0,0,0,0.25)] lg:h-20 lg:w-20">
               {member.avatar ? (
                 <img src={member.avatar} alt={member.name} className="h-full w-full object-cover rounded-full" />
               ) : (
-                <span className="text-[20px] font-black text-brand-white lg:text-[24px]">{member.name.slice(0, 2).toUpperCase()}</span>
+                <span className="text-[20px] font-black text-brand-white lg:text-[24px]">{initials(member.name)}</span>
               )}
             </div>
             <div>
@@ -102,20 +101,25 @@ export function MemberProfile({ member, attendance, paymentReceipts, renewalHist
             <h1 className="mt-1 text-[26px] font-extrabold leading-tight lg:mt-2 lg:text-[34px]">{member.name}</h1>
             <div className="mt-3 flex flex-wrap gap-1.5 lg:mt-4 lg:gap-2">
               <Badge tone={member.status === "Active" ? "active" : member.status === "Expired" ? "expired" : "neutral"}>{member.status}</Badge>
-              <Badge tone="neutral">{member.goal}</Badge>
+              <Badge tone="neutral">{displayGoal(member)}</Badge>
               <Badge tone={member.paymentStatus === "Paid" ? "paid" : member.paymentStatus === "Partially Paid" ? "due" : "pending"}>{member.paymentStatus}</Badge>
             </div>
             </div>
           </div>
           <div className="rounded-[var(--radius-card)] border border-white/10 bg-white/10 p-3 lg:p-4">
-            <p className="text-[12px] font-bold uppercase tracking-wider text-white/60">Renewal Date</p>
+            <p className="text-[12px] font-bold uppercase tracking-wider text-white/60">{isShortTerm ? "Plan End" : `${actionDueKind} Date`}</p>
             <p className="mt-1.5 text-[20px] font-black lg:mt-2 lg:text-[22px]">
               {isShortTerm ? "N/A" : formatDisplayDate(actionDueDate)}
             </p>
+            {countdown ? (
+              <p className={`mt-1 text-[13px] font-black ${countdownTone}`}>{countdown}</p>
+            ) : null}
             <p className="mt-1 text-[12px] font-bold uppercase tracking-wide text-white/60">
-              {isShortTerm ? "" : `${actionDueKind} · `}Payment {member.paymentStatus}
+              {member.planType} · Payment {member.paymentStatus}
             </p>
-            {member.paymentStatus === "Partially Paid" ? (
+            {member.paymentStatus === "Paid" ? (
+              <p className="mt-2 text-[14px] text-white/70 lg:mt-3 lg:text-[15px]">{formatCurrency(member.feesAmount)} · Fully paid ✓</p>
+            ) : (
               <div className="mt-2 space-y-1 text-[13px] text-white/80 border-t border-white/10 pt-2 lg:mt-3">
                 <div className="flex justify-between">
                   <span>Total Fees:</span>
@@ -130,8 +134,6 @@ export function MemberProfile({ member, attendance, paymentReceipts, renewalHist
                   <span className="font-bold">{formatCurrency(member.balanceAmount)}</span>
                 </div>
               </div>
-            ) : (
-              <p className="mt-2 text-[14px] text-white/70 lg:mt-3 lg:text-[15px]">{formatCurrency(member.feesAmount)}</p>
             )}
           </div>
         </div>
@@ -151,7 +153,9 @@ export function MemberProfile({ member, attendance, paymentReceipts, renewalHist
               <ProfileRow label="Training Type" value={member.trainingType} />
               <ProfileRow label="Address" value={member.address || "None recorded"} />
               <ProfileRow label="Join Date" value={formatDisplayDate(member.joinDate)} />
-              <ProfileRow label="BMI" value={`${member.bmi}`} />
+              <ProfileRow label="Plan" value={member.planType} />
+              <ProfileRow label="Membership Start" value={formatDisplayDate(member.membershipStart)} />
+              <ProfileRow label="BMI" value={`${member.bmi} · ${bmiCategory(member.bmi)}`} />
               <ProfileRow label="Weight" value={`${member.weightKg} kg`} />
               <ProfileRow label="Height" value={`${member.heightCm} cm`} />
             </dl>
@@ -165,6 +169,7 @@ export function MemberProfile({ member, attendance, paymentReceipts, renewalHist
           >
             <h2 className="text-[20px] font-black text-text-primary lg:text-[22px]">Training Notes</h2>
             <dl className="grid gap-2 lg:gap-3">
+              <ProfileRow label="Goal" value={displayGoal(member)} />
               <ProfileRow label="Health Problem" value={member.healthProblem || "None recorded"} />
               <ProfileRow label="Special Instruction" value={member.specialInstruction || "None recorded"} />
               <ProfileRow label="Warmup" value={member.warmupExercises || "Not recorded"} />
@@ -204,11 +209,12 @@ export function MemberProfile({ member, attendance, paymentReceipts, renewalHist
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.6 }}
       >
-        <AttendanceTable memberId={member.id} attendance={attendance} onAddVisit={onAddVisit} />
+        <AttendanceTable memberId={member.id} attendance={attendance} onAddVisit={onAddVisit} onDeleteVisit={onDeleteVisit} />
       </motion.div>
       </div>
 
       <RenewModal
+        key={isRenewOpen ? member.id : "closed"}
         open={isRenewOpen}
         member={member}
         onClose={() => setIsRenewOpen(false)}
@@ -321,7 +327,7 @@ function RenewalHistoryRow({ entry }: { entry: RenewalHistoryEntry }) {
           {entry.oldPlanType} to {entry.newPlanType}
         </p>
         <p className="mt-1 text-[12px] font-bold text-text-secondary">
-          {formatDisplayDate(entry.oldDueDate)} renewed to {formatDisplayDate(entry.newDueDate)}
+          New period {formatDisplayDate(entry.newStartDate)} → {formatDisplayDate(entry.newDueDate)}
         </p>
         <p className="mt-1 text-[11px] font-black uppercase tracking-wider text-text-muted">Recorded {formatDisplayDate(entry.renewedOn)}</p>
       </div>
@@ -361,7 +367,10 @@ function PaymentReceiptPanel({
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const numericAmount = Number(amount);
-  const isAdvancePayment = balanceAmount === 0 || numericAmount > balanceAmount;
+  const fullyPaid = balanceAmount <= 0;
+  const memberDeleted = member.status === "Deleted";
+  const noFees = member.feesAmount <= 0;
+  const formLocked = fullyPaid || memberDeleted || noFees;
 
   async function submitReceipt(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -370,17 +379,18 @@ function PaymentReceiptPanel({
       setError("Enter a valid payment amount.");
       return;
     }
+    if (numericAmount > balanceAmount) {
+      setError(`Amount cannot exceed the balance of ${formatCurrency(balanceAmount)}.`);
+      return;
+    }
 
     setIsSaving(true);
     try {
-      const autoNote = isAdvancePayment && !note.trim()
-        ? "Advance payment towards next renewal"
-        : note;
       await onAddPaymentReceipt(member.id, {
         paidOn,
         amount: numericAmount,
         method,
-        note: autoNote,
+        note,
         receiptNo: receiptNo.trim() || undefined,
       });
       setAmount("");
@@ -591,26 +601,28 @@ function PaymentReceiptPanel({
               <Banknote size={16} className="text-brand-primary" />
               Record Payment
             </p>
-            <div className="flex items-center gap-2">
-              <span className={`rounded-full px-3 py-1 text-[12px] font-black ${
-                balanceAmount > 0 ? "bg-amber-50 text-amber-700" : "bg-green-50 text-green-700"
-              }`}>
-                {balanceAmount > 0 ? `Due ${formatCurrency(balanceAmount)}` : "Fully Paid ✓"}
-              </span>
-              {balanceAmount === 0 && (
-                <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-[11px] font-black text-sky-700">
-                  Advance Recording
-                </span>
-              )}
-            </div>
+            <span className={`rounded-full px-3 py-1 text-[12px] font-black ${
+              balanceAmount > 0 ? "bg-amber-50 text-amber-700" : "bg-green-50 text-green-700"
+            }`}>
+              {balanceAmount > 0 ? `Due ${formatCurrency(balanceAmount)}` : "Fully Paid ✓"}
+            </span>
           </div>
-          {balanceAmount === 0 && (
-            <p className="rounded-[var(--radius-card)] border border-sky-100 bg-sky-50 px-3 py-2 text-[12px] font-bold text-sky-700">
-              💡 Member is fully paid. You can still record an advance payment for the next month below.
+          {memberDeleted ? (
+            <p className="rounded-[var(--radius-card)] border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-bold text-amber-800">
+              This member is deleted. Restore them from the members list before recording payments.
             </p>
-          )}
+          ) : noFees ? (
+            <p className="rounded-[var(--radius-card)] border border-slate-200 bg-slate-50 px-3 py-2 text-[12px] font-bold text-slate-600">
+              No fees set for this plan. Edit the member to set fees before recording payments.
+            </p>
+          ) : fullyPaid ? (
+            <p className="rounded-[var(--radius-card)] border border-green-200 bg-green-50 px-3 py-2 text-[12px] font-bold text-green-800">
+              Fully paid. To collect the next payment, press Renew above to start the new period first.
+            </p>
+          ) : null}
+          <fieldset disabled={formLocked} className="grid gap-3">
           <div className="grid gap-3 sm:grid-cols-2">
-            <Input label="Amount" type="number" step="1" min="1" value={amount} onChange={(event) => setAmount(event.target.value)} disabled={isSaving} />
+            <Input label="Amount" type="number" step="1" min="1" max={balanceAmount} value={amount} onChange={(event) => setAmount(event.target.value)} disabled={isSaving} />
             <Input label="Paid Date" type="date" value={paidOn} onChange={(event) => setPaidOn(event.target.value)} disabled={isSaving} />
             <label className="grid gap-2 text-[14px] font-semibold lg:text-[15px]">
               Method
@@ -630,13 +642,14 @@ function PaymentReceiptPanel({
               maxLength={180}
               onChange={(event) => setNote(event.target.value)}
               disabled={isSaving}
-              placeholder={balanceAmount === 0 ? "Advance for next month (auto-noted if blank)" : "Cash counter, UPI ref, or trainer note"}
+              placeholder="Cash counter, UPI ref, or trainer note"
             />
           </label>
+          </fieldset>
           {error ? <p className="rounded-[var(--radius-card)] bg-red-50 px-3 py-2 text-[12px] font-bold text-status-expired">{error}</p> : null}
-          <Button type="submit" disabled={isSaving}>
+          <Button type="submit" disabled={isSaving || formLocked}>
             <ReceiptText size={18} />
-            {isSaving ? "Saving..." : isAdvancePayment ? "Save Advance Receipt" : "Save Receipt"}
+            {isSaving ? "Saving..." : "Save Receipt"}
           </Button>
         </form>
       </div>

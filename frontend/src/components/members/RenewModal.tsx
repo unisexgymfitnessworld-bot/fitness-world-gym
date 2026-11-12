@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Member, PaymentStatus, PlanType } from "../../types";
-import { calculateDueDate, calculateNextRenewalStart, cn } from "../../lib/utils";
+import { calculateDueDate, calculateNextRenewalStart, cn, formatCurrency, formatDisplayDate } from "../../lib/utils";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Modal } from "../ui/Modal";
@@ -14,15 +14,6 @@ interface RenewModalProps {
 
 const planOptions: PlanType[] = ["1 Month", "3 Months", "6 Months", "1 Year", "Custom"];
 
-// Default pricing helper
-const defaultPricing: Record<PlanType, number> = {
-  "1 Month": 1500,
-  "3 Months": 4000,
-  "6 Months": 7000,
-  "1 Year": 12000,
-  "Custom": 1500,
-};
-
 export function RenewModal({ open, member, onClose, onConfirm }: RenewModalProps) {
   const [planType, setPlanType] = useState<PlanType>(member.planType);
   const [membershipStart, setMembershipStart] = useState<string>(() => calculateNextRenewalStart(member));
@@ -30,9 +21,10 @@ export function RenewModal({ open, member, onClose, onConfirm }: RenewModalProps
     calculateDueDate(calculateNextRenewalStart(member), member.planType)
   );
   const [feesAmount, setFeesAmount] = useState<number>(member.feesAmount);
-  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("Paid");
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("Pending");
   const [partialPaidAmount, setPartialPaidAmount] = useState<number>(0);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Auto-calculate due date when start date or plan type changes
   useEffect(() => {
@@ -48,11 +40,17 @@ export function RenewModal({ open, member, onClose, onConfirm }: RenewModalProps
     }
   }, [paymentStatus]);
 
-  // Only set default fees when the modal first opens (not on every plan change)
-  // This prevents overwriting custom amounts trainers have entered
-
   async function handleRenewSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setError(null);
+    if (!membershipStart || !membershipDue) {
+      setError("Pick the plan start and end dates.");
+      return;
+    }
+    if (paymentStatus === "Partially Paid" && (partialPaidAmount < 1 || partialPaidAmount >= feesAmount)) {
+      setError(`Collected amount must be between ₹1 and ${formatCurrency(Math.max(feesAmount - 1, 0))}.`);
+      return;
+    }
     setLoading(true);
     try {
       await onConfirm(
@@ -66,7 +64,7 @@ export function RenewModal({ open, member, onClose, onConfirm }: RenewModalProps
       );
       onClose();
     } catch (err) {
-      console.error(err);
+      setError(err instanceof Error ? err.message : "Unable to renew membership");
     } finally {
       setLoading(false);
     }
@@ -91,11 +89,11 @@ export function RenewModal({ open, member, onClose, onConfirm }: RenewModalProps
             </div>
             <div>
               <span className="text-[11px] font-semibold text-text-muted block">CURRENT PLAN</span>
-              {member.planType} (₹{member.feesAmount})
+              {member.planType} ({formatCurrency(member.feesAmount)})
             </div>
             <div>
-              <span className="text-[11px] font-semibold text-text-muted block">EXPIRED ON</span>
-              {member.membershipDue}
+              <span className="text-[11px] font-semibold text-text-muted block">CURRENT DUE DATE</span>
+              {formatDisplayDate(member.membershipDue)}
             </div>
           </div>
         </div>
@@ -152,13 +150,13 @@ export function RenewModal({ open, member, onClose, onConfirm }: RenewModalProps
               value={paymentStatus}
               onChange={(e) => setPaymentStatus(e.target.value as PaymentStatus)}
             >
-              <option value="Paid">✅ Paid – Member has paid in full</option>
-              <option value="Pending">⏳ Pending – Payment not yet collected</option>
-              <option value="Partially Paid">💰 Partially Paid – Member paid part of the fees</option>
+              <option value="Paid">Paid – Member has paid in full</option>
+              <option value="Pending">Pending – Payment not yet collected</option>
+              <option value="Partially Paid">Partially Paid – Member paid part of the fees</option>
             </select>
             {paymentStatus === "Pending" && (
               <p className="text-[12px] font-normal text-amber-600 mt-1">
-                ⚠️ Status will be saved as <strong>Pending</strong>. Update once the member pays.
+                Status will be saved as <strong>Pending</strong>. Update once the member pays.
               </p>
             )}
           </label>
@@ -166,7 +164,7 @@ export function RenewModal({ open, member, onClose, onConfirm }: RenewModalProps
           {/* ── Partial amount input (only shown when Partially Paid) ── */}
           {isPartiallyPaid && (
             <Input
-              label={`Amount Collected (₹) — Remaining Balance: ₹${Math.max(feesAmount - partialPaidAmount, 0)}`}
+              label={`Amount Collected (₹) — Remaining Balance: ${formatCurrency(Math.max(feesAmount - partialPaidAmount, 0))}`}
               type="number"
               required
               min="1"
@@ -178,6 +176,8 @@ export function RenewModal({ open, member, onClose, onConfirm }: RenewModalProps
             />
           )}
         </div>
+
+        {error ? <p className="text-[13px] font-semibold text-status-expired">{error}</p> : null}
 
         <div className="mt-4 flex justify-end gap-3 border-t border-border-default pt-4">
           <Button variant="secondary" type="button" onClick={onClose} disabled={loading}>

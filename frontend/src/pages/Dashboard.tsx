@@ -1,4 +1,4 @@
-import { AlertTriangle, CalendarClock, IndianRupee, Sparkles, TrendingUp, UsersRound, UserCheck, type LucideIcon } from "lucide-react";
+import { AlertTriangle, CalendarClock, IndianRupee, RefreshCw, Sparkles, TrendingUp, UsersRound, UserCheck, type LucideIcon } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FilterBar } from "../components/filters/FilterBar";
@@ -25,7 +25,7 @@ import type { MemberInput, PaymentReceiptInput, PaymentStatus, PlanType } from "
 
 export function Dashboard() {
   const { signOut } = useAuth();
-  const { members, attendance, paymentReceipts, renewalHistory, stats, loading, upsertMember, upsertMembers, suspendMember, deleteMember, renewMember, addVisit, addPaymentReceipt, markSmsSent } = useMembers();
+  const { members, attendance, paymentReceipts, renewalHistory, stats, loading, loadError, retryLoad, isDemo, upsertMember, upsertMembers, suspendMember, restoreMember, deleteMember, renewMember, addVisit, deleteVisit, addPaymentReceipt, markSmsSent } = useMembers();
   const trainer = useAppStore((state) => state.trainer);
   const filters = useAppStore((state) => state.filters);
   const selectedMemberId = useAppStore((state) => state.selectedMemberId);
@@ -139,6 +139,7 @@ export function Dashboard() {
 
   const selectedMember = members.find((member) => member.id === selectedMemberId) ?? null;
   const editingMember = members.find((member) => member.id === editingMemberId) ?? null;
+  const editingReceiptCount = editingMember ? paymentReceipts.filter((receipt) => receipt.memberId === editingMember.id).length : 0;
   const smsMember = members.find((member) => member.id === smsMemberId) ?? null;
   const selectedMemberPaymentReceipts = useMemo(
     () => (selectedMember ? paymentReceipts.filter((receipt) => receipt.memberId === selectedMember.id) : []),
@@ -171,14 +172,17 @@ export function Dashboard() {
   const pendingTotal = useMemo(() => {
     return dashboardSummary.allTime.pendingAmount;
   }, [dashboardSummary.allTime.pendingAmount]);
-  const inactiveTotal = Math.max(0, stats.total - stats.active);
+  const expiredCount = useMemo(() => members.filter((member) => member.status === "Expired").length, [members]);
+  const suspendedCount = useMemo(() => members.filter((member) => member.status === "Suspended").length, [members]);
   const nextDueDate = nextDueMember ? getMemberActionDueDate(nextDueMember) : null;
   const nextDueDays = nextDueDate ? daysUntil(nextDueDate) : null;
   const nextDueKind = nextDueMember ? getMemberDueKind(nextDueMember) : null;
   const collectionPulse =
-    dashboardSummary.allTime.expectedAmount > 0
-      ? `${dashboardSummary.allTime.collectionRate}% collected`
-      : "No fee target yet";
+    dashboardSummary.allTime.expectedAmount <= 0
+      ? "No fee target yet"
+      : dashboardSummary.allTime.pendingAmount > 0
+        ? `${formatCurrency(dashboardSummary.allTime.pendingAmount)} still to collect`
+        : "100% collected";
 
   function openSms(memberId: string, template?: MessageTemplateId): void {
     setSmsTemplateId(template);
@@ -237,6 +241,23 @@ export function Dashboard() {
     }
   }
 
+  async function handleRestore(memberId: string): Promise<void> {
+    try {
+      await restoreMember(memberId);
+      pushToast({
+        title: "Member restored",
+        message: "Member status was restored based on due date.",
+        tone: "success",
+      });
+    } catch (error) {
+      pushToast({
+        title: "Restore failed",
+        message: error instanceof Error ? error.message : "Unable to restore member",
+        tone: "error",
+      });
+    }
+  }
+
   const tableRef = useRef<HTMLDivElement>(null);
 
   function handleMetricClick(metric: string): void {
@@ -251,25 +272,32 @@ export function Dashboard() {
     });
   }
 
-  async function handleMessageSend(memberId: string, message: string, type: "sms" | "whatsapp"): Promise<void> {
+  async function handleMessageSend(memberId: string, message: string, markReminder: boolean): Promise<void> {
     try {
-      if (isApiConfigured) {
-        if (type === "whatsapp") {
-          await api.sendWhatsApp(memberId, message);
-        } else {
-          await api.sendSms(memberId, message);
+      if (!isApiConfigured) {
+        if (markReminder) {
+          await markSmsSent(memberId);
         }
+        pushToast({
+          title: "Demo mode",
+          message: "SMS is not actually sent in demo mode.",
+          tone: "info",
+        });
+        return;
       }
-      await markSmsSent(memberId);
+      await api.sendSms(memberId, message, markReminder);
+      if (markReminder) {
+        await markSmsSent(memberId);
+      }
       pushToast({
-        title: type === "whatsapp" ? "WhatsApp sent" : "SMS sent",
+        title: "SMS sent",
         message: message.slice(0, 52),
         tone: "success",
       });
     } catch (error) {
       pushToast({
-        title: type === "whatsapp" ? "WhatsApp failed" : "SMS failed",
-        message: error instanceof Error ? error.message : `${type === "whatsapp" ? "WhatsApp" : "SMS"} could not be sent`,
+        title: "SMS failed",
+        message: error instanceof Error ? error.message : "SMS could not be sent",
         tone: "error",
       });
       throw error;
@@ -290,6 +318,7 @@ export function Dashboard() {
         message: error instanceof Error ? error.message : "Unable to renew membership",
         tone: "error",
       });
+      throw error;
     }
   }
 
@@ -305,6 +334,23 @@ export function Dashboard() {
       pushToast({
         title: "Log visit failed",
         message: error instanceof Error ? error.message : "Unable to log visit",
+        tone: "error",
+      });
+    }
+  }
+
+  async function handleDeleteVisit(attendanceId: string): Promise<void> {
+    try {
+      await deleteVisit(attendanceId);
+      pushToast({
+        title: "Visit removed",
+        message: "The check-in entry was removed.",
+        tone: "success",
+      });
+    } catch (error) {
+      pushToast({
+        title: "Remove visit failed",
+        message: error instanceof Error ? error.message : "Unable to remove visit",
         tone: "error",
       });
     }
@@ -346,9 +392,10 @@ export function Dashboard() {
           onSms={(memberId) => openSms(memberId)}
           onRenew={(memberId, start, due, feesAmount, planType, paymentStatus, partialPaidAmount) => handleRenew(memberId, start, due, feesAmount, planType, paymentStatus, partialPaidAmount)}
           onAddVisit={(memberId, visitDate, weightKg) => void handleAddVisit(memberId, visitDate, weightKg)}
+          onDeleteVisit={(attendanceId) => void handleDeleteVisit(attendanceId)}
           onAddPaymentReceipt={(memberId, input) => handleAddPaymentReceipt(memberId, input)}
         />
-        <MemberSheet open={editingMemberId !== null} member={editingMember} onClose={() => setEditingMemberId(null)} onSave={saveMember} />
+        <MemberSheet open={editingMemberId !== null} member={editingMember} onClose={() => setEditingMemberId(null)} onSave={saveMember} existingReceiptCount={editingReceiptCount} />
         <SmsModal member={smsMember} open={smsMember !== null} initialTemplate={smsTemplateId} onClose={closeSms} onSend={handleMessageSend} />
         <SettingsModal open={isSettingsOpen} trainer={trainer} onClose={() => setIsSettingsOpen(false)} />
         <ReportExportModal
@@ -369,6 +416,31 @@ export function Dashboard() {
       <TopBar trainer={trainer} onLogout={() => void signOut()} onSettings={() => setIsSettingsOpen(true)} onReports={() => setIsExportOpen(true)} members={members} onSelectMember={setSelectedMemberId} />
       <main className="studio-shell animated-grid relative min-h-screen overflow-hidden">
         <div className="relative mx-auto grid max-w-[1500px] gap-3 px-3 pb-24 pt-3 sm:px-4 lg:gap-5 lg:px-8 lg:pt-6">
+          {isDemo ? (
+            <div className="flex items-center gap-2.5 rounded-[var(--radius-card)] border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] font-bold text-amber-800">
+              <AlertTriangle size={16} className="shrink-0" />
+              <span>Demo data — connect the API (VITE_API_BASE_URL) to see live gym records.</span>
+            </div>
+          ) : null}
+          {loadError && !loading ? (
+            <div className="grid gap-3 rounded-[var(--radius-card)] border border-red-200 bg-red-50 px-4 py-4 sm:grid-cols-[1fr_auto] sm:items-center">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle size={18} className="mt-0.5 shrink-0 text-status-expired" />
+                <div>
+                  <p className="text-[15px] font-black text-text-primary">Could not load gym data</p>
+                  <p className="mt-0.5 text-[13px] font-semibold text-text-secondary">{loadError}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={retryLoad}
+                className="focus-ring inline-flex min-h-10 items-center justify-center gap-2 rounded-[var(--radius-card)] bg-text-primary px-4 text-[14px] font-bold text-brand-white transition hover:opacity-90"
+              >
+                <RefreshCw size={15} />
+                Try again
+              </button>
+            </div>
+          ) : null}
           <motion.section
             className="studio-card grid gap-0 overflow-hidden rounded-[var(--radius-panel)] xl:grid-cols-[minmax(0,1fr)_360px]"
             initial={{ opacity: 0, y: 24 }}
@@ -378,12 +450,11 @@ export function Dashboard() {
             <div className="grid gap-5 p-3 sm:p-4 lg:gap-6 lg:p-8">
               <div className="flex flex-wrap items-start justify-between gap-2 lg:gap-4">
                 <div>
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-brand-primary sm:text-[12px]">Live Trainer Desk</p>
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-brand-primary sm:text-[12px]">Trainer Desk</p>
                   <h1 className="mt-1 text-[22px] font-black leading-tight text-text-primary sm:text-[28px] lg:mt-2 lg:text-[36px]">
-                    Fitness{" "}
-                    <span className="gradient-text">World</span>
+                    Fitness <span className="text-brand-primary">World</span>
                   </h1>
-                  <p className="mt-1 hidden text-[14px] font-semibold text-text-secondary sm:block lg:mt-2 lg:text-[15px]">Today's members, renewals, payments, and outreach in one clean work view.</p>
+                  <p className="mt-1 hidden text-[14px] font-semibold text-text-secondary sm:block lg:mt-2 lg:text-[15px]">Members, renewals, payments, and follow-ups in one place.</p>
                 </div>
                 <motion.div
                   className="hidden rounded-[var(--radius-card)] border border-white/60 bg-brand-white/40 backdrop-blur-md px-3 py-2 sm:block lg:px-4 lg:py-3 shadow-sm"
@@ -391,13 +462,9 @@ export function Dashboard() {
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ delay: 0.3 }}
                 >
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-text-muted sm:text-[12px]">Floor Status</p>
-                  <div className="mt-0.5 flex items-center gap-2 text-[14px] font-bold text-text-primary lg:mt-1 lg:text-[17px]">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-status-active opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-status-active"></span>
-                    </span>
-                    Open Desk
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-text-muted sm:text-[12px]">Today</p>
+                  <div className="mt-0.5 text-[14px] font-bold text-text-primary lg:mt-1 lg:text-[17px]">
+                    {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short" })}
                   </div>
                 </motion.div>
               </div>
@@ -409,7 +476,7 @@ export function Dashboard() {
                   value={`${stats.total}`}
                   tone="neutral"
                   subtext="Registered in system"
-                  footer={`${stats.active} active · ${inactiveTotal} expired`}
+                  footer={`${stats.active} active · ${expiredCount} expired${suspendedCount > 0 ? ` · ${suspendedCount} suspended` : ""}`}
                   index={0}
                 />
                 <CommandMetric
@@ -418,7 +485,7 @@ export function Dashboard() {
                   value={`${stats.active}`}
                   tone="green"
                   subtext="Can train now"
-                  footer={inactiveTotal > 0 ? `${inactiveTotal} need attention` : "All accounts active"}
+                  footer={stats.dueThisWeek > 0 ? `${stats.dueThisWeek} due this week` : "No dues this week"}
                   index={1}
                 />
                 <CommandMetric
@@ -598,7 +665,7 @@ export function Dashboard() {
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-wider text-brand-primary">Financial Analysis</p>
                   <h3 className="text-[18px] font-black text-text-primary sm:text-[20px]">
-                    Revenue & Profit Report: <span className="gradient-text">{monthlyStats.monthLabel}</span>
+                    Revenue & Profit Report: <span className="text-brand-primary">{monthlyStats.monthLabel}</span>
                   </h3>
                 </div>
                 <div className="rounded-full bg-brand-primary-light px-3 py-1 text-[13px] font-bold text-brand-primary shadow-sm">
@@ -654,7 +721,7 @@ export function Dashboard() {
                 </div>
                 <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-slate-100">
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-brand-primary to-status-active transition-all duration-500"
+                    className="h-full rounded-full bg-status-active transition-all duration-500"
                     style={{ width: `${monthlyStats.collectionRate}%` }}
                   />
                 </div>
@@ -698,6 +765,7 @@ export function Dashboard() {
             onEdit={setEditingMemberId}
             onSms={(memberId) => openSms(memberId)}
             onSuspend={setConfirmingSuspendId}
+            onRestore={(memberId) => void handleRestore(memberId)}
             onDelete={setConfirmingDeleteId}
             isDbEmpty={members.length === 0}
             onAddClick={() => setEditingMemberId("new")}
@@ -716,7 +784,7 @@ export function Dashboard() {
         </div>
       </main>
       <FloatingActionButton onClick={() => setEditingMemberId("new")} />
-      <MemberSheet open={editingMemberId !== null} member={editingMemberId === "new" ? null : editingMember} onClose={() => setEditingMemberId(null)} onSave={saveMember} />
+      <MemberSheet open={editingMemberId !== null} member={editingMemberId === "new" ? null : editingMember} onClose={() => setEditingMemberId(null)} onSave={saveMember} existingReceiptCount={editingReceiptCount} />
       <SmsModal member={smsMember} open={smsMember !== null} initialTemplate={smsTemplateId} onClose={closeSms} onSend={handleMessageSend} />
       <ConfirmModal
         open={confirmingSuspendId !== null}

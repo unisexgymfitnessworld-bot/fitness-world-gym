@@ -11,3 +11,7 @@ dist
 coverage
 env.production.tmp
 *.tmp
+
+node_modules/
+!.env.example
+.wrangler/

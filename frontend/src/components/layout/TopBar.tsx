@@ -168,7 +168,7 @@ export function TopBar({ trainer, onLogout, onSettings, onReports, members = [],
                           {member.avatar ? (
                             <img src={member.avatar} alt={member.name} className="h-full w-full object-cover" />
                           ) : (
-                            <span className="text-[11px] font-bold text-white/60">{member.name.slice(0, 2).toUpperCase()}</span>
+                            <span className="text-[11px] font-bold text-white/60">{initials(member.name)}</span>
                           )}
                         </div>
                         <div className="min-w-0">
@@ -338,7 +338,7 @@ export function TopBar({ trainer, onLogout, onSettings, onReports, members = [],
                       {member.avatar ? (
                         <img src={member.avatar} alt={member.name} className="h-full w-full object-cover" />
                       ) : (
-                        <span className="text-[13px] font-bold text-white/80">{member.name.slice(0, 2).toUpperCase()}</span>
+                        <span className="text-[13px] font-bold text-white/80">{initials(member.name)}</span>
                       )}
                     </div>
                     <div className="min-w-0">

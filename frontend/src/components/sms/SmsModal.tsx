@@ -1,4 +1,4 @@
-import { CheckCircle2, MessageCircle, Send } from "lucide-react";
+import { CheckCircle2, Send } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { formatPhone } from "../../lib/utils";
@@ -8,12 +8,14 @@ import type { Member } from "../../types";
 import { Button } from "../ui/Button";
 import { Modal } from "../ui/Modal";
 
+const reminderTemplates: MessageTemplateId[] = ["renewal-due", "expired-plan"];
+
 interface SmsModalProps {
   member: Member | null;
   open: boolean;
   initialTemplate?: MessageTemplateId;
   onClose: () => void;
-  onSend: (memberId: string, message: string, type: "sms" | "whatsapp") => Promise<void> | void;
+  onSend: (memberId: string, message: string, markReminder: boolean) => Promise<void> | void;
 }
 
 export function SmsModal({ member, open, initialTemplate, onClose, onSend }: SmsModalProps) {
@@ -21,10 +23,7 @@ export function SmsModal({ member, open, initialTemplate, onClose, onSend }: Sms
   const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
-  const [sentType, setSentType] = useState<"sms" | "whatsapp" | null>(null);
   const [sending, setSending] = useState(false);
-  const cleanPhone = member ? member.phone.replace(/\D/g, "") : "";
-  const whatsAppHref = member ? `https://wa.me/91${cleanPhone.slice(-10)}?text=${encodeURIComponent(message)}` : "#";
 
   useEffect(() => {
     if (!member) {
@@ -36,7 +35,6 @@ export function SmsModal({ member, open, initialTemplate, onClose, onSend }: Sms
     setMessage(createMessageForTemplate(member, nextTemplate));
     setError(null);
     setSent(false);
-    setSentType(null);
     setSending(false);
   }, [initialTemplate, member, member?.id, open]);
 
@@ -49,7 +47,7 @@ export function SmsModal({ member, open, initialTemplate, onClose, onSend }: Sms
     setSent(false);
   }
 
-  async function submit(type: "sms" | "whatsapp"): Promise<void> {
+  async function submit(): Promise<void> {
     if (!member) {
       return;
     }
@@ -61,11 +59,10 @@ export function SmsModal({ member, open, initialTemplate, onClose, onSend }: Sms
     setSending(true);
     setError(null);
     try {
-      await onSend(member.id, parsed.data.message, type);
-      setSentType(type);
+      await onSend(member.id, parsed.data.message, reminderTemplates.includes(templateId));
       setSent(true);
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : `Unable to send ${type}`;
+      const message = caught instanceof Error ? caught.message : "Unable to send SMS";
       setError(message);
     } finally {
       setSending(false);
@@ -112,34 +109,14 @@ export function SmsModal({ member, open, initialTemplate, onClose, onSend }: Sms
           {sent ? (
             <motion.div className="flex items-center gap-3 rounded-card bg-green-50 p-4 text-status-active" initial={{ scale: 0 }} animate={{ scale: [0, 1.2, 1] }} transition={{ duration: 0.3 }}>
               <CheckCircle2 size={22} />
-              <span className="text-[15px] font-bold">Message sent via {sentType === "whatsapp" ? "WhatsApp Gateway" : "SMS Fast2SMS"}</span>
+              <span className="text-[15px] font-bold">SMS sent to {formatPhone(member.phone)}</span>
             </motion.div>
           ) : null}
 
-          <div className="grid gap-2 grid-cols-1 sm:grid-cols-3">
-            <a
-              className="focus-ring inline-flex min-h-11 items-center justify-center gap-1.5 rounded-[var(--radius-card)] border border-green-200 bg-green-50 px-2 text-[13px] font-bold text-status-active transition-all hover:border-green-300 hover:bg-green-100"
-              href={whatsAppHref}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <MessageCircle size={16} />
-              Open WA (Manual)
-            </a>
-            <Button
-              variant="secondary"
-              className="!border-emerald-200 !bg-emerald-50/50 !text-emerald-700 hover:!bg-emerald-100 px-2 text-[13px] font-bold"
-              onClick={() => void submit("whatsapp")}
-              disabled={sent || sending}
-            >
-              <MessageCircle size={16} />
-              {sending ? "Sending..." : "Send WA Gateway"}
-            </Button>
-            <Button onClick={() => void submit("sms")} disabled={sent || sending} className="px-2 text-[13px] font-bold">
-              <Send size={16} />
-              {sending ? "Sending..." : "Send SMS"}
-            </Button>
-          </div>
+          <Button onClick={() => void submit()} disabled={sent || sending} className="w-full text-[15px] font-bold">
+            <Send size={16} />
+            {sending ? "Sending..." : "Send SMS"}
+          </Button>
         </div>
       ) : null}
     </Modal>

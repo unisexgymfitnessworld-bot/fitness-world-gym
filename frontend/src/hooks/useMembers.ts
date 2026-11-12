@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, isApiConfigured } from "../lib/api";
 import { sampleAttendance, sampleMembers, samplePaymentReceipts, sampleRenewalHistory } from "../lib/sampleData";
-import { daysUntil, getMemberActionDueDate, getMembershipStatus, toMember, isPlanLessThanOneMonth } from "../lib/utils";
+import { daysUntil, formatCurrency, getMemberActionDueDate, getMembershipStatus, toMember, isPlanLessThanOneMonth } from "../lib/utils";
 import type { AttendanceEntry, DashboardStats, Member, MemberInput, PaymentReceipt, PaymentReceiptInput, PaymentStatus, RenewalHistoryEntry, PlanType } from "../types";
 
 interface MembersState {
@@ -11,12 +11,17 @@ interface MembersState {
   renewalHistory: RenewalHistoryEntry[];
   stats: DashboardStats;
   loading: boolean;
+  loadError: string | null;
+  retryLoad: () => void;
+  isDemo: boolean;
   upsertMember: (input: MemberInput, memberId?: string) => Promise<Member>;
   upsertMembers: (inputs: MemberInput[]) => Promise<Member[]>;
   suspendMember: (memberId: string) => Promise<void>;
+  restoreMember: (memberId: string) => Promise<void>;
   deleteMember: (memberId: string) => Promise<void>;
   renewMember: (memberId: string, start: string, due: string, feesAmount: number, planType?: PlanType, paymentStatus?: PaymentStatus, partialPaidAmount?: number) => Promise<void>;
   addVisit: (memberId: string, visitDate: string, weightKg?: number) => Promise<void>;
+  deleteVisit: (attendanceId: string) => Promise<void>;
   addPaymentReceipt: (memberId: string, input: PaymentReceiptInput) => Promise<PaymentReceipt>;
   markSmsSent: (memberId: string) => Promise<void>;
 }
@@ -40,51 +45,56 @@ export function useMembers(): MembersState {
   const [paymentReceipts, setPaymentReceipts] = useState<PaymentReceipt[]>(isApiConfigured ? [] : samplePaymentReceipts);
   const [renewalHistory, setRenewalHistory] = useState<RenewalHistoryEntry[]>(isApiConfigured ? [] : sampleRenewalHistory);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    if (isApiConfigured) {
-      let cancelled = false;
-      async function loadLiveData(): Promise<void> {
-        setLoading(true);
-        try {
-          // Load members first — this clears the loading spinner quickly
-          const liveMembers = await api.members();
-          if (!cancelled) {
-            setMembers(liveMembers);
-            setLoading(false); // Show the UI as soon as members are ready
-          }
-
-          // Load secondary data in the background without blocking the UI
-          const [liveAttendance, livePaymentReceipts, liveRenewalHistory] = await Promise.all([
-            api.allAttendance(),
-            api.allPaymentReceipts(),
-            api.allRenewalHistory(),
-          ]);
-          if (!cancelled) {
-            setAttendance(liveAttendance);
-            setPaymentReceipts(livePaymentReceipts);
-            setRenewalHistory(liveRenewalHistory);
-          }
-        } catch (error) {
-          console.error("Unable to load live member data", error);
-          if (!cancelled) {
-            setMembers(sampleMembers);
-            setAttendance(sampleAttendance);
-            setPaymentReceipts(samplePaymentReceipts);
-            setRenewalHistory(sampleRenewalHistory);
-            setLoading(false);
-          }
-        }
-      }
-      void loadLiveData();
-      return () => {
-        cancelled = true;
-      };
+    if (!isApiConfigured) {
+      const timer = window.setTimeout(() => setLoading(false), 280);
+      return () => window.clearTimeout(timer);
     }
 
-    const timer = window.setTimeout(() => setLoading(false), 280);
-    return () => window.clearTimeout(timer);
-  }, []);
+    let cancelled = false;
+    async function loadLiveData(): Promise<void> {
+      setLoading(true);
+      setLoadError(null);
+      try {
+        // Load members first — this clears the loading spinner quickly
+        const liveMembers = await api.members();
+        if (cancelled) {
+          return;
+        }
+        setMembers(liveMembers);
+        setLoading(false); // Show the UI as soon as members are ready
+
+        // Load secondary data in the background without blocking the UI
+        const [liveAttendance, livePaymentReceipts, liveRenewalHistory] = await Promise.all([
+          api.allAttendance(),
+          api.allPaymentReceipts(),
+          api.allRenewalHistory(),
+        ]);
+        if (!cancelled) {
+          setAttendance(liveAttendance);
+          setPaymentReceipts(livePaymentReceipts);
+          setRenewalHistory(liveRenewalHistory);
+        }
+      } catch (error) {
+        console.error("Unable to load live member data", error);
+        if (!cancelled) {
+          setLoadError(error instanceof Error ? error.message : "Unable to load gym data");
+          setLoading(false);
+        }
+      }
+    }
+    void loadLiveData();
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  function retryLoad(): void {
+    setReloadKey((key) => key + 1);
+  }
 
   const stats = useMemo<DashboardStats>(() => {
     const dueThisWeek = members.filter((member) => {
@@ -102,10 +112,7 @@ export function useMembers(): MembersState {
 
   async function upsertMembers(inputs: MemberInput[]): Promise<Member[]> {
     if (isApiConfigured) {
-      const savedMembers: Member[] = [];
-      for (const input of inputs) {
-        savedMembers.push(await api.createMember(input));
-      }
+      const savedMembers = await api.createMembers(inputs);
       setMembers((current) => [...savedMembers, ...current]);
       return savedMembers;
     }
@@ -168,6 +175,26 @@ export function useMembers(): MembersState {
           ? {
               ...member,
               status: member.status === "Suspended" ? getMembershipStatus(member.membershipDue, member.paymentStatus) : "Suspended",
+              updatedAt: new Date().toISOString(),
+            }
+          : member,
+      ),
+    );
+  }
+
+  async function restoreMember(memberId: string): Promise<void> {
+    if (isApiConfigured) {
+      const restored = await api.restoreMember(memberId);
+      setMembers((current) => current.map((member) => (member.id === memberId ? restored : member)));
+      return;
+    }
+
+    setMembers((current) =>
+      current.map((member) =>
+        member.id === memberId
+          ? {
+              ...member,
+              status: getMembershipStatus(member.membershipDue, member.paymentStatus),
               updatedAt: new Date().toISOString(),
             }
           : member,
@@ -283,6 +310,9 @@ export function useMembers(): MembersState {
   }
 
   async function addVisit(memberId: string, visitDate: string, weightKg?: number): Promise<void> {
+    if (!isApiConfigured && attendance.some((entry) => entry.memberId === memberId && entry.visitDate === visitDate)) {
+      throw new Error("A visit is already logged for this date");
+    }
     const visit = isApiConfigured
       ? await api.createAttendance(memberId, visitDate, weightKg)
       : {
@@ -293,6 +323,13 @@ export function useMembers(): MembersState {
           createdAt: new Date().toISOString(),
         };
     setAttendance((current) => [visit, ...current]);
+  }
+
+  async function deleteVisit(attendanceId: string): Promise<void> {
+    if (isApiConfigured) {
+      await api.deleteAttendance(attendanceId);
+    }
+    setAttendance((current) => current.filter((entry) => entry.id !== attendanceId));
   }
 
   async function addPaymentReceipt(memberId: string, input: PaymentReceiptInput): Promise<PaymentReceipt> {
@@ -322,7 +359,7 @@ export function useMembers(): MembersState {
       throw new Error("This member has no pending balance");
     }
     if (input.amount > currentBalance) {
-      throw new Error(`Payment cannot exceed the pending balance of ₹${currentBalance}`);
+      throw new Error(`Payment cannot exceed the pending balance of ${formatCurrency(currentBalance)}`);
     }
 
     const collectedAmount = collectedBeforeReceipt + input.amount;
@@ -367,12 +404,17 @@ export function useMembers(): MembersState {
     renewalHistory,
     stats,
     loading,
+    loadError,
+    retryLoad,
+    isDemo: !isApiConfigured,
     upsertMember,
     upsertMembers,
     suspendMember,
+    restoreMember,
     deleteMember,
     renewMember,
     addVisit,
+    deleteVisit,
     addPaymentReceipt,
     markSmsSent,
   };

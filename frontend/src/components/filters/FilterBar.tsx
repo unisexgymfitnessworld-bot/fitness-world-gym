@@ -1,7 +1,7 @@
 import { CalendarClock, IndianRupee, Search, SlidersHorizontal, X, ChevronDown, ChevronUp } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useMemo, useState } from "react";
-import { cn, daysUntil, getMemberActionDueDate } from "../../lib/utils";
+import { cn, daysUntil, getMemberActionDueDate, isPlanLessThanOneMonth } from "../../lib/utils";
 import { goalOptions, type MemberFilters, paymentOptions, type Member, trainingTypeOptions, planOptions } from "../../types";
 
 interface FilterBarProps {
@@ -30,7 +30,7 @@ export function FilterBar({ filters, resultCount, onChange, members }: FilterBar
     const partial = members.filter((member) => member.status !== "Deleted" && member.paymentStatus === "Partially Paid").length;
     const dueSoon = members.filter((member) => {
       const remaining = daysUntil(getMemberActionDueDate(member));
-      return member.status === "Active" && remaining >= 0 && remaining <= 3;
+      return member.status === "Active" && !isPlanLessThanOneMonth(member) && remaining >= 0 && remaining <= 3;
     }).length;
     return { pending, partial, dueSoon };
   }, [members]);
@@ -159,7 +159,7 @@ export function FilterBar({ filters, resultCount, onChange, members }: FilterBar
               className={cn(
                 "focus-ring min-h-9 shrink-0 rounded-[10px] px-3.5 text-[13px] font-bold transition-all",
                 filters.status === status
-                  ? "bg-brand-primary text-brand-white shadow-[0_2px_8px_rgba(232,23,93,0.15)]"
+                  ? "bg-brand-primary text-brand-white shadow-sm"
                   : "text-text-secondary hover:text-text-primary",
               )}
               onClick={() => onChange("status", status)}

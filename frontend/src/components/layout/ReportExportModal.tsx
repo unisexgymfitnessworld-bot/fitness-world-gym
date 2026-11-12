@@ -3,7 +3,7 @@ import { AlertTriangle, Calendar, CheckCircle2, Coins, Download, FileSpreadsheet
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
 import { getMemberCollectedAmount, getMemberPendingAmount } from "../../lib/analytics";
-import { compareRegistrationNumbers, formatCurrency, formatDisplayDate, formatPhone, getMemberActionDueDate, getMemberDueDatesForMonth, getMemberDueKind, isPlanLessThanOneMonth } from "../../lib/utils";
+import { compareRegistrationNumbers, displayGoal, formatCurrency, formatDisplayDate, formatPhone, getMemberActionDueDate, getMemberDueDatesForMonth, getMemberDueKind, isPlanLessThanOneMonth } from "../../lib/utils";
 import type { AttendanceEntry, Member, PaymentReceipt, RenewalHistoryEntry } from "../../types";
 
 interface ReportExportModalProps {
@@ -320,7 +320,7 @@ export function ReportExportModal({ open, members, attendance = [], paymentRecei
               <span>${htmlEscape(member.trainingType)} Training</span>
             </td>
             <td>${htmlEscape(formatPhone(member.phone))}</td>
-            <td>${htmlEscape(member.goal)}</td>
+            <td>${htmlEscape(displayGoal(member))}</td>
             <td>${htmlEscape(member.planType)}</td>
             <td>
               ${isPlanLessThanOneMonth(member) ? `
@@ -591,7 +591,7 @@ export function ReportExportModal({ open, members, attendance = [], paymentRecei
             Training Type
             <select
               value={selectedTrainingType}
-              onChange={(event) => setSelectedTrainingType(event.target.value as any)}
+              onChange={(event) => setSelectedTrainingType(event.target.value as "All" | "General" | "Personal" | "Couple")}
               className="studio-select h-12 w-full px-3 text-[15px] font-bold"
             >
               <option value="All">All Types</option>

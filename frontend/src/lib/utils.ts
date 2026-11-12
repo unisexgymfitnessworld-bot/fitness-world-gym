@@ -10,7 +10,55 @@ export function todayISO(): string {
 }
 
 export function formatDisplayDate(value: string): string {
-  return format(parseISO(value), "dd MMM yyyy");
+  try {
+    const parsed = parseISO(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return "—";
+    }
+    return format(parsed, "dd MMM yyyy");
+  } catch {
+    return "—";
+  }
+}
+
+export function displayGoal(member: Pick<Member, "goal" | "goalOther">): string {
+  if (member.goal === "Other" && member.goalOther?.trim()) {
+    return member.goalOther.trim();
+  }
+  return member.goal;
+}
+
+export function bmiCategory(bmi: number): string {
+  if (!Number.isFinite(bmi) || bmi <= 0) {
+    return "Not available";
+  }
+  if (bmi < 18.5) {
+    return "Underweight";
+  }
+  if (bmi < 25) {
+    return "Normal";
+  }
+  if (bmi < 30) {
+    return "Overweight";
+  }
+  return "Obese";
+}
+
+export function dueCountdown(member: DueAwareMember): string | null {
+  if (isPlanLessThanOneMonth(member)) {
+    return null;
+  }
+  const remaining = daysUntil(member.membershipDue);
+  if (remaining < 0) {
+    return `Expired ${-remaining} day${-remaining === 1 ? "" : "s"} ago`;
+  }
+  if (remaining === 0) {
+    return "Expires today";
+  }
+  if (remaining === 1) {
+    return "Expires tomorrow";
+  }
+  return `${remaining} days left`;
 }
 
 export function daysUntil(value: string): number {
@@ -26,18 +74,25 @@ export function calculateBmi(weightKg: number, heightCm: number): number {
 }
 
 export function calculateDueDate(startDate: string, planType: PlanType): string {
-  const start = parseISO(startDate);
-  switch (planType) {
-    case "1 Month":
-      return format(addMonths(start, 1), "yyyy-MM-dd");
-    case "3 Months":
-      return format(addMonths(start, 3), "yyyy-MM-dd");
-    case "6 Months":
-      return format(addMonths(start, 6), "yyyy-MM-dd");
-    case "1 Year":
-      return format(addMonths(start, 12), "yyyy-MM-dd");
-    case "Custom":
-      return format(addMonths(start, 1), "yyyy-MM-dd");
+  try {
+    const start = parseISO(startDate);
+    if (Number.isNaN(start.getTime())) {
+      return startDate;
+    }
+    switch (planType) {
+      case "1 Month":
+        return format(addMonths(start, 1), "yyyy-MM-dd");
+      case "3 Months":
+        return format(addMonths(start, 3), "yyyy-MM-dd");
+      case "6 Months":
+        return format(addMonths(start, 6), "yyyy-MM-dd");
+      case "1 Year":
+        return format(addMonths(start, 12), "yyyy-MM-dd");
+      case "Custom":
+        return format(addMonths(start, 1), "yyyy-MM-dd");
+    }
+  } catch {
+    return startDate;
   }
 }
 
@@ -172,13 +227,6 @@ export function registrationNumberValue(regNo: string): number {
 export function compareRegistrationNumbers(a: string, b: string): number {
   const numeric = registrationNumberValue(a) - registrationNumberValue(b);
   return numeric === 0 ? a.localeCompare(b) : numeric;
-}
-
-export function createWhatsAppLink(member: Pick<Member, "name" | "phone"> & DueAwareMember): string {
-  const dueDate = getMemberActionDueDate(member);
-  const dueKind = getMemberDueKind(member);
-  const text = `Hi ${member.name}, your Fitness World ${dueKind.toLowerCase()} date is ${formatDisplayDate(dueDate)}. Payment status: ${member.paymentStatus}. - Fitness World`;
-  return `https://wa.me/91${member.phone}?text=${encodeURIComponent(text)}`;
 }
 
 export function createReminderMessage(member: Pick<Member, "name"> & DueAwareMember): string {

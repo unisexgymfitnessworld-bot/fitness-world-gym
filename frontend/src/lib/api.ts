@@ -1,4 +1,4 @@
-import type { ApiEnvelope, AttendanceEntry, DashboardStats, DeveloperDiagnostics, LogEntry, Member, MemberInput, PaymentReceipt, PaymentReceiptInput, RenewalHistoryEntry, Trainer, TrainerAccount, SystemConfigSettings } from "../types";
+import type { ApiEnvelope, AttendanceEntry, DashboardStats, DeveloperDiagnostics, LogEntry, Member, MemberInput, PaymentReceipt, PaymentReceiptInput, RenewalHistoryEntry, SmsSettingsState, SmsStatus, Trainer, TrainerAccount, SystemConfigSettings } from "../types";
 import { supabase } from "./supabase";
 
 export const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
@@ -31,10 +31,15 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     ...init,
     headers,
   });
-  const payload = (await response.json()) as ApiEnvelope<T>;
 
-  if (!response.ok || !payload.success || payload.data === undefined) {
-    throw new Error(payload.error?.message ?? "Request failed");
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(`Request failed (server returned ${response.status} ${response.statusText || "with a non-JSON response"})`);
+  }
+  const payload = (await response.json().catch(() => null)) as ApiEnvelope<T> | null;
+
+  if (!response.ok || !payload?.success || payload.data === undefined) {
+    throw new Error(payload?.error?.message ?? `Request failed (${response.status})`);
   }
   return payload.data;
 }
@@ -46,12 +51,6 @@ export const api = {
       body: JSON.stringify({ email, password }),
     }),
   me: () => request<{ trainer: Trainer }>("/auth/me"),
-  getWhatsAppGatewayStatus: () =>
-    request<{ success: boolean; status: string; qrReady: boolean; qrRetries: number; gatewayUrl?: string }>("/whatsapp-gateway/status"),
-  resetWhatsAppGateway: () =>
-    request<{ success: boolean; message: string }>("/whatsapp-gateway/reset", {
-      method: "POST",
-    }),
   developerDiagnostics: () => request<DeveloperDiagnostics>("/developer/diagnostics"),
   developerLogs: () => request<LogEntry[]>("/developer/logs"),
   pingDb: () => request<{ latency: number; supabase: string; checkedAt: string }>("/developer/ping-db"),
@@ -60,10 +59,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
-  testNotification: (type: "sms" | "whatsapp", phone: string, message: string) =>
+  testNotification: (phone: string, message: string) =>
     request<{ requestId: string }>("/developer/test-notification", {
       method: "POST",
-      body: JSON.stringify({ type, phone, message }),
+      body: JSON.stringify({ phone, message }),
     }),
   runDeveloperFix: (action: "expire-members" | "send-sms-reminder") =>
     request<{ message: string; changed?: number; sent?: number }>("/developer/fix", {
@@ -114,6 +113,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+  createMembers: (inputs: MemberInput[]) =>
+    request<Member[]>("/members/batch", {
+      method: "POST",
+      body: JSON.stringify({ members: inputs }),
+    }),
   updateMember: (id: string, input: MemberInput) =>
     request<Member>(`/members/${id}`, {
       method: "PUT",
@@ -137,6 +141,10 @@ export const api = {
     request<Member>(`/members/${id}/suspend`, {
       method: "PATCH",
     }),
+  restoreMember: (id: string) =>
+    request<Member>(`/members/${id}/restore`, {
+      method: "PATCH",
+    }),
   deleteMember: (id: string) =>
     request<Member>(`/members/${id}`, {
       method: "DELETE",
@@ -149,14 +157,24 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ memberId, visitDate, weightKg }),
     }),
-  sendSms: (memberId: string, message: string) =>
-    request<{ requestId: string }>("/sms/send", {
-      method: "POST",
-      body: JSON.stringify({ member_id: memberId, message, type: "sms" }),
+  deleteAttendance: (attendanceId: string) =>
+    request<{ message: string }>(`/attendance/${attendanceId}`, {
+      method: "DELETE",
     }),
-  sendWhatsApp: (memberId: string, message: string) =>
+  sendSms: (memberId: string, message: string, markReminder = false) =>
     request<{ requestId: string }>("/sms/send", {
       method: "POST",
-      body: JSON.stringify({ member_id: memberId, message, type: "whatsapp" }),
+      body: JSON.stringify({ member_id: memberId, message, markReminder }),
+    }),
+  smsStatus: () => request<SmsStatus>("/sms/status"),
+  saveSmsSettings: (input: Partial<SmsSettingsState>) =>
+    request<{ message: string }>("/sms/settings", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  testSms: (phone: string, message: string) =>
+    request<{ requestId: string }>("/sms/test", {
+      method: "POST",
+      body: JSON.stringify({ phone, message }),
     }),
 };

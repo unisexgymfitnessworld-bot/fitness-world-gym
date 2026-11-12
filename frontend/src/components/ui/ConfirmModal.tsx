@@ -1,6 +1,6 @@
 import { AlertTriangle } from "lucide-react";
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "./Button";
 import { Modal } from "./Modal";
 
@@ -26,8 +26,19 @@ export function ConfirmModal({
   onClose,
 }: ConfirmModalProps) {
   const [shake, setShake] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setBusy(false);
+    }
+  }, [open]);
 
   async function handleConfirm(): Promise<void> {
+    if (busy) {
+      return;
+    }
+    setBusy(true);
     setShake(true);
     setTimeout(() => {
       setShake(false);
@@ -49,13 +60,14 @@ export function ConfirmModal({
           </div>
         </div>
         <div className="mt-4 flex justify-end gap-3">
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose} disabled={busy}>
             {cancelText}
           </Button>
           <motion.div animate={shake ? { x: [-4, 4, -4, 4, 0] } : {}} transition={{ duration: 0.4 }}>
             <Button
               className={isSuccess ? "!bg-status-active !text-brand-white hover:!bg-emerald-700" : "!bg-status-expired !text-brand-white hover:!bg-red-700"}
               onClick={() => void handleConfirm()}
+              disabled={busy}
             >
               {confirmText}
             </Button>

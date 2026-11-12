@@ -41,6 +41,10 @@ export function ResetPassword() {
       }
       setHasRecoverySession(Boolean(data.session));
       setCheckingSession(false);
+    }).catch(() => {
+      if (mounted) {
+        setCheckingSession(false);
+      }
     });
 
     return () => {
@@ -166,7 +170,7 @@ export function ResetPassword() {
             <button
               type="submit"
               disabled={saving || checkingSession}
-              className="focus-ring inline-flex min-h-12 w-full items-center justify-center gap-3 rounded-[var(--radius-card)] bg-gradient-to-r from-brand-primary to-[#F0447D] px-5 py-3 text-[16px] font-black text-brand-white shadow-[0_14px_34px_rgba(232,23,93,0.26)] transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
+              className="focus-ring inline-flex min-h-12 w-full items-center justify-center gap-3 rounded-[var(--radius-card)] bg-brand-primary px-5 py-3 text-[16px] font-black text-brand-white shadow-[0_2px_8px_rgba(26,26,46,0.16)] transition-colors hover:bg-brand-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
             >
               {saving ? <Loader2 size={20} className="animate-spin" /> : <ShieldCheck size={20} />}
               Save New Password

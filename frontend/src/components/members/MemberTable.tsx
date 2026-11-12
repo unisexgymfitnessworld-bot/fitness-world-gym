@@ -11,7 +11,7 @@ import {
 import { Eye, MessageCircle, MessageSquare, Pencil, UserX, SearchX, Plus, Download, UserCheck, Trash2 } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
-import { compareRegistrationNumbers, createWhatsAppLink, formatDisplayDate, formatPhone, getDueTone, getMemberActionDueDate, getMemberDueKind, isPlanLessThanOneMonth, formatCurrency } from "../../lib/utils";
+import { compareRegistrationNumbers, displayGoal, formatDisplayDate, formatPhone, getDueTone, getMemberActionDueDate, getMemberDueKind, initials, isPlanLessThanOneMonth, formatCurrency } from "../../lib/utils";
 import type { Member } from "../../types";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
@@ -26,6 +26,7 @@ interface MemberTableProps {
   onEdit: (memberId: string) => void;
   onSms: (memberId: string) => void;
   onSuspend: (memberId: string) => void;
+  onRestore: (memberId: string) => void;
   onDelete: (memberId: string) => void;
   isDbEmpty?: boolean;
   onAddClick?: () => void;
@@ -36,7 +37,7 @@ const columnHelper = createColumnHelper<Member>();
 
 const actionLegend = [
   "View profile",
-  "WhatsApp/SMS reminders",
+  "SMS reminders",
   "Edit details",
   "Suspend or restore member",
 ] as const;
@@ -58,6 +59,7 @@ export function MemberTable({
   onEdit,
   onSms,
   onSuspend,
+  onRestore,
   onDelete,
   isDbEmpty = false,
   onAddClick,
@@ -110,7 +112,7 @@ export function MemberTable({
         member.weightKg,
         member.heightCm,
         member.bmi,
-        `"${member.goal}"`,
+        `"${displayGoal(member).replace(/"/g, '""')}"`,
         `"${member.planType}"`,
         `"${member.membershipStart}"`,
         `"${getMemberActionDueDate(member)}"`,
@@ -157,7 +159,7 @@ export function MemberTable({
                 {member.avatar ? (
                   <img src={member.avatar} alt={member.name} className="h-full w-full object-cover" />
                 ) : (
-                  <span className="text-[12px] font-bold text-text-muted">{member.name.slice(0, 2).toUpperCase()}</span>
+                  <span className="text-[12px] font-bold text-text-muted">{initials(member.name)}</span>
                 )}
               </div>
               <div className="flex flex-col">
@@ -188,7 +190,7 @@ export function MemberTable({
         header: "Goal",
         cell: (info) => (
           <Badge tone="neutral">
-            {info.getValue()}
+            {displayGoal(info.row.original)}
           </Badge>
         ),
       }),
@@ -252,7 +254,7 @@ export function MemberTable({
               </Badge>
               {status === "Partially Paid" && member.balanceAmount > 0 && (
                 <span className="text-[11px] font-black text-status-due leading-none pl-1">
-                  Due: ₹{member.balanceAmount}
+                  Due: {formatCurrency(member.balanceAmount)}
                 </span>
               )}
             </div>
@@ -292,86 +294,86 @@ export function MemberTable({
           const isShortTerm = isPlanLessThanOneMonth(member);
           return (
             <div className="flex items-center gap-1.5">
-              <motion.button
+              <button
+                type="button"
                 className="focus-ring flex h-9 items-center gap-1.5 rounded-lg border border-indigo-100 bg-indigo-50/50 px-2.5 text-[12px] font-bold text-indigo-700 transition hover:bg-indigo-600 hover:text-white"
                 onClick={() => onView(member.id)}
                 title="View full member profile"
                 aria-label={`View full profile for ${member.name}`}
-                whileHover={{ scale: 1.08, y: -1 }}
-                whileTap={{ scale: 0.92 }}
-                transition={{ type: "spring", stiffness: 500, damping: 20 }}
               >
                 <Eye size={14} />
                 <span>View</span>
-              </motion.button>
-              {!isShortTerm && (
+              </button>
+              {!isShortTerm && member.status !== "Deleted" && (
                 <>
-                  <motion.button
+                  <button
+                    type="button"
                     className="focus-ring flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-100 bg-emerald-50/50 text-emerald-700 transition hover:bg-emerald-600 hover:text-white"
                     onClick={() => onSms(member.id)}
-                    title="Send WhatsApp/SMS renewal reminder"
-                    aria-label={`Send WhatsApp/SMS renewal reminder to ${member.name}`}
-                    whileHover={{ scale: 1.12, y: -1 }}
-                    whileTap={{ scale: 0.9 }}
-                    transition={{ type: "spring", stiffness: 500, damping: 20 }}
+                    title="Send SMS renewal reminder"
+                    aria-label={`Send SMS renewal reminder to ${member.name}`}
                   >
                     <MessageCircle size={15} />
-                  </motion.button>
+                  </button>
                 </>
               )}
-              <motion.button
-                className="focus-ring flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-55 text-slate-700 transition hover:bg-slate-600 hover:text-white"
+              <button
+                type="button"
+                className="focus-ring flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700 transition hover:bg-slate-600 hover:text-white"
                 onClick={() => onEdit(member.id)}
                 title="Edit member details"
                 aria-label={`Edit member details for ${member.name}`}
-                whileHover={{ scale: 1.12, y: -1 }}
-                whileTap={{ scale: 0.9 }}
-                transition={{ type: "spring", stiffness: 500, damping: 20 }}
               >
                 <Pencil size={15} />
-              </motion.button>
+              </button>
               {member.status === "Suspended" ? (
-                <motion.button
+                <button
+                  type="button"
                   className="focus-ring flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-100 bg-emerald-50/50 text-emerald-700 transition hover:bg-emerald-600 hover:text-white"
                   onClick={() => onSuspend(member.id)}
                   title="Unsuspend member access"
                   aria-label={`Unsuspend member access for ${member.name}`}
-                  whileHover={{ scale: 1.12, y: -1 }}
-                  whileTap={{ scale: 0.9 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 20 }}
                 >
                   <UserCheck size={15} />
-                </motion.button>
+                </button>
+              ) : member.status === "Deleted" ? (
+                <button
+                  type="button"
+                  className="focus-ring flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-100 bg-emerald-50/50 text-emerald-700 transition hover:bg-emerald-600 hover:text-white"
+                  onClick={() => onRestore(member.id)}
+                  title="Restore deleted member"
+                  aria-label={`Restore deleted member ${member.name}`}
+                >
+                  <UserCheck size={15} />
+                </button>
               ) : (
-                <motion.button
+                <button
+                  type="button"
                   className="focus-ring flex h-9 w-9 items-center justify-center rounded-lg border border-rose-100 bg-rose-50/50 text-rose-700 transition hover:bg-rose-600 hover:text-white"
                   onClick={() => onSuspend(member.id)}
                   title="Suspend member access"
                   aria-label={`Suspend member access for ${member.name}`}
-                  whileHover={{ scale: 1.12, y: -1 }}
-                  whileTap={{ scale: 0.9 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 20 }}
                 >
                   <UserX size={15} />
-                </motion.button>
+                </button>
               )}
-              <motion.button
-                className="focus-ring flex h-9 w-9 items-center justify-center rounded-lg border border-red-100 bg-red-50/50 text-red-700 transition hover:bg-red-600 hover:text-white"
-                onClick={() => onDelete(member.id)}
-                title="Delete member"
-                aria-label={`Delete member ${member.name}`}
-                whileHover={{ scale: 1.12, y: -1 }}
-                whileTap={{ scale: 0.9 }}
-                transition={{ type: "spring", stiffness: 500, damping: 20 }}
-              >
-                <Trash2 size={15} />
-              </motion.button>
+              {member.status !== "Deleted" && (
+                <button
+                  type="button"
+                  className="focus-ring flex h-9 w-9 items-center justify-center rounded-lg border border-red-100 bg-red-50/50 text-red-700 transition hover:bg-red-600 hover:text-white"
+                  onClick={() => onDelete(member.id)}
+                  title="Delete member"
+                  aria-label={`Delete member ${member.name}`}
+                >
+                  <Trash2 size={15} />
+                </button>
+              )}
             </div>
           );
         },
       }),
     ],
-    [onEdit, onSms, onSuspend, onDelete, onView],
+    [onEdit, onSms, onSuspend, onRestore, onDelete, onView],
   );
 
   const table = useReactTable({
@@ -430,7 +432,7 @@ export function MemberTable({
       {rows.length === 0 ? (
         isDbEmpty ? (
           <div className="flex flex-col items-center justify-center p-8 text-center sm:p-12 lg:p-16 border-t border-border-default bg-brand-white/80 backdrop-blur-sm shadow-[0_12px_40px_rgba(26,26,46,0.04)]">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-primary-light text-brand-primary shadow-[0_12px_24px_rgba(232,23,93,0.12)]">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-primary-light text-brand-primary">
               <Plus size={28} className="animate-pulse" />
             </div>
             <h2 className="mt-6 text-[22px] font-black text-text-primary sm:text-[24px]">Welcome to Fitness World!</h2>
@@ -438,7 +440,7 @@ export function MemberTable({
               Start by registering your first member to track their plans, body metrics, BMI, and daily attendance.
             </p>
             {onAddClick && (
-              <Button className="mt-6 px-6 py-2.5 bg-gradient-to-r from-brand-primary to-[#F0447D] shadow-[0_10px_24px_rgba(232,23,93,0.24)] hover:shadow-[0_12px_28px_rgba(232,23,93,0.3)] hover:-translate-y-0.5 transition-all" onClick={onAddClick}>
+              <Button className="mt-6 px-6 py-2.5" onClick={onAddClick}>
                 <Plus size={18} />
                 Add First Member
               </Button>
@@ -483,7 +485,7 @@ export function MemberTable({
                   {member.avatar ? (
                     <img src={member.avatar} alt={member.name} className="h-full w-full object-cover" />
                   ) : (
-                    <span className="text-[12px] font-bold text-text-muted">{member.name.slice(0, 2).toUpperCase()}</span>
+                    <span className="text-[12px] font-bold text-text-muted">{initials(member.name)}</span>
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
@@ -507,7 +509,7 @@ export function MemberTable({
               <div className="mt-2 grid grid-cols-3 gap-1.5 sm:mt-3 sm:gap-2">
                 <div className="rounded-md bg-surface-overlay px-2 py-1.5 sm:rounded-lg sm:py-2">
                   <p className="text-[10px] font-bold uppercase text-text-muted">Goal</p>
-                  <p className="mt-0.5 truncate text-[12px] font-bold text-text-primary sm:text-[13px]">{member.goal}</p>
+                  <p className="mt-0.5 truncate text-[12px] font-bold text-text-primary sm:text-[13px]" title={displayGoal(member)}>{displayGoal(member)}</p>
                 </div>
                 <div className="rounded-md bg-surface-overlay px-2 py-1.5 sm:rounded-lg sm:py-2">
                   <p className="text-[10px] font-bold uppercase text-text-muted">Renewal</p>
@@ -530,7 +532,7 @@ export function MemberTable({
                     </Badge>
                     {member.paymentStatus === "Partially Paid" && member.balanceAmount > 0 && (
                       <span className="text-[10px] font-bold text-status-due">
-                        Due: ₹{member.balanceAmount}
+                        Due: {formatCurrency(member.balanceAmount)}
                       </span>
                     )}
                   </div>
@@ -555,80 +557,80 @@ export function MemberTable({
               )}
 
               <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                <motion.button
-                  className="focus-ring flex h-8 items-center gap-1 rounded-md border border-indigo-100 bg-indigo-50/50 px-2 text-[11px] font-bold text-indigo-700 transition"
+                <button
+                  type="button"
+                  className="focus-ring flex h-8 items-center gap-1 rounded-md border border-indigo-100 bg-indigo-50/50 px-2 text-[11px] font-bold text-indigo-700 transition hover:bg-indigo-600 hover:text-white"
                   onClick={() => onView(member.id)}
                   title="View full member profile"
                   aria-label={`View full profile for ${member.name}`}
-                  whileHover={{ scale: 1.08 }}
-                  whileTap={{ scale: 0.92 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 20 }}
                 >
                   <Eye size={13} />
                   <span>View</span>
-                </motion.button>
-                {!isShortTerm && (
+                </button>
+                {!isShortTerm && member.status !== "Deleted" && (
                   <>
-                    <motion.button
-                      className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-emerald-100 bg-emerald-50/50 text-emerald-700 transition"
+                    <button
+                      type="button"
+                      className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-emerald-100 bg-emerald-50/50 text-emerald-700 transition hover:bg-emerald-600 hover:text-white"
                       onClick={() => onSms(member.id)}
-                      title="Send WhatsApp/SMS renewal reminder"
-                      aria-label={`Send WhatsApp/SMS renewal reminder to ${member.name}`}
-                      whileHover={{ scale: 1.12 }}
-                      whileTap={{ scale: 0.9 }}
-                      transition={{ type: "spring", stiffness: 500, damping: 20 }}
+                      title="Send SMS renewal reminder"
+                      aria-label={`Send SMS renewal reminder to ${member.name}`}
                     >
                       <MessageCircle size={14} />
-                    </motion.button>
+                    </button>
                   </>
                 )}
-                <motion.button
-                  className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-700 transition"
+                <button
+                  type="button"
+                  className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-700 transition hover:bg-slate-600 hover:text-white"
                   onClick={() => onEdit(member.id)}
                   title="Edit member details"
                   aria-label={`Edit member details for ${member.name}`}
-                  whileHover={{ scale: 1.12 }}
-                  whileTap={{ scale: 0.9 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 20 }}
                 >
                   <Pencil size={14} />
-                </motion.button>
+                </button>
                 {member.status === "Suspended" ? (
-                  <motion.button
-                    className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-emerald-100 bg-emerald-50/50 text-emerald-700 transition"
+                  <button
+                    type="button"
+                    className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-emerald-100 bg-emerald-50/50 text-emerald-700 transition hover:bg-emerald-600 hover:text-white"
                     onClick={() => onSuspend(member.id)}
                     title="Unsuspend member access"
                     aria-label={`Unsuspend member access for ${member.name}`}
-                    whileHover={{ scale: 1.12 }}
-                    whileTap={{ scale: 0.9 }}
-                    transition={{ type: "spring", stiffness: 500, damping: 20 }}
                   >
                     <UserCheck size={14} />
-                  </motion.button>
+                  </button>
+                ) : member.status === "Deleted" ? (
+                  <button
+                    type="button"
+                    className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-emerald-100 bg-emerald-50/50 text-emerald-700 transition hover:bg-emerald-600 hover:text-white"
+                    onClick={() => onRestore(member.id)}
+                    title="Restore deleted member"
+                    aria-label={`Restore deleted member ${member.name}`}
+                  >
+                    <UserCheck size={14} />
+                  </button>
                 ) : (
-                  <motion.button
-                    className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-rose-100 bg-rose-50/50 text-rose-700 transition"
+                  <button
+                    type="button"
+                    className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-rose-100 bg-rose-50/50 text-rose-700 transition hover:bg-rose-600 hover:text-white"
                     onClick={() => onSuspend(member.id)}
                     title="Suspend member access"
                     aria-label={`Suspend member access for ${member.name}`}
-                    whileHover={{ scale: 1.12 }}
-                    whileTap={{ scale: 0.9 }}
-                    transition={{ type: "spring", stiffness: 500, damping: 20 }}
                   >
                     <UserX size={14} />
-                  </motion.button>
+                  </button>
                 )}
-                <motion.button
-                  className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-red-100 bg-red-50 text-red-700 transition hover:bg-red-600 hover:text-white"
-                  onClick={() => onDelete(member.id)}
-                  title="Delete member"
-                  aria-label={`Delete member ${member.name}`}
-                  whileHover={{ scale: 1.12 }}
-                  whileTap={{ scale: 0.9 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 20 }}
-                >
-                  <Trash2 size={14} />
-                </motion.button>
+                {member.status !== "Deleted" && (
+                  <button
+                    type="button"
+                    className="focus-ring flex h-8 w-8 items-center justify-center rounded-md border border-red-100 bg-red-50 text-red-700 transition hover:bg-red-600 hover:text-white"
+                    onClick={() => onDelete(member.id)}
+                    title="Delete member"
+                    aria-label={`Delete member ${member.name}`}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
               </div>
             </motion.article>
           );
@@ -655,7 +657,7 @@ export function MemberTable({
                 {row.getVisibleCells().map((cell, index) => (
                   <td key={cell.id} className="px-4 py-4 text-[15px]">
                     <div className={index === 0 ? "relative" : undefined}>
-                      {index === 0 ? <span className="absolute -left-4 top-1/2 h-8 w-[3px] -translate-y-1/2 rounded-r bg-gradient-to-b from-brand-primary to-[#F0447D] opacity-0 transition-opacity group-hover:opacity-100" /> : null}
+                      {index === 0 ? <span className="absolute -left-4 top-1/2 h-8 w-[3px] -translate-y-1/2 rounded-r bg-brand-primary opacity-0 transition-opacity group-hover:opacity-100" /> : null}
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </div>
                   </td>

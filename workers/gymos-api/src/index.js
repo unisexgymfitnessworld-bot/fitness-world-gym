@@ -85,59 +85,6 @@ async function handleRequest(request, env) {
     return jsonResponse(request, env, { success: true, data: { message: "Logged out" } });
   }
 
-function resolveWaGatewayUrl(settings = {}, env = {}) {
-  const url = settings.whatsapp_gateway_url || env.WHATSAPP_GATEWAY_URL;
-  if (!url || url.includes("railway.app")) {
-    return "https://gymos-whatsapp-gateway.onrender.com";
-  }
-  return url.replace(/\/$/, "");
-}
-
-function resolveWaGatewayToken(settings = {}, env = {}) {
-  return settings.whatsapp_gateway_token || env.WHATSAPP_GATEWAY_TOKEN || "fitness-world-secret-token-2026";
-}
-
-  if (path === "/whatsapp-gateway/status" && method === "GET") {
-    assertTrainerAllowed(env, authUser);
-    const settings = await getSystemSettings(env);
-    const waGatewayUrl = resolveWaGatewayUrl(settings, env);
-    const waGatewayToken = resolveWaGatewayToken(settings, env);
-    try {
-      const response = await fetch(`${waGatewayUrl}/status`);
-      const data = await response.json();
-      return jsonResponse(request, env, { success: true, data: { ...data, gatewayUrl: waGatewayUrl } });
-    } catch (err) {
-      return jsonResponse(request, env, {
-        success: true,
-        data: {
-          success: false,
-          status: "unavailable",
-          gatewayUrl: waGatewayUrl,
-          error: "Unable to reach WhatsApp gateway service. Make sure it is running."
-        }
-      });
-    }
-  }
-
-  if (path === "/whatsapp-gateway/reset" && method === "POST") {
-    assertTrainerAllowed(env, authUser);
-    const settings = await getSystemSettings(env);
-    const waGatewayUrl = resolveWaGatewayUrl(settings, env);
-    const waGatewayToken = resolveWaGatewayToken(settings, env);
-    try {
-      const response = await fetch(`${waGatewayUrl}/reset`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${waGatewayToken}`
-        }
-      });
-      const data = await response.json();
-      return jsonResponse(request, env, { success: true, data });
-    } catch (err) {
-      return jsonResponse(request, env, { success: false, error: "Unable to reach WhatsApp gateway service to disconnect." }, 502);
-    }
-  }
-
   if (path === "/developer/diagnostics" && method === "GET") {
     assertDeveloper(authUser);
     return jsonResponse(request, env, { success: true, data: await developerDiagnostics(env) });
@@ -153,20 +100,11 @@ function resolveWaGatewayToken(settings = {}, env = {}) {
   if (path === "/developer/test-notification" && method === "POST") {
     assertDeveloper(authUser);
     const body = await parseJsonBody(request);
-    const type = requiredString(body.type, "notification type");
     const phone = requiredString(body.phone, "phone number");
     const message = requiredString(body.message, "test message");
 
-    let requestId;
-    if (type === "sms") {
-      requestId = await sendSms(env, phone, message);
-    } else if (type === "whatsapp") {
-      requestId = await sendWhatsApp(env, phone, message);
-    } else {
-      throw new ApiError(400, "INVALID_NOTIFICATION_TYPE", "Notification type must be sms or whatsapp");
-    }
-
-    logInfo("developer_test_notification", { type, phone, requestId });
+    const requestId = await sendSms(env, phone, message);
+    logInfo("developer_test_notification", { phone, requestId });
     return jsonResponse(request, env, { success: true, data: { requestId } });
   }
 
@@ -225,6 +163,33 @@ function resolveWaGatewayToken(settings = {}, env = {}) {
     }
   }
 
+  // SMS setup endpoints: shared by trainers and developers (placed before the
+  // trainer-workspace gate so both roles can configure the gym phone).
+  if (path === "/sms/status" && method === "GET") {
+    return jsonResponse(request, env, { success: true, data: await smsStatus(env) });
+  }
+
+  if (path === "/sms/settings" && method === "POST") {
+    applyRateLimit(request, "sms-settings", 15 * 60 * 1000, 30);
+    const body = validateSmsSettingsInput(await parseJsonBody(request));
+    await saveSystemSettings(env, body);
+    logInfo("sms_settings_saved", { by: authUser.email });
+    return jsonResponse(request, env, { success: true, data: { message: "SMS settings saved successfully" } });
+  }
+
+  if (path === "/sms/test" && method === "POST") {
+    applyRateLimit(request, "sms-test", 15 * 60 * 1000, 30);
+    const body = await parseJsonBody(request);
+    const phone = requiredString(body.phone, "phone number");
+    const message = requiredString(body.message, "test message");
+    if (message.length > 320) {
+      throw new ApiError(400, "INVALID_SMS_MESSAGE", "Test message must be 320 characters or less");
+    }
+    const requestId = await sendSms(env, phone, message);
+    logInfo("sms_test_sent", { phone, requestId });
+    return jsonResponse(request, env, { success: true, data: { requestId } });
+  }
+
   assertTrainerWorkspace(authUser);
 
   if (path === "/members/payments/all" && method === "GET") {
@@ -246,6 +211,31 @@ function resolveWaGatewayToken(settings = {}, env = {}) {
   if (path === "/members" && method === "POST") {
     const body = validateMemberInput(await parseJsonBody(request));
     return jsonResponse(request, env, { success: true, data: await createMember(env, authUser, body) }, 201);
+  }
+
+  if (path === "/members/batch" && method === "POST") {
+    const body = await parseJsonBody(request);
+    const inputs = body?.members;
+    if (!Array.isArray(inputs) || inputs.length < 1 || inputs.length > 2) {
+      throw new ApiError(400, "INVALID_BATCH", "Provide 1 to 2 members to create together");
+    }
+    const validated = inputs.map(validateMemberInput);
+    const created = [];
+    try {
+      for (const input of validated) {
+        created.push(await createMember(env, authUser, input));
+      }
+    } catch (error) {
+      for (const member of created) {
+        try {
+          await supabaseJson(env, `/members?id=eq.${encodeURIComponent(member.id)}`, { method: "DELETE" });
+        } catch {
+          // Best-effort rollback; the original error is what matters.
+        }
+      }
+      throw error;
+    }
+    return jsonResponse(request, env, { success: true, data: created }, 201);
   }
 
   const memberMatch = path.match(/^\/members\/([^/]+)(?:\/([^/]+))?$/);
@@ -270,10 +260,8 @@ function resolveWaGatewayToken(settings = {}, env = {}) {
       return jsonResponse(request, env, { success: true, data: await suspendMember(env, authUser, memberId) });
     }
 
-    if (action === "payment" && method === "PATCH") {
-      const body = await parseJsonBody(request);
-      const paymentStatus = assertEnum(body.paymentStatus ?? body.payment_status, PAYMENT_STATUSES, "payment status");
-      return jsonResponse(request, env, { success: true, data: await updatePayment(env, authUser, memberId, paymentStatus) });
+    if (action === "restore" && method === "PATCH") {
+      return jsonResponse(request, env, { success: true, data: await restoreMember(env, authUser, memberId) });
     }
 
     if (action === "payments" && method === "GET") {
@@ -293,7 +281,7 @@ function resolveWaGatewayToken(settings = {}, env = {}) {
       const body = validateRenewInput(await parseJsonBody(request));
       return jsonResponse(request, env, {
         success: true,
-        data: await renewMember(env, authUser, memberId, body.membershipStart, body.membershipDue, body.feesAmount, body.planType),
+        data: await renewMember(env, authUser, memberId, body.membershipStart, body.membershipDue, body.feesAmount, body.planType, body.paymentStatus, body.partialPaidAmount),
       });
     }
   }
@@ -322,57 +310,16 @@ function resolveWaGatewayToken(settings = {}, env = {}) {
   }
 
   if (path === "/sms/send" && method === "POST") {
-    applyRateLimit(request, "sms", 15 * 60 * 1000, 10);
+    applyRateLimit(request, "sms", 15 * 60 * 1000, 60);
     const body = validateSmsInput(await parseJsonBody(request));
     const member = await getMember(env, authUser, body.memberId);
-    
-    let requestId = "skipped";
-    let sentSMS = false;
-    let sentWA = false;
+    assertNotDeleted(member);
 
-    const settings = await getSystemSettings(env);
-    const fast2SmsKey = settings.fast2sms_api_key || env.FAST2SMS_API_KEY;
-    const waInstanceId = settings.whatsapp_instance_id || env.WHATSAPP_INSTANCE_ID;
-    const waToken = settings.whatsapp_token || env.WHATSAPP_TOKEN;
-    const waGatewayUrl = resolveWaGatewayUrl(settings, env);
-    const waGatewayToken = resolveWaGatewayToken(settings, env);
-    const whatsappProvider = settings.whatsapp_provider || (env.WHATSAPP_INSTANCE_ID === "self_hosted" ? "self_hosted" : env.WHATSAPP_INSTANCE_ID ? "ultramsg" : "self_hosted");
-
-    const smsEnabled = settings.sms_enabled !== "false";
-    const whatsappEnabled = settings.whatsapp_enabled !== "false";
-
-    const sendSmsChannel = body.type === "both" || body.type === "sms";
-    const sendWaChannel = body.type === "both" || body.type === "whatsapp";
-
-    if (sendSmsChannel && fast2SmsKey && smsEnabled) {
-      requestId = await sendSms(env, member.phone, body.message);
-      sentSMS = true;
+    const requestId = await sendSms(env, member.phone, body.message);
+    if (body.markReminder) {
+      await markReminderSent(env, member.id);
     }
-
-    const isWhatsAppConfigured = Boolean(
-      (whatsappProvider === "self_hosted" && waGatewayUrl) ||
-      (whatsappProvider === "ultramsg" && waInstanceId && waToken)
-    );
-
-    if (sendWaChannel && isWhatsAppConfigured && whatsappEnabled) {
-      const waId = await sendWhatsApp(env, member.phone, body.message);
-      if (!sentSMS || requestId === "skipped_disabled") requestId = waId;
-      sentWA = true;
-    }
-
-    if (!sentSMS && !sentWA) {
-      throw new ApiError(503, "NOTIFICATIONS_NOT_CONFIGURED", "Neither SMS nor WhatsApp is configured or enabled for this type");
-    }
-
-    await markReminderSent(env, member.id);
     return jsonResponse(request, env, { success: true, data: { requestId } });
-  }
-
-  if (path === "/sms/whatsapp-link" && method === "POST") {
-    const body = validateSmsMemberInput(await parseJsonBody(request));
-    const member = await getMember(env, authUser, body.memberId);
-    const text = encodeURIComponent(`Hi ${member.name}, your Fitness World membership update is ready. - Fitness World`);
-    return jsonResponse(request, env, { success: true, data: { url: `https://wa.me/91${member.phone}?text=${text}` } });
   }
 
   throw new ApiError(404, "NOT_FOUND", "Route not found");
@@ -382,7 +329,7 @@ async function handleScheduled(controller, env) {
   const startedAt = new Date().toISOString();
   try {
     if (controller.cron === "*/30 * * * *" || controller.cron === "*/10 * * * *") {
-      await keepSupabaseAlive(env, true);
+      await keepSupabaseAlive(env);
       logInfo("scheduled_keep_alive_complete", { startedAt });
       return;
     }
@@ -525,6 +472,8 @@ function assertTrainerWorkspace(user) {
   }
 }
 
+// Single-gym shared workspace: every trainer sees every member record.
+// owner_user_id is a creator audit trail, not an access boundary.
 function ownerFilter(user) {
   return "not.is.null";
 }
@@ -555,24 +504,17 @@ async function developerDiagnostics(env) {
   const settings = await getSystemSettings(env);
   const accounts = await listAllTrainerAccounts(env);
 
-  const fast2SmsKey = settings.fast2sms_api_key || env.FAST2SMS_API_KEY;
-  const waInstanceId = settings.whatsapp_instance_id || env.WHATSAPP_INSTANCE_ID;
-  const waToken = settings.whatsapp_token || env.WHATSAPP_TOKEN;
-  const waGatewayUrl = resolveWaGatewayUrl(settings, env);
-  const waGatewayToken = resolveWaGatewayToken(settings, env);
+  const smsgateUsername = settings.smsgate_username || env.SMSGATE_USERNAME;
+  const smsgatePassword = settings.smsgate_password || env.SMSGATE_PASSWORD;
 
   const smsEnabled = settings.sms_enabled !== "false";
-  const whatsappEnabled = settings.whatsapp_enabled !== "false";
-  const whatsAppConfigured = Boolean(
-    (waInstanceId && waToken) ||
-    (waGatewayUrl)
-  );
+  const smsgateConfigured = Boolean(smsgateUsername && smsgatePassword);
 
   return {
     api: "ok",
     supabase,
-    smsConfigured: Boolean(fast2SmsKey) && smsEnabled,
-    whatsAppConfigured: whatsAppConfigured && whatsappEnabled,
+    smsConfigured: smsgateConfigured && smsEnabled,
+    smsgateConfigured: smsgateConfigured && smsEnabled,
     memberOwnershipReady,
     orphanMembers,
     expiredActiveMembers,
@@ -589,20 +531,12 @@ async function developerDiagnostics(env) {
     },
     settings: {
       sms_enabled: settings.sms_enabled ?? "true",
-      whatsapp_enabled: settings.whatsapp_enabled ?? "true",
-      whatsapp_provider: settings.whatsapp_provider ?? (env.WHATSAPP_INSTANCE_ID === "self_hosted" ? "self_hosted" : env.WHATSAPP_INSTANCE_ID ? "ultramsg" : "none"),
-      whatsapp_gateway_url: settings.whatsapp_gateway_url ?? (env.WHATSAPP_GATEWAY_URL ?? ""),
-      whatsapp_gateway_token: settings.whatsapp_gateway_token ?? (env.WHATSAPP_GATEWAY_TOKEN ?? ""),
-      whatsapp_instance_id: settings.whatsapp_instance_id ?? (env.WHATSAPP_INSTANCE_ID ?? ""),
-      whatsapp_token: settings.whatsapp_token ?? (env.WHATSAPP_TOKEN ?? ""),
-      fast2sms_api_key: settings.fast2sms_api_key ?? (env.FAST2SMS_API_KEY ?? ""),
+      smsgate_username: settings.smsgate_username ?? (env.SMSGATE_USERNAME ?? ""),
+      smsgate_password: settings.smsgate_password ?? (env.SMSGATE_PASSWORD ?? ""),
+      smsgate_device_id: settings.smsgate_device_id ?? (env.SMSGATE_DEVICE_ID ?? ""),
+      smsgate_sim_number: settings.smsgate_sim_number ?? (env.SMSGATE_SIM_NUMBER ?? ""),
       db_keep_alive_enabled: settings.db_keep_alive_enabled ?? "false",
       sms_auto_reminder_paused: settings.sms_auto_reminder_paused ?? "false",
-      whatsapp_auto_reminder_paused: settings.whatsapp_auto_reminder_paused ?? "false",
-      sms_provider: settings.sms_provider ?? "fast2sms",
-      twilio_account_sid: settings.twilio_account_sid ?? (env.TWILIO_ACCOUNT_SID ?? ""),
-      twilio_auth_token: settings.twilio_auth_token ?? (env.TWILIO_AUTH_TOKEN ?? ""),
-      twilio_from_number: settings.twilio_from_number ?? (env.TWILIO_FROM_NUMBER ?? ""),
     },
     checkedAt: new Date().toISOString(),
   };
@@ -667,9 +601,11 @@ async function createTrainerAccount(env, body) {
 
 async function updateTrainerAccount(env, accountId, body, currentUser) {
   const input = validateAccountInput(body, { requirePassword: false });
+  const existing = await supabaseAuthAdminJson(env, `/users/${encodeURIComponent(accountId)}`);
+  const existingUser = existing?.user ?? existing ?? {};
   const update = {
-    app_metadata: { role: input.role },
-    user_metadata: { name: input.name },
+    app_metadata: { ...(existingUser.app_metadata ?? {}), role: input.role },
+    user_metadata: { ...(existingUser.user_metadata ?? {}), name: input.name },
   };
   if (input.email) {
     update.email = input.email;
@@ -815,30 +751,40 @@ async function getMember(env, user, memberId) {
   return mapMember(rows[0]);
 }
 
+export function deriveMembershipStatus(membershipDue, paymentStatus) {
+  const today = isoDateInTimeZone();
+  if (membershipDue < today) {
+    return "Expired";
+  }
+  if (membershipDue === today && (paymentStatus === "Pending" || paymentStatus === "Partially Paid")) {
+    return "Expired";
+  }
+  return "Active";
+}
+
 async function createMember(env, user, input) {
   const rows = await supabaseJson(env, "/members?select=*", {
     method: "POST",
     headers: { Prefer: "return=representation" },
-    body: JSON.stringify({ ...memberInputToDb(input), owner_user_id: user.id }),
+    body: JSON.stringify({
+      ...memberInputToDb(input),
+      owner_user_id: user.id,
+      status: deriveMembershipStatus(input.membershipDue, input.paymentStatus),
+    }),
   });
   return mapMember(rows[0]);
 }
 
 async function updateMember(env, user, memberId, input) {
+  const current = await getMember(env, user, memberId);
+  const keepStatus = current.status === "Suspended" || current.status === "Deleted";
   const rows = await supabaseJson(env, `/members?id=eq.${encodeURIComponent(memberId)}&owner_user_id=${ownerFilter(user)}&select=*`, {
     method: "PATCH",
     headers: { Prefer: "return=representation" },
-    body: JSON.stringify(memberInputToDb(input)),
-  });
-  if (!rows[0]) throw new ApiError(404, "MEMBER_NOT_FOUND", "Member not found");
-  return mapMember(rows[0]);
-}
-
-async function updatePayment(env, user, memberId, paymentStatus) {
-  const rows = await supabaseJson(env, `/members?id=eq.${encodeURIComponent(memberId)}&owner_user_id=${ownerFilter(user)}&select=*`, {
-    method: "PATCH",
-    headers: { Prefer: "return=representation" },
-    body: JSON.stringify({ payment_status: paymentStatus }),
+    body: JSON.stringify({
+      ...memberInputToDb(input),
+      status: keepStatus ? current.status : deriveMembershipStatus(input.membershipDue, input.paymentStatus),
+    }),
   });
   if (!rows[0]) throw new ApiError(404, "MEMBER_NOT_FOUND", "Member not found");
   return mapMember(rows[0]);
@@ -913,6 +859,7 @@ async function paymentReceiptTotal(env, user, memberId, membershipStart) {
 
 async function createPaymentReceipt(env, user, memberId, input) {
   const member = await getMember(env, user, memberId);
+  assertNotDeleted(member);
   const existingReceiptTotal = await paymentReceiptTotal(env, user, memberId, member.membershipStart);
   const legacyCollectedAmount = Math.max(0, Math.min(member.partialPaidAmount - existingReceiptTotal, member.feesAmount));
   const collectedBeforeReceipt = legacyCollectedAmount + existingReceiptTotal;
@@ -957,16 +904,30 @@ async function createPaymentReceipt(env, user, memberId, input) {
     member: mapMember(memberRows[0]),
   };
 
-  // Automatically send receipt via WhatsApp
-  await sendReceiptWhatsApp(env, result.member, result.receipt);
+  // Automatically send the receipt via SMS
+  await sendReceiptSms(env, result.member, result.receipt);
 
   return result;
 }
 
-async function renewMember(env, user, memberId, membershipStart, membershipDue, feesAmount, planType) {
+async function renewMember(env, user, memberId, membershipStart, membershipDue, feesAmount, planType, paymentStatus = "Pending", partialPaidAmount = 0) {
   const member = await getMember(env, user, memberId);
+  assertNotDeleted(member);
   const newPlan = planType ?? member.planType;
-  
+
+  let safePartial;
+  let balanceAmount;
+  if (paymentStatus === "Paid") {
+    safePartial = feesAmount;
+    balanceAmount = 0;
+  } else if (paymentStatus === "Partially Paid") {
+    safePartial = Math.min(Math.max(partialPaidAmount, 0), feesAmount);
+    balanceAmount = Math.max(feesAmount - safePartial, 0);
+  } else {
+    safePartial = 0;
+    balanceAmount = feesAmount;
+  }
+
   await supabaseJson(env, "/renewal_history?select=*", {
     method: "POST",
     headers: { Prefer: "return=representation" },
@@ -980,26 +941,30 @@ async function renewMember(env, user, memberId, membershipStart, membershipDue, 
       new_start_date: membershipStart,
       new_due_date: membershipDue,
       amount: feesAmount,
-      payment_status: "Paid",
+      payment_status: paymentStatus,
       renewed_on: isoDateInTimeZone(),
     }),
   });
 
-  // Automatically create a payment receipt for the renewal
-  const receiptNo = generateReceiptNo(new Date(membershipStart));
-  const receiptRows = await supabaseJson(env, "/payment_receipts?select=*", {
-    method: "POST",
-    headers: { Prefer: "return=representation" },
-    body: JSON.stringify({
-      member_id: memberId,
-      owner_user_id: user.id,
-      receipt_no: receiptNo,
-      paid_on: membershipStart,
-      amount: feesAmount,
-      method: "Cash",
-      note: `Membership Renewal: ${newPlan} plan (${membershipStart} to ${membershipDue})`,
-    }),
-  });
+  // Create a payment receipt only for money actually collected at renewal time
+  let receipt = null;
+  if (safePartial > 0) {
+    const receiptNo = generateReceiptNo(new Date(membershipStart));
+    const receiptRows = await supabaseJson(env, "/payment_receipts?select=*", {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({
+        member_id: memberId,
+        owner_user_id: user.id,
+        receipt_no: receiptNo,
+        paid_on: membershipStart,
+        amount: safePartial,
+        method: "Cash",
+        note: `Membership Renewal: ${newPlan} plan (${membershipStart} to ${membershipDue})`,
+      }),
+    });
+    receipt = receiptRows && receiptRows[0] ? mapPaymentReceipt(receiptRows[0]) : null;
+  }
 
   const rows = await supabaseJson(env, `/members?id=eq.${encodeURIComponent(memberId)}&owner_user_id=${ownerFilter(user)}&select=*`, {
     method: "PATCH",
@@ -1009,32 +974,33 @@ async function renewMember(env, user, memberId, membershipStart, membershipDue, 
       membership_due: membershipDue,
       fees_amount: feesAmount,
       plan_type: newPlan,
-      payment_status: "Paid",
-      partial_paid_amount: feesAmount,
-      balance_amount: 0,
+      payment_status: paymentStatus,
+      partial_paid_amount: safePartial,
+      balance_amount: balanceAmount,
       status: "Active",
       sms_sent_3days: false,
+      sms_sent_winback: false,
     }),
   });
   if (!rows[0]) throw new ApiError(404, "MEMBER_NOT_FOUND", "Member not found");
 
   const updatedMember = mapMember(rows[0]);
-  const receipt = receiptRows && receiptRows[0] ? mapPaymentReceipt(receiptRows[0]) : {
-    receiptNo,
-    paidOn: membershipStart,
-    amount: feesAmount,
-    method: "Cash",
-    note: `Membership Renewal: ${newPlan} plan (${membershipStart} to ${membershipDue})`,
-  };
-
-  // Automatically send receipt via WhatsApp
-  await sendReceiptWhatsApp(env, updatedMember, receipt);
+  if (receipt) {
+    await sendReceiptSms(env, updatedMember, receipt);
+  }
 
   return updatedMember;
 }
 
+function assertNotDeleted(member) {
+  if (member.status === "Deleted") {
+    throw new ApiError(400, "MEMBER_DELETED", "This member is deleted. Restore the member first.");
+  }
+}
+
 async function suspendMember(env, user, memberId) {
   const member = await getMember(env, user, memberId);
+  assertNotDeleted(member);
   const nextStatus = member.status === "Suspended" ? (member.membershipDue < isoDateInTimeZone() ? "Expired" : "Active") : "Suspended";
   const rows = await supabaseJson(env, `/members?id=eq.${encodeURIComponent(memberId)}&owner_user_id=${ownerFilter(user)}&select=*`, {
     method: "PATCH",
@@ -1050,6 +1016,20 @@ async function deleteMember(env, user, memberId) {
     method: "PATCH",
     headers: { Prefer: "return=representation" },
     body: JSON.stringify({ status: "Deleted" }),
+  });
+  if (!rows[0]) throw new ApiError(404, "MEMBER_NOT_FOUND", "Member not found");
+  return mapMember(rows[0]);
+}
+
+async function restoreMember(env, user, memberId) {
+  const member = await getMember(env, user, memberId);
+  if (member.status !== "Deleted") {
+    return member;
+  }
+  const rows = await supabaseJson(env, `/members?id=eq.${encodeURIComponent(memberId)}&owner_user_id=${ownerFilter(user)}&select=*`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({ status: deriveMembershipStatus(member.membershipDue, member.paymentStatus) }),
   });
   if (!rows[0]) throw new ApiError(404, "MEMBER_NOT_FOUND", "Member not found");
   return mapMember(rows[0]);
@@ -1071,7 +1051,12 @@ async function listAttendance(env, user, memberId, month) {
 }
 
 async function createAttendance(env, user, memberId, visitDate, weightKg) {
-  await getMember(env, user, memberId);
+  const member = await getMember(env, user, memberId);
+  assertNotDeleted(member);
+  const existing = await supabaseJson(env, `/attendance?select=id&member_id=eq.${encodeURIComponent(memberId)}&visit_date=eq.${encodeURIComponent(visitDate)}&limit=1`);
+  if (existing && existing.length > 0) {
+    throw new ApiError(409, "VISIT_ALREADY_LOGGED", "A visit is already logged for this date");
+  }
   const rows = await supabaseJson(env, "/attendance?select=*", {
     method: "POST",
     headers: { Prefer: "return=representation" },
@@ -1143,7 +1128,7 @@ async function runExpireStatus(env) {
   return rows1.length + rows2.length;
 }
 
-function isMemberPlanLessThanOneMonth(member) {
+export function isMemberPlanLessThanOneMonth(member) {
   if (member.planType !== "Custom") return false;
   if (!member.membershipStart || !member.membershipDue) return false;
   const start = new Date(member.membershipStart);
@@ -1153,126 +1138,131 @@ function isMemberPlanLessThanOneMonth(member) {
   return diffDays < 30;
 }
 
+function smsSendingConfigured(env, settings) {
+  return Boolean((settings.smsgate_username || env.SMSGATE_USERNAME) && (settings.smsgate_password || env.SMSGATE_PASSWORD));
+}
+
 async function runSmsReminder(env) {
   const settings = await getSystemSettings(env);
-  const fast2SmsKey = settings.fast2sms_api_key || env.FAST2SMS_API_KEY;
-  const waInstanceId = settings.whatsapp_instance_id || env.WHATSAPP_INSTANCE_ID;
-  const waToken = settings.whatsapp_token || env.WHATSAPP_TOKEN;
-  const waGatewayUrl = resolveWaGatewayUrl(settings, env);
-  const waGatewayToken = resolveWaGatewayToken(settings, env);
 
   const smsEnabled = settings.sms_enabled !== "false";
-  const whatsappEnabled = settings.whatsapp_enabled !== "false";
-
   const smsAutoPaused = settings.sms_auto_reminder_paused === "true";
-  const whatsappAutoPaused = settings.whatsapp_auto_reminder_paused === "true";
+  const hasSms = smsEnabled && !smsAutoPaused && smsSendingConfigured(env, settings);
 
-  const hasSms = Boolean(fast2SmsKey) && smsEnabled && !smsAutoPaused;
-  const whatsappProvider = settings.whatsapp_provider || (env.WHATSAPP_INSTANCE_ID === "self_hosted" ? "self_hosted" : env.WHATSAPP_INSTANCE_ID ? "ultramsg" : "self_hosted");
-  const hasWhatsApp = (
-    (whatsappProvider === "self_hosted" && waGatewayUrl) ||
-    (whatsappProvider === "ultramsg" && waInstanceId && waToken)
-  ) && whatsappEnabled && !whatsappAutoPaused;
-
-  // 0. Ensure WhatsApp Gateway is awake before we start sending reminders
-  if (hasWhatsApp && whatsappProvider === "self_hosted") {
-    try {
-      const pingUrl = `${waGatewayUrl}/status`;
-      await fetch(pingUrl).catch(() => {});
-    } catch (_) {}
+  if (!hasSms) {
+    logWarn("sms_reminders_skipped", { smsEnabled, smsAutoPaused });
+    return 0;
   }
 
   let sent = 0;
 
-  // 1. Process 3-Day Alerts (SMS + WhatsApp)
-  const threeDayMembers = await membersDueInThreeDays(env);
-  if (threeDayMembers.length > 0 && (hasSms || hasWhatsApp)) {
-    for (const member of threeDayMembers) {
-      if (isMemberPlanLessThanOneMonth(member)) {
-        continue;
-      }
-      try {
-        let sentSMS = false;
-        let sentWA = false;
-        const messageText = createReminderText(member);
-
-        if (hasSms) {
-          try {
-            await sendSms(env, member.phone, messageText);
-            sentSMS = true;
-          } catch (error) {
-            logError("sms_3day_reminder_failed", error, { memberId: member.id });
-          }
-        }
-
-        if (hasWhatsApp) {
-          try {
-            await sendWhatsApp(env, member.phone, messageText);
-            sentWA = true;
-          } catch (error) {
-            logError("whatsapp_3day_reminder_failed", error, { memberId: member.id });
-          }
-        }
-
-        if (sentSMS || sentWA) {
-          await markReminderSent(env, member.id);
-          sent += 1;
-        }
-      } catch (error) {
-        logError("reminder_3day_general_failed", error, { memberId: member.id });
-      }
+  // 1. Process 3-Day Alerts via SMS (1-3 day window catches missed cron days)
+  const threeDayMembers = await membersNeedingReminder(env);
+  for (const member of threeDayMembers) {
+    if (isMemberPlanLessThanOneMonth(member)) {
+      continue;
+    }
+    try {
+      await sendSms(env, member.phone, createReminderText(member));
+      await markReminderSent(env, member.id);
+      sent += 1;
+    } catch (error) {
+      logError("sms_3day_reminder_failed", error, { memberId: member.id });
     }
   }
 
-  // 2. Process Due Day Alerts (WhatsApp ONLY)
-  if (hasWhatsApp) {
-    const todayMembers = await membersDueToday(env);
-    for (const member of todayMembers) {
-      if (isMemberPlanLessThanOneMonth(member)) {
-        continue;
-      }
-      try {
-        const messageText = createDueDayReminderText(member);
-        await sendWhatsApp(env, member.phone, messageText);
-        sent += 1;
-      } catch (error) {
-        logError("whatsapp_dueday_reminder_failed", error, { memberId: member.id });
-      }
+  // 2. Process Due Day Alerts via SMS
+  const todayMembers = await membersDueToday(env);
+  for (const member of todayMembers) {
+    if (isMemberPlanLessThanOneMonth(member)) {
+      continue;
+    }
+    try {
+      await sendSms(env, member.phone, createDueDayReminderText(member));
+      sent += 1;
+    } catch (error) {
+      logError("sms_dueday_reminder_failed", error, { memberId: member.id });
     }
   }
 
-  if (!hasSms && !hasWhatsApp) {
-    logWarn("notifications_not_configured", { threeDayMembers: threeDayMembers.length });
+  // 3. Process Win-Back Alerts via SMS (expired 15+ days ago, once each)
+  const winbackMembers = await membersNeedingWinback(env);
+  for (const member of winbackMembers) {
+    if (isMemberPlanLessThanOneMonth(member)) {
+      continue;
+    }
+    try {
+      await sendSms(env, member.phone, createWinbackText(member));
+      await markWinbackSent(env, member.id);
+      sent += 1;
+    } catch (error) {
+      logError("sms_winback_failed", error, { memberId: member.id });
+    }
   }
 
   return sent;
 }
 
-async function membersDueInThreeDays(env) {
-  const targetDate = isoDateInTimeZone(addDays(new Date(), 3));
+export function reminderWindowParams(fromDate = new Date()) {
   const params = new URLSearchParams({
     select: "*",
-    membership_due: `eq.${targetDate}`,
     sms_sent_3days: "eq.false",
     status: "eq.Active",
   });
-  const rows = await supabaseJson(env, `/members?${params.toString()}`);
+  params.set("membership_due", `gte.${isoDateInTimeZone(addDays(fromDate, 1))}`);
+  params.append("membership_due", `lte.${isoDateInTimeZone(addDays(fromDate, 3))}`);
+  return params;
+}
+
+export function dueTodayParams(fromDate = new Date()) {
+  return new URLSearchParams({
+    select: "*",
+    membership_due: `eq.${isoDateInTimeZone(fromDate)}`,
+    status: "in.(Active,Expired)",
+  });
+}
+
+export function winbackParams(fromDate = new Date()) {
+  return new URLSearchParams({
+    select: "*",
+    membership_due: `lt.${isoDateInTimeZone(addDays(fromDate, -15))}`,
+    status: "eq.Expired",
+    sms_sent_winback: "eq.false",
+  });
+}
+
+export function createWinbackText(member) {
+  return `Hi ${member.name}, your Fitness World plan ended on ${formatDisplayDateIST(member.membershipDue)}. We miss you at the gym - renew today and restart training. - Fitness World`;
+}
+
+async function membersNeedingReminder(env) {
+  const rows = await supabaseJson(env, `/members?${reminderWindowParams().toString()}`);
   return rows.map(mapMember);
 }
 
 async function membersDueToday(env) {
-  const today = isoDateInTimeZone();
-  const params = new URLSearchParams({
-    select: "*",
-    membership_due: `eq.${today}`,
-    status: "eq.Active",
-  });
-  const rows = await supabaseJson(env, `/members?${params.toString()}`);
+  const rows = await supabaseJson(env, `/members?${dueTodayParams().toString()}`);
   return rows.map(mapMember);
 }
 
-function createDueDayReminderText(member) {
-  return `Hi ${member.name}, your Fitness World membership expires today (${member.membershipDue}). Please renew to continue. - Fitness World`;
+async function membersNeedingWinback(env) {
+  const rows = await supabaseJson(env, `/members?${winbackParams().toString()}`);
+  return rows.map(mapMember);
+}
+
+async function markWinbackSent(env, memberId) {
+  await supabaseJson(env, `/members?id=eq.${encodeURIComponent(memberId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ sms_sent_winback: true }),
+  });
+}
+
+export function createDueDayReminderText(member) {
+  const when = formatDisplayDateIST(member.membershipDue);
+  if (member.status === "Expired") {
+    return `Hi ${member.name}, your Fitness World plan ended on ${when}. Please renew to restart training. - Fitness World`;
+  }
+  return `Hi ${member.name}, your Fitness World membership expires today (${when}). Please renew to continue. - Fitness World`;
 }
 
 async function markReminderSent(env, memberId) {
@@ -1282,87 +1272,95 @@ async function markReminderSent(env, memberId) {
   });
 }
 
-async function keepSupabaseAlive(env, wait = false) {
-  // Ping Supabase
+async function keepSupabaseAlive(env) {
   try {
     await supabaseJson(env, "/members?select=id&limit=1");
   } catch (err) {
     logWarn("keep_supabase_alive_failed", { error: err instanceof Error ? err.message : String(err) });
   }
-
-  // Ping WhatsApp Gateway asynchronously so we do not block any API requests unless wait is true
-  try {
-    const settings = await getSystemSettings(env);
-    const waGatewayUrl = resolveWaGatewayUrl(settings, env);
-    if (waGatewayUrl) {
-      const pingUrl = `${waGatewayUrl}/status`;
-      const promise = fetch(pingUrl).catch(err => {
-        logWarn("keep_whatsapp_gateway_alive_fetch_failed", { error: err.message });
-      });
-      if (wait) {
-        await promise;
-      }
-    }
-  } catch (err) {
-    logWarn("keep_whatsapp_gateway_alive_failed", { error: err instanceof Error ? err.message : String(err) });
-  }
 }
 
-async function sendTwilioSms(accountSid, authToken, fromNumber, targetPhone, message) {
-  let formattedPhone = targetPhone.replace(/\D/g, "");
-  if (!formattedPhone.startsWith("+")) {
-    if (formattedPhone.length === 10) {
-      formattedPhone = "+91" + formattedPhone;
-    } else {
-      formattedPhone = "+" + formattedPhone;
+async function smsStatus(env) {
+  const settings = await getSystemSettings(env);
+  const smsEnabled = settings.sms_enabled !== "false";
+  const smsgateConfigured = Boolean(
+    (settings.smsgate_username || env.SMSGATE_USERNAME) && (settings.smsgate_password || env.SMSGATE_PASSWORD),
+  );
+  return {
+    smsEnabled,
+    smsConfigured: smsgateConfigured && smsEnabled,
+    smsgateConfigured: smsgateConfigured && smsEnabled,
+    settings: {
+      sms_enabled: settings.sms_enabled ?? "true",
+      smsgate_username: settings.smsgate_username ?? (env.SMSGATE_USERNAME ?? ""),
+      smsgate_password: settings.smsgate_password ?? (env.SMSGATE_PASSWORD ?? ""),
+      smsgate_device_id: settings.smsgate_device_id ?? (env.SMSGATE_DEVICE_ID ?? ""),
+      smsgate_sim_number: settings.smsgate_sim_number ?? (env.SMSGATE_SIM_NUMBER ?? ""),
+      sms_auto_reminder_paused: settings.sms_auto_reminder_paused ?? "false",
+    },
+  };
+}
+
+export function validateSmsSettingsInput(body) {
+  if (!body || typeof body !== "object") {
+    throw new ApiError(400, "INVALID_INPUT", "Settings are required");
+  }
+  const out = {};
+  if (body.sms_enabled !== undefined) {
+    out.sms_enabled = assertFlag(body.sms_enabled, "sms_enabled");
+  }
+  for (const key of ["smsgate_username", "smsgate_password", "smsgate_device_id"]) {
+    if (body[key] !== undefined) {
+      const value = String(body[key]).trim();
+      if (value.length > 200) {
+        throw new ApiError(400, "INVALID_INPUT", `${key} is too long`);
+      }
+      out[key] = value;
     }
   }
+  if (body.smsgate_sim_number !== undefined) {
+    const value = String(body.smsgate_sim_number).trim();
+    if (value && !/^\d{1,2}$/.test(value)) {
+      throw new ApiError(400, "INVALID_INPUT", "SIM number must be digits");
+    }
+    out.smsgate_sim_number = value;
+  }
+  if (body.sms_auto_reminder_paused !== undefined) {
+    out.sms_auto_reminder_paused = assertFlag(body.sms_auto_reminder_paused, "sms_auto_reminder_paused");
+  }
+  return out;
+}
 
-  const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
-  const formData = new URLSearchParams();
-  formData.append("From", fromNumber);
-  formData.append("To", formattedPhone);
-  formData.append("Body", message);
+function assertFlag(value, label) {
+  const text = String(value);
+  if (text !== "true" && text !== "false") {
+    throw new ApiError(400, "INVALID_INPUT", `${label} must be true or false`);
+  }
+  return text;
+}
 
-  const authHeader = "Basic " + btoa(`${accountSid}:${authToken}`);
-
-  const response = await fetch(twilioUrl, {
-    method: "POST",
-    headers: {
-      "Authorization": authHeader,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: formData.toString(),
-  });
-
-  const payload = await safeJson(response);
-  if (!response.ok) {
-    const errorMsg = payload?.message || `Twilio request failed (Status: ${response.status})`;
-    throw new Error(errorMsg);
+export function resolveSmsProviders(env, settings) {
+  if (settings.sms_enabled === "false") {
+    throw new ApiError(503, "SMS_DISABLED", "SMS sending is disabled in system settings");
   }
 
-  return payload.sid ?? "sent";
+  const smsgate = {
+    username: settings.smsgate_username || env.SMSGATE_USERNAME,
+    password: settings.smsgate_password || env.SMSGATE_PASSWORD,
+    deviceId: settings.smsgate_device_id || env.SMSGATE_DEVICE_ID,
+    simNumber: settings.smsgate_sim_number || env.SMSGATE_SIM_NUMBER,
+  };
+
+  if (!smsgate.username || !smsgate.password) {
+    throw new ApiError(503, "SMS_NOT_CONFIGURED", "SMSGate is not configured. Add the gym phone's SMSGate cloud username and password in the developer console.");
+  }
+
+  return { smsgate };
 }
 
 async function sendSms(env, phone, message) {
   const settings = await getSystemSettings(env);
-  if (settings.sms_enabled === "false") {
-    logInfo("sms_disabled_skipping", { phone });
-    return "skipped_disabled";
-  }
-
-  const smsProvider = settings.sms_provider || "fast2sms";
-  const fast2SmsKey = settings.fast2sms_api_key || env.FAST2SMS_API_KEY;
-  const twilioSid = settings.twilio_account_sid || env.TWILIO_ACCOUNT_SID;
-  const twilioToken = settings.twilio_auth_token || env.TWILIO_AUTH_TOKEN;
-  const twilioFrom = settings.twilio_from_number || env.TWILIO_FROM_NUMBER;
-
-  const hasFast2Sms = Boolean(fast2SmsKey);
-  const hasTwilio = Boolean(twilioSid && twilioToken && twilioFrom);
-
-  if (!hasFast2Sms && !hasTwilio) {
-    throw new ApiError(503, "SMS_NOT_CONFIGURED", "Neither Fast2SMS nor Twilio is configured.");
-  }
+  const plan = resolveSmsProviders(env, settings);
 
   const cleanPhone = phone.replace(/\D/g, "");
   const targetPhone = cleanPhone.slice(-10);
@@ -1370,214 +1368,81 @@ async function sendSms(env, phone, message) {
     throw new ApiError(400, "INVALID_PHONE", `Phone number must be a valid 10-digit number (got: ${phone})`);
   }
 
-  // Helper to send via Fast2SMS
-  const tryFast2Sms = async () => {
-    if (!hasFast2Sms) throw new Error("Fast2SMS not configured");
-    const response = await fetch("https://www.fast2sms.com/dev/bulkV2", {
-      method: "POST",
-      headers: {
-        authorization: fast2SmsKey,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        route: "q",
-        message,
-        language: "english",
-        numbers: targetPhone,
-        flash: 0,
-      }),
-    });
-
-    const payload = await safeJson(response);
-    if (!response.ok || payload?.return !== true) {
-      const errorMsg = typeof payload?.message === "string"
-        ? payload.message
-        : Array.isArray(payload?.message)
-          ? payload.message.join(", ")
-          : `Fast2SMS request failed (Status: ${response.status})`;
-      throw new Error(errorMsg);
-    }
-    return payload.request_id ?? "sent";
-  };
-
-  // Helper to send via Twilio
-  const tryTwilio = async () => {
-    if (!hasTwilio) throw new Error("Twilio not configured");
-    return await sendTwilioSms(twilioSid, twilioToken, twilioFrom, targetPhone, message);
-  };
-
-  if (smsProvider === "twilio") {
-    try {
-      return await tryTwilio();
-    } catch (err) {
-      logError("twilio_sms_failed_trying_fast2sms", err);
-      if (hasFast2Sms) {
-        return await tryFast2Sms();
-      }
-      throw new ApiError(502, "SMS_SEND_FAILED", `Twilio failed: ${err.message}`);
-    }
-  } else {
-    // Default to Fast2SMS with Twilio as fallback
-    try {
-      return await tryFast2Sms();
-    } catch (err) {
-      logError("fast2sms_failed_trying_twilio", err);
-      if (hasTwilio) {
-        try {
-          return await tryTwilio();
-        } catch (twilioErr) {
-          throw new ApiError(502, "SMS_SEND_FAILED", `Fast2SMS failed (${err.message}) and Twilio fallback also failed (${twilioErr.message})`);
-        }
-      }
-      throw new ApiError(502, "SMS_SEND_FAILED", `Fast2SMS failed: ${err.message}`);
-    }
+  try {
+    return await sendViaSMSGate(plan.smsgate, targetPhone, message);
+  } catch (err) {
+    logError("sms_send_failed", err, { provider: "smsgate" });
+    throw new ApiError(502, "SMS_SEND_FAILED", err instanceof Error ? err.message : "SMS send failed");
   }
 }
 
-async function sendWhatsApp(env, phone, message) {
-  const settings = await getSystemSettings(env);
-  if (settings.whatsapp_enabled === "false") {
-    logInfo("whatsapp_disabled_skipping", { phone });
-    return "skipped_disabled";
+export function buildSMSGatePayload(account, targetPhone, message) {
+  const payload = {
+    textMessage: { text: message },
+    phoneNumbers: [`+91${targetPhone}`],
+    ttl: 86400,
+    priority: 100,
+  };
+  if (account.deviceId) {
+    payload.deviceId = account.deviceId;
   }
-  
-  const provider = settings.whatsapp_provider || (env.WHATSAPP_INSTANCE_ID === "self_hosted" ? "self_hosted" : env.WHATSAPP_INSTANCE_ID ? "ultramsg" : "none");
-  if (provider === "none") {
-    throw new ApiError(503, "WHATSAPP_NOT_CONFIGURED", "WhatsApp alerts are disabled or not configured");
+  const simNumber = Number(account.simNumber);
+  if (Number.isInteger(simNumber) && simNumber > 0) {
+    payload.simNumber = simNumber;
   }
-  
-  const formattedPhone = phone.startsWith("91") && phone.length === 12 ? phone : `91${phone}`;
+  return payload;
+}
 
-  if (provider === "self_hosted") {
-    const waGatewayUrl = resolveWaGatewayUrl(settings, env);
-    const waGatewayToken = resolveWaGatewayToken(settings, env);
-    
-    if (!waGatewayUrl || !waGatewayToken) {
-      throw new ApiError(503, "WHATSAPP_NOT_CONFIGURED", "Self-hosted WhatsApp URL or Token is not configured");
-    }
+async function sendViaSMSGate(account, targetPhone, message) {
+  const auth = btoa(`${account.username}:${account.password}`);
+  const payload = buildSMSGatePayload(account, targetPhone, message);
 
-    // Wake up gateway if asleep (Render free tier sleeps after 15 min)
-    try {
-      await fetch(`${waGatewayUrl}/status`).catch(() => {});
-    } catch (_) {}
-
-    // Retry up to 3 times with increasing delays to let the gateway cold-start
-    const MAX_RETRIES = 3;
-    const sendBody = JSON.stringify({ to: formattedPhone, message: message });
-    let lastError = "Self-hosted WhatsApp request failed";
-
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-      try {
-        const response = await fetch(`${waGatewayUrl}/send`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${waGatewayToken}`
-          },
-          body: sendBody
-        });
-
-        const payload = await safeJson(response);
-        if (response.ok && payload?.success === true) {
-          return payload.messageId ?? "sent";
-        }
-
-        lastError = payload?.error ?? `Gateway returned HTTP ${response.status}`;
-        logInfo("whatsapp_send_attempt_failed", { attempt, status: response.status, error: lastError });
-      } catch (fetchErr) {
-        lastError = fetchErr?.message ?? "Network error reaching WhatsApp gateway";
-        logInfo("whatsapp_send_attempt_error", { attempt, error: lastError });
-      }
-
-      // Wait before retrying (3s, then 6s) — gives Render time to cold-start
-      if (attempt < MAX_RETRIES) {
-        await new Promise(r => setTimeout(r, attempt * 3000));
-      }
-    }
-
-    throw new ApiError(502, "WHATSAPP_SEND_FAILED", lastError);
-  }
-
-  // Fallback to UltraMsg
-  const waInstanceId = settings.whatsapp_instance_id || env.WHATSAPP_INSTANCE_ID;
-  const waToken = settings.whatsapp_token || env.WHATSAPP_TOKEN;
-  if (!waInstanceId || !waToken) {
-    throw new ApiError(503, "WHATSAPP_NOT_CONFIGURED", "WhatsApp instance ID or token is not configured");
-  }
-
-  const params = new URLSearchParams({
-    token: waToken,
-    to: formattedPhone,
-    body: message,
-    priority: "10"
-  });
-
-  const response = await fetch(`https://api.ultramsg.com/${waInstanceId}/messages/chat`, {
+  const response = await fetch("https://api.sms-gate.app/3rdparty/v1/messages", {
     method: "POST",
     headers: {
-      "Content-Type": "application/x-www-form-urlencoded"
+      Authorization: `Basic ${auth}`,
+      "Content-Type": "application/json",
     },
-    body: params.toString()
+    body: JSON.stringify(payload),
   });
 
-  const payload = await safeJson(response);
-  if (!response.ok || (payload?.sent !== "true" && payload?.sent !== true)) {
-    const errorMsg = payload?.error?.message ?? payload?.error ?? "WhatsApp request failed";
-    throw new ApiError(502, "WHATSAPP_SEND_FAILED", errorMsg);
+  const data = await safeJson(response);
+  if (!response.ok) {
+    throw new Error(data?.message ?? `SMSGate request failed (Status: ${response.status})`);
   }
-
-  return payload.id ?? "sent";
+  return data?.id ?? "sent";
 }
 
-function createReminderText(member) {
-  return `Hi ${member.name}, your Fitness World membership expires in 3 days on ${member.membershipDue}. Please renew to continue. - Fitness World`;
+export function formatDisplayDateIST(isoDate) {
+  const parsed = new Date(`${isoDate}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) {
+    return isoDate;
+  }
+  return new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", day: "2-digit", month: "short", year: "numeric" }).format(parsed);
 }
 
-async function sendReceiptWhatsApp(env, member, receipt) {
+export function daysUntilIST(isoDate, fromDate = new Date()) {
+  const start = Date.parse(`${isoDateInTimeZone(fromDate)}T00:00:00Z`);
+  const end = Date.parse(`${isoDate}T00:00:00Z`);
+  if (Number.isNaN(start) || Number.isNaN(end)) {
+    return 0;
+  }
+  return Math.round((end - start) / ONE_DAY_MS);
+}
+
+export function createReminderText(member, fromDate = new Date()) {
+  const days = daysUntilIST(member.membershipDue, fromDate);
+  const when = days <= 1 ? "tomorrow" : `in ${days} days`;
+  return `Hi ${member.name}, your Fitness World membership expires ${when} (${formatDisplayDateIST(member.membershipDue)}). Please renew to continue. - Fitness World`;
+}
+
+async function sendReceiptSms(env, member, receipt) {
   try {
-    const amount = receipt.amount;
-    const receiptNo = receipt.receiptNo;
-    const dateObj = new Date(receipt.paidOn);
-    const dateFormatted = !isNaN(dateObj.getTime())
-      ? dateObj.toLocaleDateString("en-IN", {
-          day: "2-digit",
-          month: "2-digit",
-          year: "numeric"
-        })
-      : receipt.paidOn;
-
-    const method = receipt.method;
-    const note = receipt.note || "";
-    const balance = member.balanceAmount ?? 0;
-    
-    const dueObj = member.membershipDue ? new Date(member.membershipDue) : null;
-    const dueFormatted = dueObj && !isNaN(dueObj.getTime())
-      ? dueObj.toLocaleDateString("en-IN", {
-          day: "2-digit",
-          month: "2-digit",
-          year: "numeric"
-        })
-      : member.membershipDue || "N/A";
-
-    const message = `💪 *FITNESS WORLD* 🧾
-Unisex Gym & Fitness Center
-
-Dear *${member.name}*,
-Thank you for your payment! Here is your payment receipt:
-
-🧾 *Receipt No:* ${receiptNo}
-📅 *Date:* ${dateFormatted}
-💰 *Amount Paid:* ₹${amount}
-💳 *Method:* ${method}
-📅 *Membership Due:* ${dueFormatted}
-💵 *Pending Balance:* ₹${balance}
-${note ? `📝 *Note:* ${note}\n` : ""}
-Thank you for training with us! Keep up the hard work! 💪🔥`;
-
-    await sendWhatsApp(env, member.phone, message);
-    logInfo("receipt_whatsapp_sent", { memberId: member.id, receiptNo });
+    const message = `Fitness World: received Rs.${receipt.amount} from ${member.name} (Receipt ${receipt.receiptNo}). Balance: Rs.${member.balanceAmount ?? 0}. Thank you!`;
+    await sendSms(env, member.phone, message);
+    logInfo("receipt_sms_sent", { memberId: member.id, receiptNo: receipt.receiptNo });
   } catch (error) {
-    logError("receipt_whatsapp_send_failed", error, { memberId: member?.id, receiptNo: receipt?.receiptNo });
+    logError("receipt_sms_failed", error, { memberId: member?.id, receiptNo: receipt?.receiptNo });
   }
 }
 
@@ -1630,8 +1495,13 @@ async function supabaseRaw(env, path, init = {}, retries = 2) {
   headers.set("Authorization", `Bearer ${serviceKey}`);
   if (init.body) headers.set("Content-Type", "application/json");
 
+  // POST creates are not idempotent: a retried insert can write a duplicate row
+  // (member, receipt, renewal history) or fail confusingly after succeeding.
+  const method = String(init.method ?? "GET").toUpperCase();
+  const maxAttempts = method === "POST" ? 0 : retries;
+
   let lastError;
-  for (let attempt = 0; attempt <= retries; attempt++) {
+  for (let attempt = 0; attempt <= maxAttempts; attempt++) {
     try {
       const response = await fetch(`${supabaseUrl(env)}/rest/v1${path}`, {
         ...init,
@@ -1639,7 +1509,7 @@ async function supabaseRaw(env, path, init = {}, retries = 2) {
       });
 
       // Retry on 5xx server errors (Supabase waking up) but not on 4xx client errors
-      if (!response.ok && response.status >= 500 && attempt < retries) {
+      if (!response.ok && response.status >= 500 && attempt < maxAttempts) {
         const delay = (attempt + 1) * 1000; // 1s, 2s
         await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
@@ -1655,7 +1525,7 @@ async function supabaseRaw(env, path, init = {}, retries = 2) {
       // Network errors (connection refused, timeout) — retry if attempts remain
       if (err instanceof ApiError) throw err; // Don't retry known API errors
       lastError = err;
-      if (attempt < retries) {
+      if (attempt < maxAttempts) {
         const delay = (attempt + 1) * 1000;
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
@@ -1758,8 +1628,22 @@ function validateRenewInput(body) {
     membershipDue: requiredDate(body.membershipDue ?? body.membership_due, "membership due"),
     feesAmount: requiredNumber(body.feesAmount ?? body.fees_amount, "fees amount", 0),
     planType: body.planType ?? body.plan_type ? assertEnum(body.planType ?? body.plan_type, PLAN_TYPES, "plan type") : undefined,
+    paymentStatus: body.paymentStatus ?? body.payment_status ? assertEnum(body.paymentStatus ?? body.payment_status, PAYMENT_STATUSES, "payment status") : "Pending",
+    partialPaidAmount: body.partialPaidAmount !== undefined || body.partial_paid_amount !== undefined
+      ? requiredNumber(body.partialPaidAmount ?? body.partial_paid_amount, "partial paid amount", 0)
+      : 0,
   };
   assertDueDateOrder(input.membershipStart, input.membershipDue);
+
+  if (input.paymentStatus === "Partially Paid") {
+    if (input.partialPaidAmount < 1) {
+      throw new ApiError(400, "INVALID_PARTIAL_AMOUNT", "Partial amount must be at least 1");
+    }
+    if (input.partialPaidAmount >= input.feesAmount) {
+      throw new ApiError(400, "INVALID_PARTIAL_AMOUNT", "Partial amount must be less than total fees (use 'Paid' if fully paid)");
+    }
+  }
+
   return input;
 }
 
@@ -1823,20 +1707,10 @@ function validateSmsInput(body) {
   if (message.length < 12 || message.length > 320) {
     throw new ApiError(400, "INVALID_SMS_MESSAGE", "SMS message must be 12 to 320 characters");
   }
-  const type = body.type;
-  if (type && type !== "sms" && type !== "whatsapp" && type !== "both") {
-    throw new ApiError(400, "INVALID_MESSAGE_TYPE", "Type must be sms, whatsapp or both");
-  }
   return {
     memberId: assertUuid(body.memberId ?? body.member_id, "member id"),
     message,
-    type: type || "both",
-  };
-}
-
-function validateSmsMemberInput(body) {
-  return {
-    memberId: assertUuid(body.memberId ?? body.member_id, "member id"),
+    markReminder: body.markReminder === true,
   };
 }
 
@@ -2050,11 +1924,11 @@ function toDbColumn(column) {
   return /^[a-z_]+$/.test(safe) ? safe : "created_at";
 }
 
-function addDays(date, days) {
+export function addDays(date, days) {
   return new Date(date.getTime() + days * ONE_DAY_MS);
 }
 
-function isoDateInTimeZone(date = new Date()) {
+export function isoDateInTimeZone(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: TIME_ZONE,
     year: "numeric",
@@ -2076,7 +1950,9 @@ function jsonResponse(request, env, payload, status = 200) {
 }
 
 function errorResponse(request, env, error) {
-  const apiError = error instanceof ApiError ? error : new ApiError(500, "INTERNAL_ERROR", "Internal server error");
+  const apiError = error instanceof ApiError 
+    ? error 
+    : new ApiError(500, "INTERNAL_ERROR", error instanceof Error ? error.message : "Internal server error");
   if (!(error instanceof ApiError)) {
     logError("unhandled_request_error", error);
   }
@@ -2156,10 +2032,14 @@ function logError(event, error, details = {}) {
 
 async function getSystemSettings(env) {
   try {
-    const rows = await supabaseJson(env, "/whatsapp_sessions?key=eq.system_config_settings&select=value");
-    if (rows && rows[0] && rows[0].value) {
-      return typeof rows[0].value === 'string' ? JSON.parse(rows[0].value) : rows[0].value;
+    const rows = await supabaseJson(env, "/system_settings?select=key,value");
+    const settings = {};
+    for (const row of rows ?? []) {
+      if (row && typeof row.key === "string") {
+        settings[row.key] = row.value ?? "";
+      }
     }
+    return settings;
   } catch (err) {
     logError("get_system_settings_failed", err);
   }
@@ -2169,39 +2049,30 @@ async function getSystemSettings(env) {
 async function saveSystemSettings(env, settings) {
   const keys = [
     "sms_enabled",
-    "whatsapp_enabled",
-    "whatsapp_provider",
-    "whatsapp_gateway_url",
-    "whatsapp_gateway_token",
-    "whatsapp_instance_id",
-    "whatsapp_token",
-    "fast2sms_api_key",
+    "smsgate_username",
+    "smsgate_password",
+    "smsgate_device_id",
+    "smsgate_sim_number",
     "db_keep_alive_enabled",
     "sms_auto_reminder_paused",
-    "whatsapp_auto_reminder_paused",
-    "sms_provider",
-    "twilio_account_sid",
-    "twilio_auth_token",
-    "twilio_from_number",
   ];
 
-  const currentSettings = await getSystemSettings(env);
-  const updatedSettings = { ...currentSettings };
+  const rows = [];
   for (const key of keys) {
     if (settings[key] !== undefined) {
-      updatedSettings[key] = String(settings[key]);
+      rows.push({ key, value: String(settings[key]) });
     }
   }
+  if (rows.length === 0) {
+    return;
+  }
 
-  await supabaseJson(env, "/whatsapp_sessions", {
+  await supabaseJson(env, "/system_settings", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "Prefer": "resolution=merge-duplicates"
     },
-    body: JSON.stringify({
-      key: "system_config_settings",
-      value: updatedSettings
-    })
+    body: JSON.stringify(rows)
   });
 }

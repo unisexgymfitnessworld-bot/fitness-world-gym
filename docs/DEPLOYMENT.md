@@ -17,22 +17,34 @@ Update these placeholders once the production environments are provisioned:
 ## 2. Step-by-Step Deployment Steps
 
 ### Phase A: Supabase Setup (Database & Auth)
+
 1. **Create Project**: Sign in to [supabase.com](https://supabase.com) and create a new project.
-2. **Execute Migrations**: Run the SQL script from `supabase/migrations/202606070001_create_fitness_world_schema.sql` in the Supabase SQL Editor to configure tables, indexes, triggers, and RLS policies.
-   Then run `supabase/migrations/202606080001_add_member_owner_isolation.sql` so each trainer workspace has isolated member ownership.
+2. **Execute Migrations**: Run every file in `supabase/migrations/` **in name order** in the Supabase SQL Editor:
+   - `202606070001_create_fitness_world_schema.sql` (members, attendance, triggers, RLS)
+   - `202606080001_add_member_owner_isolation.sql` (creator audit column)
+   - `202606090002_add_member_fields.sql` (training type, partial payments)
+   - `202606100001_add_payment_receipts.sql` (receipt ledger)
+   - `202606100002_add_renewal_history.sql` (renewal ledger)
+   - `202606100003_add_whatsapp_sessions.sql` (legacy table, safe to keep)
+   - `202606120002_add_deleted_status.sql` (soft-delete status)
+   - `202606130001_create_system_settings.sql` (runtime settings store)
+   - `202606140001_add_winback_flag.sql` (one-time win-back flag for long-expired members)
+   - `202606150001_remove_fast2sms_settings.sql` (drops obsolete Fast2SMS/provider settings)
 3. **Copy Secrets**: Retrieve the following from **Settings** → **API**:
    - `SUPABASE_URL`
    - `SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY` (Keep secure)
 
 ### Phase A.1: Supabase Auth Security Settings
+
 1. In Supabase Dashboard, open **Authentication** → **Sign In / Providers**.
 2. Disable public signups unless the client explicitly needs self-registration.
 3. Open **Authentication** → **Security** or **Password protection**.
 4. Enable leaked password protection.
 5. Keep trainer account passwords unique and rotate them before handover.
 
-### Phase B: Backend Setup on Cloudflare Workers (No Card REST API)
+### Phase B: Backend Setup on Cloudflare Workers
+
 1. **Login to Cloudflare**:
    ```bash
    cd workers/gymos-api
@@ -42,9 +54,10 @@ Update these placeholders once the production environments are provisioned:
    ```bash
    npx wrangler secret put SUPABASE_ANON_KEY
    npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
-   npx wrangler secret put FAST2SMS_API_KEY
    npx wrangler secret put FRONTEND_URLS
    npx wrangler secret put TRAINER_EMAILS
+   npx wrangler secret put SMSGATE_USERNAME
+   npx wrangler secret put SMSGATE_PASSWORD
    ```
    Set `FRONTEND_URLS` to a comma-separated list, for example:
    ```text
@@ -54,24 +67,18 @@ Update these placeholders once the production environments are provisioned:
    ```text
    vedasaradhiv@gmail.com,fitnessworld@gmail.com,trainer@fitnessworld.in
    ```
-   Accounts created later from the developer console are authorized by Supabase `app_metadata.role`. Developer accounts see the system health console only; trainer accounts see isolated gym member data.
+   Accounts created later from the developer console are authorized by Supabase `app_metadata.role`. Developer accounts see the system health console only; trainer accounts share the gym workspace.
 3. **Deploy Worker**:
    ```bash
    npx wrangler deploy
    ```
 4. **Verify Health**:
    Open `https://fitness-world-gymos-api.your-subdomain.workers.dev/health`.
-5. **Seed Trainer Accounts**:
-   Run the seed script locally after adding the Supabase secrets and strong trainer passwords:
-   ```bash
-   SUPABASE_URL="your-url" \
-   SUPABASE_SERVICE_ROLE_KEY="your-key" \
-   TRAINER_SEED_ACCOUNTS="vedasaradhiv@gmail.com:strong-password-here:developer,fitnessworld@gmail.com:strong-password-here:trainer,trainer@fitnessworld.in:strong-password-here:trainer" \
-   npm run seed:trainers
-   ```
-   Use unique passwords with at least 12 characters. Do not use shared demo passwords in production. The developer account is labeled with developer metadata, while the other two are trainer accounts.
+5. **Create the first developer account**:
+   Create it in Supabase Dashboard → **Authentication** → **Users** → **Add user** (auto-confirm email), then set its `app_metadata` to `{"role": "developer"}` via the user editor. Sign in with it and create the remaining trainer accounts from the developer console → Account Manager. Use unique passwords with at least 12 characters.
 
 ### Phase C: Frontend Setup on Vercel
+
 1. **Connect Repo**: Import the repository on [vercel.com](https://vercel.com).
 2. **Configure App settings**:
    - Framework Preset: `Vite`
@@ -88,13 +95,43 @@ Update these placeholders once the production environments are provisioned:
 
 ---
 
-## 3. Keep-Alive Configuration
+## 3. SMS Setup (SMSGate only)
+
+Automated reminders are SMS-only. The gym Android phone sends them for free through
+[SMSGate](https://github.com/capcom6/android-sms-gateway). There is no fallback
+provider: the phone must stay on and online, or SMS sending fails and the error
+is logged.
+
+The 09:00 IST job runs three sweeps: members due in 1–3 days (each reminded once,
+with catch-up if a day was missed), members due today (including plans the
+midnight job just expired for non-payment), and a one-time win-back for members
+expired more than 15 days ago. Note: on the first run after deploying, every
+long-expired member gets one win-back SMS each, so expect a burst that day.
+
+1. **Install the SMSGate app** on the gym phone from the project's Releases page and grant SMS permissions.
+2. **Register a cloud account** inside the app (needed so the Worker API can reach the phone over the internet).
+3. **Enter the credentials** in GymOS → Settings (gear icon) → SMS Setup tab (trainers and developers both can do this): username, password, optional device ID / SIM number. Save, then use the built-in test box to send yourself a test message.
+4. **Keep the phone on, online, and plugged in** at the gym desk on a recharge that includes SMS (most unlimited packs include 100 SMS/day). Turn off battery optimization for the SMS Gateway app so Android does not kill it.
+
+---
+
+## 4. Upgrading From the WhatsApp Build
+
+- WhatsApp (Baileys gateway service, UltraMsg, Twilio) is removed. Messaging is SMS-only via SMSGate (gym phone).
+- Runtime settings moved from the `whatsapp_sessions` table to the `system_settings` table. After deploying, **re-enter SMS credentials once** in Settings → SMS Setup (open to trainers and developers), then send a test from the built-in test box.
+- The legacy `whatsapp_sessions` table can be left in place. Optional cleanup (Supabase SQL Editor): `drop table if exists public.whatsapp_sessions;`
+- Delete the old Render `gymos-whatsapp-gateway` service if it still exists.
+
+---
+
+## 5. Keep-Alive Configuration
 
 To prevent free tiers from pausing:
+
 1. **Cloudflare Worker Cron (Primary)**:
    - `30 18 * * *` updates expired members at 00:00 Asia/Kolkata.
    - `30 3 * * *` sends SMS reminders at 09:00 Asia/Kolkata.
-   - Both jobs touch Supabase every day, which helps prevent Supabase inactivity sleep.
+   - `*/10 * * * *` pings Supabase to prevent inactivity sleep.
 2. **UptimeRobot (Optional Worker Health Monitor)**:
    - Create a free account on [uptimerobot.com](https://uptimerobot.com).
    - Add a monitor → HTTP(s) → URL: `https://fitness-world-gymos-api.your-subdomain.workers.dev/health`.
@@ -102,16 +139,3 @@ To prevent free tiers from pausing:
 3. **GitHub Actions (Optional Supabase Backup Keep-Alive)**:
    - Save `SUPABASE_URL` and `SUPABASE_ANON_KEY` as repository secrets.
    - The workflow in `.github/workflows/keep-supabase-alive.yml` will trigger every 5 days to query the database and keep the instance warm.
-
----
-
-## 4. SMS Management & Fast2SMS Recharge
-
-The system uses **Fast2SMS** for automated dues alerts.
-- **Cost**: ~₹0.25 per SMS.
-- **Low Balance Indicator**: If the wallet balance falls to zero, automated alerts will fail. Check Cloudflare Worker logs for `FAST2SMS_FAILED` errors.
-- **Recharge Instructions**:
-  1. Login to the client account at [fast2sms.com](https://fast2sms.com).
-  2. Navigate to the **Wallet / Add Credits** section.
-  3. Load a minimum of ₹100 using UPI/Card.
-  4. Ensure the API key remains the same. If regenerated, update the `FAST2SMS_API_KEY` Worker secret and redeploy.

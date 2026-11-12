@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { compressImage } from "../../lib/imageCompression";
 import { useForm } from "react-hook-form";
 import { splitAmountForCouple } from "../../lib/analytics";
-import { calculateBmi, calculateDueDate, createPlanDueSummary, formatDisplayDate, getPlanDurationLabel, normalizePhone, todayISO } from "../../lib/utils";
+import { calculateBmi, calculateDueDate, createPlanDueSummary, formatCurrency, formatDisplayDate, getPlanDurationLabel, initials, normalizePhone, todayISO } from "../../lib/utils";
 import { memberInputSchema, type MemberInputValues } from "../../lib/validations";
 import { genderOptions, goalOptions, paymentOptions, planOptions, trainingTypeOptions, type Gender, type Goal, type Member, type MemberInput } from "../../types";
 import { Button } from "../ui/Button";
@@ -15,6 +15,7 @@ interface MemberSheetProps {
   member: Member | null;
   onClose: () => void;
   onSave: (input: MemberInput | MemberInput[], memberId?: string) => Promise<void>;
+  existingReceiptCount?: number;
 }
 
 interface CouplePartnerValues {
@@ -234,7 +235,7 @@ function Section({ title, children, delay = 0 }: { title: string; children: Reac
       transition={{ duration: 0.35, delay }}
     >
       <div className="flex items-center gap-3">
-        <span className="h-6 w-1 rounded-full bg-gradient-to-b from-brand-primary to-[#F0447D]" />
+        <span className="h-6 w-1 rounded-full bg-brand-primary" />
         <h3 className="text-[16px] font-bold text-text-primary lg:text-[17px]">{title}</h3>
       </div>
       {children}
@@ -242,7 +243,7 @@ function Section({ title, children, delay = 0 }: { title: string; children: Reac
   );
 }
 
-export function MemberSheet({ open, member, onClose, onSave }: MemberSheetProps) {
+export function MemberSheet({ open, member, onClose, onSave, existingReceiptCount = 0 }: MemberSheetProps) {
   const [showCloseWarning, setShowCloseWarning] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -359,13 +360,21 @@ export function MemberSheet({ open, member, onClose, onSave }: MemberSheetProps)
         return;
       }
 
-      await onSave([applyCouplePaymentSplit(parsed.data, 0), applyCouplePaymentSplit(parsedPartner.data, 1)]);
+      try {
+        await onSave([applyCouplePaymentSplit(parsed.data, 0), applyCouplePaymentSplit(parsedPartner.data, 1)]);
+      } catch {
+        return;
+      }
       reset(defaults(null));
       onClose();
       return;
     }
 
-    await onSave(parsed.data, member?.id);
+    try {
+      await onSave(parsed.data, member?.id);
+    } catch {
+      return;
+    }
     reset(defaults(member));
     onClose();
   }
@@ -415,7 +424,7 @@ export function MemberSheet({ open, member, onClose, onSave }: MemberSheetProps)
                   {watch("avatar") ? (
                     <img src={watch("avatar")} alt="Profile preview" className="h-full w-full object-cover" />
                   ) : (
-                    <span className="text-[20px] font-black text-text-muted">{watch("name") ? watch("name").slice(0, 2).toUpperCase() : "FW"}</span>
+                    <span className="text-[20px] font-black text-text-muted">{watch("name") ? initials(watch("name")) : "FW"}</span>
                   )}
                   <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 opacity-0 transition-opacity group-hover:opacity-100">
                     <span className="text-[12px] font-bold text-white uppercase">Upload</span>
@@ -642,6 +651,11 @@ export function MemberSheet({ open, member, onClose, onSave }: MemberSheetProps)
               ) : null}
 
               <Section title="Membership" delay={0.3}>
+                {member && existingReceiptCount > 0 ? (
+                  <p className="rounded-[var(--radius-card)] border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12px] font-bold leading-5 text-amber-800">
+                    This member has {existingReceiptCount} saved receipt{existingReceiptCount === 1 ? "" : "s"}. Changing fees or payment status here can desync the receipt ledger — prefer Record Payment on the profile for collections.
+                  </p>
+                ) : null}
                 {isNewCouple ? (
                   <p className="rounded-[var(--radius-card)] border border-sky-100 bg-sky-50/70 px-3 py-2.5 text-[12px] font-bold leading-5 text-sky-800">
                     Enter the couple's total fee here. GymOS splits the saved amounts between both members so the dashboard and PDF reports stay accurate.
@@ -685,7 +699,7 @@ export function MemberSheet({ open, member, onClose, onSave }: MemberSheetProps)
                       <div className="rounded-[var(--radius-card)] bg-amber-50/50 border border-amber-200 p-3 lg:p-4">
                         <p className="text-[12px] font-bold uppercase tracking-wider text-amber-700">Remaining Balance</p>
                         <p className="mt-1.5 text-[24px] font-black text-amber-900 lg:mt-2 lg:text-[26px]">
-                          ₹{watch("balanceAmount") || 0}
+                          {formatCurrency(Number(watch("balanceAmount")) || 0)}
                         </p>
                       </div>
                     </>
