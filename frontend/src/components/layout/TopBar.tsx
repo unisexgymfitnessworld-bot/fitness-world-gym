@@ -133,6 +133,7 @@ export function TopBar({ trainer, onLogout, onSettings, onReports, members = [],
   }, []);
 
   return (
+    <>
     <motion.header
       className="gradient-border-top sticky top-0 z-30 border-b border-border-default bg-brand-white/92 text-text-primary shadow-[0_8px_30px_rgba(26,26,46,0.08)] backdrop-blur-xl print:hidden"
       initial={{ y: -80, opacity: 0 }}
@@ -311,6 +312,8 @@ export function TopBar({ trainer, onLogout, onSettings, onReports, members = [],
         </div>
       </div>
 
+    </motion.header>
+
       <ConfirmModal
         open={confirmLogoutOpen}
         title="Log out?"
@@ -402,6 +405,6 @@ export function TopBar({ trainer, onLogout, onSettings, onReports, members = [],
           </div>
         </div>
       )}
-    </motion.header>
+    </>
   );
 }

@@ -139,9 +139,10 @@ Update these placeholders once the production environments are provisioned:
 
 ## 3. Messaging Setup (SMS + WhatsApp + Email)
 
-Reminders go out over WhatsApp and SMS with smart routing (WhatsApp first,
-then SMS): if a channel is down or unconfigured, the next ready one is tried
-automatically, and nobody is ever double-messaged. Email is bills-only
+Reminders go out by SMS with smart routing: a tool that is switched off or
+unconfigured is skipped outright, the next ready one is tried automatically,
+and nobody is ever double-messaged. WhatsApp stays off unless the gym
+explicitly enables it AND connects the OpenWA server. Email is bills-only
 (receipts, statements, PDF attachments) via the Apps Script mailer. SMS
 sends for free through the gym Android phone's SIM via
 [SMSGate](https://github.com/capcom6/android-sms-gateway) — install
@@ -194,7 +195,7 @@ GymOS talks to [OpenWA](https://github.com/rmyndharis/OpenWA) (free, MIT, Docker
 
 ### 3.4 Smart Channel Order
 
-Automatic reminders try channels in the saved order (default WhatsApp → SMS; Email is bills-only and never used for reminders) and stop at the first one that accepts the message — a member is never double-messaged. A channel is skipped for the rest of a run only when it fails auth/config for one member. Manual sends pick Auto (same order) or one fixed channel in the message box. Every attempt is logged per channel in Recent Messages with retry.
+Automatic reminders try channels in the saved order (default SMS → Email; Email is bills-only and never used for reminders) and stop at the first one that accepts the message — a member is never double-messaged. Tools that are switched off or lack credentials are skipped without an attempt; a channel is skipped for the rest of a run only when it fails auth/config for one member. Manual sends pick Auto (same order) or SMS in the message box. Every attempt is logged per channel in Recent Messages with retry. Trainers can flip each tool's on/off switch in Settings → Notifications → Message Tools; connection details stay developer-only.
 
 ---
 

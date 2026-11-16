@@ -4,9 +4,9 @@ import type { Member, PaymentReceipt, RenewalHistoryEntry } from "../types";
 export type AnalyticsRange = "1m" | "2m" | "all";
 
 /**
- * Days after expiry during which unpaid dues still count as collectible.
- * Older balances belong to members who never came back, not to this month's
- * collection target.
+ * Days after expiry during which an ended plan still lands in the trainer's
+ * follow-up queue. Older balances stay in every money total (nothing owed is
+ * ever hidden) — they just stop shouting for a call every single day.
  */
 export const COLLECTION_GRACE_DAYS = 30;
 
@@ -111,10 +111,28 @@ export function getCollectiblePendingAmount(
   return getMemberPendingAmount(member);
 }
 
+/**
+ * Every rupee the member still owes. Unlike the grace-window collectible
+ * figure, this never hides old dues: desk headlines, table chips, and book
+ * reports all use it. Removed members are excluded — their rows are out of
+ * the gym's books.
+ */
+export function getTotalPendingAmount(
+  member: Pick<Member, "status" | "feesAmount" | "paymentStatus" | "partialPaidAmount" | "balanceAmount" | "arrearsAmount">,
+): number {
+  if (member.status === "Deleted") {
+    return 0;
+  }
+  return getMemberPendingAmount(member);
+}
+
 export function getAgedPendingAmount(
   member: Pick<Member, "status" | "membershipDue" | "feesAmount" | "paymentStatus" | "partialPaidAmount" | "balanceAmount" | "arrearsAmount">,
   now = new Date(),
 ): number {
+  if (member.status === "Deleted") {
+    return 0;
+  }
   return Math.max(0, getMemberPendingAmount(member) - getCollectiblePendingAmount(member, now));
 }
 
@@ -196,8 +214,8 @@ export function summarizePeriod(
     members
       .filter((member) => renewedIds.has(member.id) && dateInScope(member.joinDate, period))
       .reduce((total, member) => total + safeAmount(firstRenewalByMember.get(member.id)?.oldAmount), 0);
-  const pendingAmount = members.reduce((total, member) => total + getCollectiblePendingAmount(member, now), 0);
-  const pendingMembers = members.filter((member) => getCollectiblePendingAmount(member, now) > 0).length;
+  const pendingAmount = members.reduce((total, member) => total + getTotalPendingAmount(member), 0);
+  const pendingMembers = members.filter((member) => getTotalPendingAmount(member) > 0).length;
   const agedAmount = members.reduce((total, member) => total + getAgedPendingAmount(member, now), 0);
   const agedMembers = members.filter((member) => getAgedPendingAmount(member, now) > 0).length;
 

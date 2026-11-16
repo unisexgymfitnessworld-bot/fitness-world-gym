@@ -10,10 +10,10 @@ import { Modal } from "../ui/Modal";
 
 const reminderTemplates: MessageTemplateId[] = ["renewal-due", "expired-plan"];
 
-// Email is bills-only (receipts/statements): reminders go by SMS/WhatsApp.
+// Email is bills-only (receipts/statements); WhatsApp is switched off gym-wide:
+// reminders go by SMS.
 const channelOptions: { value: NotifyChannelChoice; label: string }[] = [
-  { value: "auto", label: "Auto (best channel first)" },
-  { value: "whatsapp", label: "WhatsApp" },
+  { value: "auto", label: "Auto (SMS)" },
   { value: "sms", label: "SMS" },
 ];
 
@@ -86,7 +86,7 @@ export function SmsModal({ member, open, initialTemplate, onClose, onSend }: Sms
       return;
     }
     if (channel === "email") {
-      setError("Email is only used for bills. Reminders go by SMS or WhatsApp.");
+      setError("Email is only used for bills. Reminders go by SMS.");
       return;
     }
     setSending(true);
@@ -135,7 +135,7 @@ export function SmsModal({ member, open, initialTemplate, onClose, onSend }: Sms
               ))}
             </select>
             <span className="text-[12px] font-semibold leading-5 text-text-muted">
-              Auto tries WhatsApp first, then SMS.
+              Auto uses SMS. WhatsApp is switched off.
             </span>
           </label>
 
@@ -210,7 +210,7 @@ export function SmsModal({ member, open, initialTemplate, onClose, onSend }: Sms
           ) : (
             <Button onClick={() => void submit()} disabled={sending} className="w-full text-[15px] font-bold">
               <Send size={16} />
-              {sending ? "Sending..." : channel === "auto" ? "Send" : `Send via ${channel === "whatsapp" ? "WhatsApp" : channel === "email" ? "Email" : "SMS"}`}
+              {sending ? "Sending..." : channel === "auto" ? "Send" : `Send via ${channel === "email" ? "Email" : "SMS"}`}
             </Button>
           )}
         </div>

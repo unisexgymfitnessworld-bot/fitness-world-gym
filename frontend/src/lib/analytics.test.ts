@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { getMembersForAnalyticsRange, summarizePeriod } from "./analytics";
+import { getAgedPendingAmount, getCollectiblePendingAmount, getMembersForAnalyticsRange, getTotalPendingAmount, summarizePeriod } from "./analytics";
 import type { Member, PaymentReceipt, RenewalHistoryEntry } from "../types";
 
 const PERIOD = { start: new Date(2026, 10, 1), end: new Date(2026, 10, 30) };
@@ -115,5 +115,44 @@ describe("money-touch membership", () => {
     assert.equal(summary.collectedAmount, 800);
     assert.equal(summary.expectedAmount, 1800);
     assert.ok(summary.collectionRate <= 100);
+  });
+});
+
+describe("pending dues honesty", () => {
+  const now = new Date(2026, 10, 16);
+  // Expired 60+ days ago with Rs.1000 unpaid: past the queue's grace window.
+  const longExpired = () =>
+    member({
+      id: "m-aged",
+      status: "Expired",
+      membershipStart: "2026-08-01",
+      membershipDue: "2026-09-01",
+      feesAmount: 1000,
+      paymentStatus: "Pending",
+      partialPaidAmount: 0,
+      balanceAmount: 1000,
+    });
+
+  it("counts long-expired dues in totals while the queue grace window excludes them", () => {
+    const debtor = longExpired();
+    assert.equal(getTotalPendingAmount(debtor), 1000);
+    assert.equal(getCollectiblePendingAmount(debtor, now), 0);
+    assert.equal(getAgedPendingAmount(debtor, now), 1000);
+  });
+
+  it("never reports zero to-collect while dues are owed", () => {
+    const summary = summarizePeriod("All Time", [longExpired()], now, { receipts: [], renewals: [], period: null });
+    assert.equal(summary.pendingAmount, 1000);
+    assert.equal(summary.pendingMembers, 1);
+    assert.equal(summary.agedAmount, 1000);
+  });
+
+  it("excludes removed members from every dues figure", () => {
+    const removed = member({ id: "m-gone", status: "Deleted", paymentStatus: "Pending", feesAmount: 1000, balanceAmount: 1000 });
+    assert.equal(getTotalPendingAmount(removed), 0);
+    assert.equal(getAgedPendingAmount(removed, now), 0);
+    const summary = summarizePeriod("All Time", [removed], now, { receipts: [], renewals: [], period: null });
+    assert.equal(summary.pendingAmount, 0);
+    assert.equal(summary.agedAmount, 0);
   });
 });

@@ -36,23 +36,24 @@ const EMPTY_FORM: FormState = {
   smsgate_device_id: "",
   smsgate_sim_number: "",
   sms_auto_reminder_paused: false,
-  wa_enabled: true,
+  wa_enabled: false,
   wa_base_url: "",
   wa_api_key: "",
   wa_session_id: "",
   email_enabled: true,
   appscript_url: "",
   appscript_secret: "",
-  notify_channel_order: "whatsapp,sms,email",
+  notify_channel_order: "sms,email",
 };
 
-const DEFAULT_CHANNEL_ORDER = "whatsapp,sms,email";
+const DEFAULT_CHANNEL_ORDER = "sms,email";
 
 const CHANNEL_ORDER_PRESETS: { value: string; label: string }[] = [
-  { value: DEFAULT_CHANNEL_ORDER, label: "WhatsApp → SMS → Email (recommended)" },
+  { value: DEFAULT_CHANNEL_ORDER, label: "SMS → Email (recommended)" },
+  { value: "sms", label: "SMS only" },
+  { value: "whatsapp,sms,email", label: "WhatsApp → SMS → Email" },
   { value: "sms,whatsapp,email", label: "SMS → WhatsApp → Email" },
   { value: "whatsapp,sms", label: "WhatsApp → SMS (no email)" },
-  { value: "sms", label: "SMS only" },
   { value: "whatsapp", label: "WhatsApp only" },
 ];
 
@@ -83,7 +84,7 @@ export function SmsSettingsPanel({ variant = "light", onSaved }: SmsSettingsPane
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formMessage, setFormMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
-  const [testChannel, setTestChannel] = useState<NotifyChannel>("whatsapp");
+  const [testChannel, setTestChannel] = useState<NotifyChannel>("sms");
   const [testTo, setTestTo] = useState("");
   const [testMessage, setTestMessage] = useState("Test message from Fitness World GymOS.");
   const [testing, setTesting] = useState(false);
@@ -133,14 +134,14 @@ export function SmsSettingsPanel({ variant = "light", onSaved }: SmsSettingsPane
           smsgate_device_id: status.settings.smsgate_device_id,
           smsgate_sim_number: status.settings.smsgate_sim_number,
           sms_auto_reminder_paused: status.settings.sms_auto_reminder_paused === "true",
-          wa_enabled: status.settings.wa_enabled !== "false",
+          wa_enabled: status.settings.wa_enabled === "true",
           wa_base_url: status.settings.wa_base_url ?? "",
           wa_api_key: "",
           wa_session_id: status.settings.wa_session_id ?? "",
           email_enabled: status.settings.email_enabled !== "false",
           appscript_url: status.settings.appscript_url ?? "",
           appscript_secret: "",
-          notify_channel_order: status.settings.notify_channel_order || "whatsapp,sms,email",
+          notify_channel_order: status.settings.notify_channel_order || "sms,email",
         });
         setPasswordConfigured(status.settings.smsgate_password_configured === true);
         setWaKeyConfigured(status.settings.wa_api_key_configured === true);
@@ -169,11 +170,19 @@ export function SmsSettingsPanel({ variant = "light", onSaved }: SmsSettingsPane
     setSaving(true);
     setFormMessage(null);
     try {
-      // Trainers save the reminder pause only; connection fields stay
+      // Trainers save the tool on/off switches + the reminder pause.
+      // Connection fields (usernames, keys, URLs, channel order) stay
       // developer-only on the server too.
       if (!isDeveloper) {
-        await api.saveSmsSettings({ sms_auto_reminder_paused: String(form.sms_auto_reminder_paused) });
-        setFormMessage({ tone: "success", text: "Reminder setting saved." });
+        await api.saveSmsSettings({
+          sms_enabled: String(form.sms_enabled),
+          wa_enabled: String(form.wa_enabled),
+          email_enabled: String(form.email_enabled),
+          sms_auto_reminder_paused: String(form.sms_auto_reminder_paused),
+        });
+        const status = await api.smsStatus();
+        setReady({ sms: status.smsConfigured, whatsapp: status.waConfigured === true, email: status.emailConfigured === true });
+        setFormMessage({ tone: "success", text: "Message tools saved." });
         onSaved?.();
         return;
       }
@@ -316,6 +325,12 @@ export function SmsSettingsPanel({ variant = "light", onSaved }: SmsSettingsPane
       ].filter((entry): entry is string => entry !== null)
     : [];
   const anyReady = readyChannels.length > 0;
+  // SMS-only UI while WhatsApp is off: WA order presets return when it is on.
+  const visiblePresets = form.wa_enabled
+    ? CHANNEL_ORDER_PRESETS
+    : CHANNEL_ORDER_PRESETS.filter((preset) => !preset.value.includes("whatsapp"));
+  const savedPresetVisible = visiblePresets.some((preset) => preset.value === form.notify_channel_order);
+  const savedPresetLabel = CHANNEL_ORDER_PRESETS.find((preset) => preset.value === form.notify_channel_order)?.label ?? form.notify_channel_order;
 
   return (
     <div className="grid gap-5">
@@ -438,6 +453,42 @@ export function SmsSettingsPanel({ variant = "light", onSaved }: SmsSettingsPane
         )}
       </div>
 
+      <div className={cn("grid gap-1 rounded-xl border p-4", dark ? "border-white/10 bg-white/5" : "border-border-default/60 bg-surface-raised/80")}>
+        <p className={cn("text-[14px] font-black", dark ? "text-white" : "text-text-primary")}>Message Tools</p>
+        <p className={cn("-mt-0.5 pb-1 text-[12px] font-semibold", dark ? "text-white/60" : "text-text-secondary")}>
+          Switch a tool off to stop it everywhere — reminders, bills, and tests. Connection details stay developer-only.
+        </p>
+        <ToolSwitch
+          dark={dark}
+          label="SMS (gym SIM)"
+          hint="Texts from the gym phone — reminders and bills"
+          status={toolStatus(form.sms_enabled, ready?.sms)}
+          checked={form.sms_enabled}
+          onChange={(next) => setForm((current) => ({ ...current, sms_enabled: next }))}
+        />
+        <ToolSwitch
+          dark={dark}
+          label="WhatsApp"
+          hint="Needs the OpenWA server — a developer connects it"
+          status={toolStatus(form.wa_enabled, ready?.whatsapp)}
+          checked={form.wa_enabled}
+          onChange={(next) => {
+            setForm((current) => ({ ...current, wa_enabled: next }));
+            if (!next) {
+              setTestChannel((current) => (current === "whatsapp" ? "sms" : current));
+            }
+          }}
+        />
+        <ToolSwitch
+          dark={dark}
+          label="Email (bills only)"
+          hint="Bill copies — needs each member's email address"
+          status={toolStatus(form.email_enabled, ready?.email)}
+          checked={form.email_enabled}
+          onChange={(next) => setForm((current) => ({ ...current, email_enabled: next }))}
+        />
+      </div>
+
       {isDeveloper ? (
         <>
       <ol className={cn("grid gap-2 rounded-xl border p-4", dark ? "border-white/10 bg-white/5" : "border-border-default/60 bg-surface-raised/80")}>
@@ -455,16 +506,6 @@ export function SmsSettingsPanel({ variant = "light", onSaved }: SmsSettingsPane
           </li>
         ))}
       </ol>
-
-      <label className={cn("flex cursor-pointer items-center justify-between gap-3 text-[14px] font-bold", dark ? "text-white" : "text-text-primary")}>
-        SMS Sending Enabled
-        <input
-          type="checkbox"
-          className="h-5 w-5 shrink-0 cursor-pointer accent-pink-600"
-          checked={form.sms_enabled}
-          onChange={(event) => setForm((current) => ({ ...current, sms_enabled: event.target.checked }))}
-        />
-      </label>
 
       <div className="grid gap-4">
         <Input
@@ -509,15 +550,9 @@ export function SmsSettingsPanel({ variant = "light", onSaved }: SmsSettingsPane
       </div>
 
       <div className={cn("grid gap-3 rounded-xl border p-4", dark ? "border-white/10 bg-white/5" : "border-border-default/60 bg-surface-raised/80")}>
-        <label className={cn("flex cursor-pointer items-center justify-between gap-3 text-[14px] font-black", dark ? "text-white" : "text-text-primary")}>
+        <p className={cn("text-[14px] font-black", dark ? "text-white" : "text-text-primary")}>
           WhatsApp (OpenWA server)
-          <input
-            type="checkbox"
-            className="h-5 w-5 shrink-0 cursor-pointer accent-pink-600"
-            checked={form.wa_enabled}
-            onChange={(event) => setForm((current) => ({ ...current, wa_enabled: event.target.checked }))}
-          />
-        </label>
+        </p>
         <p className={cn("-mt-1 text-[12px] font-semibold", dark ? "text-white/60" : "text-text-secondary")}>
           Self-hosted gateway. Needs the OpenWA server running with a paired session (see deployment guide).
         </p>
@@ -554,15 +589,9 @@ export function SmsSettingsPanel({ variant = "light", onSaved }: SmsSettingsPane
       </div>
 
       <div className={cn("grid gap-3 rounded-xl border p-4", dark ? "border-white/10 bg-white/5" : "border-border-default/60 bg-surface-raised/80")}>
-        <label className={cn("flex cursor-pointer items-center justify-between gap-3 text-[14px] font-black", dark ? "text-white" : "text-text-primary")}>
+        <p className={cn("text-[14px] font-black", dark ? "text-white" : "text-text-primary")}>
           Email (Apps Script mailer)
-          <input
-            type="checkbox"
-            className="h-5 w-5 shrink-0 cursor-pointer accent-pink-600"
-            checked={form.email_enabled}
-            onChange={(event) => setForm((current) => ({ ...current, email_enabled: event.target.checked }))}
-          />
-        </label>
+        </p>
         <p className={cn("-mt-1 text-[12px] font-semibold", dark ? "text-white/60" : "text-text-secondary")}>
           Deploy appsscript/Code.gs in your Google account, then paste its web-app URL and secret. Only members with an email address receive emails.
         </p>
@@ -596,14 +625,19 @@ export function SmsSettingsPanel({ variant = "light", onSaved }: SmsSettingsPane
             "w-full rounded-[var(--radius-card)] px-4 py-3 text-[14px] font-semibold outline-none",
             dark ? "border border-white/10 bg-white/5 text-white" : "studio-input text-text-primary",
           )}
-          value={CHANNEL_ORDER_PRESETS.some((preset) => preset.value === form.notify_channel_order) ? form.notify_channel_order : DEFAULT_CHANNEL_ORDER}
+          value={form.notify_channel_order}
           onChange={(event) => setForm((current) => ({ ...current, notify_channel_order: event.target.value }))}
         >
-          {CHANNEL_ORDER_PRESETS.map((preset) => (
+          {visiblePresets.map((preset) => (
             <option key={preset.value} value={preset.value}>
               {preset.label}
             </option>
           ))}
+          {!savedPresetVisible && (
+            <option value={form.notify_channel_order}>
+              {savedPresetLabel}{form.notify_channel_order.includes("whatsapp") ? " — switch WhatsApp on to use" : " (current)"}
+            </option>
+          )}
         </select>
         <span className={cn("text-[12px] font-semibold", dark ? "text-white/60" : "text-text-secondary")}>
           First ready channel sends; the rest are automatic fallback.
@@ -661,7 +695,7 @@ export function SmsSettingsPanel({ variant = "light", onSaved }: SmsSettingsPane
               value={testChannel}
               onChange={(event) => setTestChannel(event.target.value as NotifyChannel)}
             >
-              <option value="whatsapp">WhatsApp</option>
+              {form.wa_enabled ? <option value="whatsapp">WhatsApp</option> : null}
               <option value="sms">SMS</option>
               <option value="email">Email</option>
             </select>
@@ -828,6 +862,39 @@ export function SmsSettingsPanel({ variant = "light", onSaved }: SmsSettingsPane
         </div>
       </div>
     </div>
+  );
+}
+
+function toolStatus(on: boolean, readyFlag: boolean | undefined): string {
+  if (!on) {
+    return "Off";
+  }
+  if (readyFlag === undefined) {
+    return "On";
+  }
+  return readyFlag ? "Ready" : "Not set up";
+}
+
+function ToolSwitch({ dark, label, hint, status, checked, onChange }: { dark: boolean; label: string; hint: string; status: string; checked: boolean; onChange: (next: boolean) => void }) {
+  return (
+    <label className={cn("flex min-h-12 cursor-pointer items-center justify-between gap-3 border-t px-1 py-2.5", dark ? "border-white/10" : "border-border-default/60")}>
+      <span className="min-w-0">
+        <span className={cn("block text-[14px] font-black", dark ? "text-white" : "text-text-primary")}>
+          {label}
+          <span className={cn("ml-2 rounded-full px-2 py-0.5 text-[11px] font-black uppercase tracking-wide", status === "Ready" ? (dark ? "bg-green-500/15 text-green-300" : "bg-green-100 text-status-active") : status === "Off" ? (dark ? "bg-white/10 text-white/60" : "bg-surface-raised text-text-muted") : (dark ? "bg-amber-500/15 text-amber-300" : "bg-amber-100 text-amber-700"))}>
+            {status}
+          </span>
+        </span>
+        <span className={cn("block text-[12px] font-semibold", dark ? "text-white/60" : "text-text-secondary")}>{hint}</span>
+      </span>
+      <input
+        type="checkbox"
+        aria-label={label}
+        className="h-5 w-5 shrink-0 cursor-pointer accent-pink-600"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+    </label>
   );
 }
 

@@ -14,7 +14,7 @@ import { useEffect, useMemo, useState } from "react";
 import { compareRegistrationNumbers, displayGoal, displayMemberStatus, displayPaymentStatus, formatDisplayDate, formatPhone, getDisplayStatus, getDueTone, getMemberActionDueDate, getMemberDueKind, initials, formatCurrency, todayISO } from "../../lib/utils";
 import { csvCell, downloadCsv } from "../../lib/escape";
 import { isApiConfigured } from "../../lib/api";
-import { getCollectiblePendingAmount } from "../../lib/analytics";
+import { getTotalPendingAmount } from "../../lib/analytics";
 import type { Member } from "../../types";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
@@ -236,15 +236,15 @@ export function MemberTable({
           const status = info.getValue();
           const member = info.row.original;
           const tone = status === "Paid" ? "paid" : status === "Partially Paid" ? "due" : "pending";
-          const collectible = getCollectiblePendingAmount(member);
+          const duesOwed = getTotalPendingAmount(member);
           return (
             <div className="flex flex-col gap-1.5 items-start justify-center">
               <Badge tone={tone}>
                 {displayPaymentStatus(status)}
               </Badge>
-              {collectible > 0 && (
+              {duesOwed > 0 && (
                 <span className="text-[11px] font-black text-status-due leading-none pl-1">
-                  Get: {formatCurrency(collectible)}
+                  Get: {formatCurrency(duesOwed)}
                 </span>
               )}
             </div>
@@ -524,9 +524,9 @@ export function MemberTable({
                     <Badge tone={member.paymentStatus === "Paid" ? "paid" : member.paymentStatus === "Partially Paid" ? "due" : "pending"}>
                       {displayPaymentStatus(member.paymentStatus)}
                     </Badge>
-                    {getCollectiblePendingAmount(member) > 0 && (
+                    {getTotalPendingAmount(member) > 0 && (
                       <span className="text-[10px] font-bold text-status-due">
-                        Get: {formatCurrency(getCollectiblePendingAmount(member))}
+                        Get: {formatCurrency(getTotalPendingAmount(member))}
                       </span>
                     )}
                   </div>

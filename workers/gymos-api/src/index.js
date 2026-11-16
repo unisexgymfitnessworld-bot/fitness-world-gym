@@ -24,7 +24,7 @@ const OPENWA_HEALTH_TIMEOUT_MS = 8_000;
 const APPSCRIPT_SEND_TIMEOUT_MS = 20_000;
 const APPSCRIPT_HEALTH_TIMEOUT_MS = 8_000;
 const NOTIFY_CHANNELS = new Set(["whatsapp", "sms", "email"]);
-const DEFAULT_CHANNEL_ORDER = ["whatsapp", "sms", "email"];
+const DEFAULT_CHANNEL_ORDER = ["sms", "email"];
 const SMS_BULK_PACING_MS = 400;
 const SMS_RETRY_SWEEP_MIN_INTERVAL_MS = 15 * 60 * 1000;
 const SMS_RETRY_SWEEP_BATCH = 50;
@@ -262,8 +262,8 @@ async function handleRequest(request, env) {
   // switches and the reminder pause, nothing that connects an account.
   const DEVELOPER_SETTING_KEYS = new Set([
     "smsgate_username", "smsgate_password", "smsgate_device_id", "smsgate_sim_number",
-    "wa_enabled", "wa_base_url", "wa_api_key", "wa_session_id",
-    "email_enabled", "appscript_url", "appscript_secret", "notify_channel_order",
+    "wa_base_url", "wa_api_key", "wa_session_id",
+    "appscript_url", "appscript_secret", "notify_channel_order",
   ]);
 
   if (path === "/sms/settings" && method === "POST") {
@@ -2387,7 +2387,7 @@ async function runSmsReminder(env) {
   const smsEnabled = settings.sms_enabled !== "false";
   const smsAutoPaused = settings.sms_auto_reminder_paused === "true";
   const anyChannel = (smsEnabled && smsSendingConfigured(env, settings))
-    || (settings.wa_enabled !== "false" && waSendingConfigured(env, settings))
+    || (settings.wa_enabled === "true" && waSendingConfigured(env, settings))
     || (settings.email_enabled !== "false" && emailSendingConfigured(env, settings));
 
   const result = { sent: 0, failed: 0, queued: 0, skipped: 0, aborted: false, error: "" };
@@ -2663,7 +2663,7 @@ async function smsStatus(env, includeSecrets = true) {
   const smsgateConfigured = Boolean(
     (settings.smsgate_username || env.SMSGATE_USERNAME) && (settings.smsgate_password || env.SMSGATE_PASSWORD),
   );
-  const waEnabled = settings.wa_enabled !== "false";
+  const waEnabled = settings.wa_enabled === "true";
   const emailEnabled = settings.email_enabled !== "false";
   return {
     smsEnabled,
@@ -2681,7 +2681,7 @@ async function smsStatus(env, includeSecrets = true) {
       smsgate_device_id: secret(settings.smsgate_device_id ?? (env.SMSGATE_DEVICE_ID ?? "")),
       smsgate_sim_number: secret(settings.smsgate_sim_number ?? (env.SMSGATE_SIM_NUMBER ?? "")),
       sms_auto_reminder_paused: settings.sms_auto_reminder_paused ?? "false",
-      wa_enabled: settings.wa_enabled ?? "true",
+      wa_enabled: settings.wa_enabled ?? "false",
       wa_base_url: secret(settings.wa_base_url ?? (env.WA_BASE_URL ?? "")),
       wa_api_key: "",
       wa_api_key_configured: Boolean(settings.wa_api_key || env.WA_API_KEY),
@@ -2690,7 +2690,7 @@ async function smsStatus(env, includeSecrets = true) {
       appscript_url: secret(settings.appscript_url ?? (env.APPSCRIPT_URL ?? "")),
       appscript_secret: "",
       appscript_secret_configured: Boolean(settings.appscript_secret || env.APPSCRIPT_SECRET),
-      notify_channel_order: secret(settings.notify_channel_order ?? "whatsapp,sms,email"),
+      notify_channel_order: secret(settings.notify_channel_order ?? "sms,email"),
     },
   };
 }
@@ -2857,7 +2857,8 @@ async function resolveEmailProvider(env, settings) {
 }
 
 // Smart channel order for automatic sends: first deliverable channel wins,
-// the rest are fallback. Defaults to WhatsApp → SMS → Email.
+// the rest are fallback. Defaults to SMS → Email (WhatsApp joins only
+// when the gym explicitly switches it on AND connects the OpenWA server).
 export function notifyChannelOrder(settings) {
   const raw = String(settings?.notify_channel_order ?? "");
   const order = raw
@@ -2865,6 +2866,19 @@ export function notifyChannelOrder(settings) {
     .map((entry) => entry.trim().toLowerCase())
     .filter((entry, index, all) => NOTIFY_CHANNELS.has(entry) && all.indexOf(entry) === index);
   return order.length > 0 ? order : [...DEFAULT_CHANNEL_ORDER];
+}
+
+// A channel is live for automatic sends only when it is switched on AND has
+// credentials. WhatsApp additionally defaults to off: it joins only after the
+// gym explicitly enables it.
+export function isNotifyChannelLive(env, settings, entry) {
+  if (entry === "whatsapp") {
+    return settings.wa_enabled === "true" && waSendingConfigured(env, settings);
+  }
+  if (entry === "email") {
+    return settings.email_enabled !== "false" && emailSendingConfigured(env, settings);
+  }
+  return settings.sms_enabled !== "false" && smsSendingConfigured(env, settings);
 }
 
 const ENC_SECRET_PREFIX = "enc:v1:";
@@ -3801,12 +3815,17 @@ const EMAIL_OK_KINDS = new Set(["receipt", "statement", "test"]);
 async function dispatchSmart(env, { phone, email, message, kind, memberId = null, clientRequestId = null, onSentAction = null, channel = "auto", runState = null }) {
   const settings = await getSystemSettings(env);
   if (channel === "email" && !EMAIL_OK_KINDS.has(kind)) {
-    throw new ApiError(400, "EMAIL_BILLS_ONLY", "Email is only used for bills. Reminders go by SMS or WhatsApp.");
+    throw new ApiError(400, "EMAIL_BILLS_ONLY", "Email is only used for bills. Reminders go by SMS.");
   }
-  const order = (channel && channel !== "auto" && NOTIFY_CHANNELS.has(channel)
-    ? [channel]
-    : notifyChannelOrder(settings)
-  ).filter((entry) => EMAIL_OK_KINDS.has(kind) || entry !== "email");
+  const explicit = channel && channel !== "auto" && NOTIFY_CHANNELS.has(channel);
+  let order = (explicit ? [channel] : notifyChannelOrder(settings))
+    .filter((entry) => EMAIL_OK_KINDS.has(kind) || entry !== "email");
+  if (!explicit) {
+    // Auto never burns an attempt (or an outbox row) on a tool the gym
+    // switched off or never set up — it goes straight to the first live one.
+    // An explicit channel still attempts, so setup mistakes surface honestly.
+    order = order.filter((entry) => isNotifyChannelLive(env, settings, entry));
+  }
   const dead = runState && runState.dead instanceof Set ? runState.dead : null;
   let lastOutcome = null;
   let tried = false;
@@ -4102,7 +4121,7 @@ async function smsOutboxStats(env) {
 // Live messaging health: cloud reachability + credential check + gym phone
 // last-seen + outbox counts. Sends no SMS. Never throws — every section
 async function whatsappHealth(env, settings) {
-  const health = { enabled: settings.wa_enabled !== "false", configured: waSendingConfigured(env, settings), reachable: false, sessionStatus: "", error: "" };
+  const health = { enabled: settings.wa_enabled === "true", configured: waSendingConfigured(env, settings), reachable: false, sessionStatus: "", error: "" };
   if (!health.enabled) {
     health.error = "WhatsApp sending is disabled";
     return health;

@@ -16,7 +16,7 @@ import { ReportExportModal } from "../components/layout/ReportExportModal";
 import { useAuth } from "../hooks/useAuth";
 import { useMembers } from "../hooks/useMembers";
 import { endOfMonth, startOfMonth } from "date-fns";
-import { getCollectiblePendingAmount, getMembersForAnalyticsRange, summarizeAnalyticsRange, summarizeMemberAnalytics, summarizePeriod, type AnalyticsRange } from "../lib/analytics";
+import { getTotalPendingAmount, getMembersForAnalyticsRange, summarizeAnalyticsRange, summarizeMemberAnalytics, summarizePeriod, type AnalyticsRange } from "../lib/analytics";
 import { api, isApiConfigured } from "../lib/api";
 import { buildTodayFollowUps } from "../lib/followUps";
 import type { MessageTemplateId } from "../lib/messageTemplates";
@@ -98,7 +98,7 @@ export function Dashboard() {
       } else if (activeMetricFilter === "money_collected") {
         metricMatch = rangeMemberIds.has(member.id) && (member.paymentStatus === "Paid" || member.paymentStatus === "Partially Paid");
       } else if (activeMetricFilter === "pending_fees") {
-        metricMatch = getCollectiblePendingAmount(member) > 0;
+        metricMatch = getTotalPendingAmount(member) > 0;
       } else if (activeMetricFilter === "active_now") {
         metricMatch = member.status === "Active";
       } else if (activeMetricFilter === "inactive_now") {
@@ -617,7 +617,7 @@ export function Dashboard() {
               </button>
             </div>
           ) : null}
-          <nav aria-label="Desk sections" className="sticky top-16 z-20 flex gap-1.5 overflow-x-auto rounded-[var(--radius-card)] border border-border-default bg-brand-white/95 p-1.5 shadow-sm backdrop-blur print:hidden">
+          <nav aria-label="Desk sections" className="flex gap-1.5 overflow-x-auto rounded-[var(--radius-card)] border border-border-default bg-brand-white p-1.5 shadow-sm print:hidden">
             {[
               { label: "Overview", target: "desk-overview" },
               { label: "Follow-ups", target: "desk-followups" },
@@ -739,7 +739,9 @@ export function Dashboard() {
                   tone="pink"
                   subtext={
                     dashboardSummary.allTime.agedAmount > 0
-                      ? `${dashboardSummary.allTime.pendingMembers} members owe · ${formatCurrency(dashboardSummary.allTime.agedAmount)} very late`
+                      ? dashboardSummary.allTime.pendingMembers === 1
+                        ? `1 member owes · ${formatCurrency(dashboardSummary.allTime.agedAmount)} very late`
+                        : `${dashboardSummary.allTime.pendingMembers} members owe · ${formatCurrency(dashboardSummary.allTime.agedAmount)} very late`
                       : `${dashboardSummary.allTime.pendingMembers} member${dashboardSummary.allTime.pendingMembers === 1 ? "" : "s"} owe`
                   }
                   footer={collectionPulse}

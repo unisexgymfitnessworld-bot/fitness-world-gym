@@ -3,7 +3,7 @@ import { AlertTriangle, Calendar, CheckCircle2, Coins, Download, FileSpreadsheet
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
 import { isApiConfigured } from "../../lib/api";
-import { getMemberCollectedAmount, getCollectiblePendingAmount } from "../../lib/analytics";
+import { getMemberCollectedAmount, getTotalPendingAmount } from "../../lib/analytics";
 import { compareRegistrationNumbers, displayGoal, formatCurrency, formatDisplayDate, formatPhone, getDisplayStatus, getMemberActionDueDate, getMemberDueDatesForMonth, getMemberDueKind } from "../../lib/utils";
 import { csvCell, htmlEscape } from "../../lib/escape";
 import type { AttendanceEntry, Member, PaymentReceipt, RenewalHistoryEntry } from "../../types";
@@ -127,7 +127,7 @@ function memberMatchesReport(member: Member, reportType: ReportType, selectedMon
     case "all":
       return true;
     case "payments":
-      return getCollectiblePendingAmount(member) > 0;
+      return getTotalPendingAmount(member) > 0;
     case "expired":
       return getDisplayStatus(member) === "Expired";
     case "active":
@@ -194,14 +194,14 @@ export function ReportExportModal({ open, members, attendance = [], paymentRecei
       (summary, member) => ({
         expected: summary.expected + member.feesAmount,
         collected: summary.collected + getMemberCollectedAmount(member),
-        pending: summary.pending + getCollectiblePendingAmount(member),
+        pending: summary.pending + getTotalPendingAmount(member),
       }),
       { expected: 0, collected: 0, pending: 0 },
     );
   }, [filteredMembers]);
 
   const actionSummary = useMemo(() => {
-    const paymentFollowUps = filteredMembers.filter((member) => getCollectiblePendingAmount(member) > 0).length;
+    const paymentFollowUps = filteredMembers.filter((member) => getTotalPendingAmount(member) > 0).length;
     const renewalCalls = filteredMembers.filter((member) => member.status === "Expired" || getMemberDueDatesForMonth(member, selectedYear, selectedMonth).length > 0).length;
     return { paymentFollowUps, renewalCalls };
   }, [filteredMembers, selectedMonth, selectedYear]);
@@ -263,7 +263,7 @@ export function ReportExportModal({ open, members, attendance = [], paymentRecei
         getMemberDueKind(member),
         member.feesAmount,
         getMemberCollectedAmount(member),
-        getCollectiblePendingAmount(member),
+        getTotalPendingAmount(member),
         member.paymentStatus,
         member.status,
         member.trainingType || "General",
@@ -319,7 +319,7 @@ export function ReportExportModal({ open, members, attendance = [], paymentRecei
             </td>
             <td>${htmlEscape(member.paymentStatus)}</td>
             <td class="currency">${htmlEscape(formatCurrency(getMemberCollectedAmount(member)))}</td>
-            <td class="currency">${htmlEscape(formatCurrency(getCollectiblePendingAmount(member)))}</td>
+            <td class="currency">${htmlEscape(formatCurrency(getTotalPendingAmount(member)))}</td>
             <td>${htmlEscape(member.status)}</td>
           </tr>
         `,

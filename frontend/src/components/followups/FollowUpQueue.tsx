@@ -1,6 +1,6 @@
 import { AlertTriangle, CalendarClock, ChevronLeft, ChevronRight, Eye, IndianRupee, MessageCircle, UserRoundX } from "lucide-react";
 import { motion } from "motion/react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatDisplayDate, getMemberActionDueDate } from "../../lib/utils";
 import type { FollowUpItem, FollowUpKind } from "../../lib/followUps";
 import type { MessageTemplateId } from "../../lib/messageTemplates";
@@ -56,6 +56,13 @@ export function FollowUpQueue({ items, onView, onMessage }: FollowUpQueueProps) 
   function nudge(direction: 1 | -1): void {
     trackRef.current?.scrollBy({ left: direction * 330, behavior: "smooth" });
   }
+
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    setAtStart(track.scrollLeft <= 4);
+    setAtEnd(track.scrollLeft + track.clientWidth >= track.scrollWidth - 4);
+  }, [items.length]);
 
   return (
     <section className="studio-card grid gap-4 rounded-[var(--radius-panel)] p-3 sm:p-4 lg:grid-cols-[250px_1fr] lg:gap-5 lg:p-5">
