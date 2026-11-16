@@ -6,6 +6,7 @@ import {
   applyRenewal,
   cycleDue,
   receiptLines,
+  reverseAllocation,
   statusFromBuckets,
   totalBalance,
   type MoneyBuckets,
@@ -31,10 +32,11 @@ interface MembersState {
   deleteMember: (memberId: string) => Promise<void>;
   purgeMember: (memberId: string) => Promise<void>;
   wipeAll: () => Promise<void>;
-  renewMember: (memberId: string, start: string, due: string, feesAmount: number, planType?: PlanType, paymentStatus?: PaymentStatus, collectedAmount?: number, method?: PaymentMethod, clientRequestId?: string) => Promise<{ receiptSms?: "sent" | "queued" | "failed"; receiptEmail?: "sent" | "queued" | "failed" | "skipped"; duplicate?: boolean }>;
+  renewMember: (memberId: string, start: string, due: string, feesAmount: number, planType?: PlanType, paymentStatus?: PaymentStatus, collectedAmount?: number, method?: PaymentMethod, clientRequestId?: string) => Promise<{ receiptSms?: "sent" | "queued" | "failed" | "skipped"; receiptEmail?: "sent" | "queued" | "failed" | "skipped"; duplicate?: boolean }>;
   addVisit: (memberId: string, visitDate: string, weightKg?: number) => Promise<void>;
   deleteVisit: (attendanceId: string) => Promise<void>;
-  addPaymentReceipt: (memberId: string, input: PaymentReceiptInput) => Promise<{ receipt: PaymentReceipt; receiptSms: "sent" | "queued" | "failed" | "demo"; receiptEmail?: "sent" | "queued" | "failed" | "skipped" | "demo"; duplicate?: boolean }>;
+  addPaymentReceipt: (memberId: string, input: PaymentReceiptInput) => Promise<{ receipt: PaymentReceipt; receiptSms: "sent" | "queued" | "failed" | "skipped" | "demo"; receiptEmail?: "sent" | "queued" | "failed" | "skipped" | "demo"; duplicate?: boolean }>;
+  deletePaymentReceipt: (memberId: string, receiptId: string) => Promise<void>;
   resendReceipt: (memberId: string, receiptId: string, channel: BillChannel) => Promise<ResendResult>;
   sendStatement: (memberId: string, channel: BillChannel, dryRun?: boolean) => Promise<StatementResult>;
   markSmsSent: (memberId: string) => Promise<void>;
@@ -135,7 +137,6 @@ export function useMembers(): MembersState {
       total: members.filter((member) => member.status !== "Deleted").length,
       active: members.filter((member) => member.status === "Active").length,
       dueThisWeek,
-      pendingPayments: members.filter((member) => member.status !== "Deleted" && (member.paymentStatus === "Pending" || member.paymentStatus === "Partially Paid")).length,
     };
   }, [members]);
 
@@ -200,6 +201,19 @@ export function useMembers(): MembersState {
       return savedMember;
     }
 
+    // Mirror the server: paid may not drop below saved bills (the correction
+    // path is deleting the wrong bill, not editing around it).
+    const guardExisting = members.find((candidate) => candidate.id === memberId);
+    if (guardExisting) {
+      const guardPartial = Math.min(Math.max(input.partialPaidAmount, 0), Math.max(input.feesAmount, 0));
+      const receiptedCycle = paymentReceipts
+        .filter((entry) => entry.memberId === memberId && entry.createdAt.slice(0, 10) >= guardExisting.membershipStart)
+        .reduce((sum, entry) => sum + (entry.cycleApplied ?? entry.amount), 0);
+      if (guardPartial < receiptedCycle) {
+        throw new Error(`Rs.${receiptedCycle} is already in saved bills — delete the wrong bill first, then edit.`);
+      }
+    }
+
     let savedMember: Member;
     const editReceipts: PaymentReceipt[] = [];
     setMembers((current) => {
@@ -259,10 +273,10 @@ export function useMembers(): MembersState {
 
     setMembers((current) =>
       current.map((member) =>
-        member.id === memberId
+        member.id === memberId && member.status !== "Suspended"
           ? {
               ...member,
-              status: member.status === "Suspended" ? getMembershipStatus(member.membershipDue, member.paymentStatus) : "Suspended",
+              status: "Suspended",
               updatedAt: new Date().toISOString(),
             }
           : member,
@@ -278,6 +292,10 @@ export function useMembers(): MembersState {
       return;
     }
 
+    const existing = members.find((member) => member.id === memberId);
+    if (existing && existing.status !== "Deleted" && existing.status !== "Suspended") {
+      throw new Error("Only a deleted or stopped member can be restored");
+    }
     setMembers((current) =>
       current.map((member) =>
         member.id === memberId
@@ -334,7 +352,7 @@ export function useMembers(): MembersState {
     setRenewalHistory([]);
   }
 
-  async function renewMember(memberId: string, start: string, due: string, feesAmount: number, planType?: PlanType, paymentStatus: PaymentStatus = "Pending", collectedAmount: number = 0, method: PaymentMethod = "Cash", clientRequestId?: string): Promise<{ receiptSms?: "sent" | "queued" | "failed"; receiptEmail?: "sent" | "queued" | "failed" | "skipped"; duplicate?: boolean }> {
+  async function renewMember(memberId: string, start: string, due: string, feesAmount: number, planType?: PlanType, paymentStatus: PaymentStatus = "Pending", collectedAmount: number = 0, method: PaymentMethod = "Cash", clientRequestId?: string): Promise<{ receiptSms?: "sent" | "queued" | "failed" | "skipped"; receiptEmail?: "sent" | "queued" | "failed" | "skipped"; duplicate?: boolean }> {
     assertWritable();
     if (isApiConfigured) {
       const result = await api.renewMember(memberId, start, due, feesAmount, planType, paymentStatus, collectedAmount, method, clientRequestId ?? crypto.randomUUID());
@@ -355,6 +373,9 @@ export function useMembers(): MembersState {
     const oldMember = members.find((member) => member.id === memberId);
     if (!oldMember) {
       throw new Error("Member not found");
+    }
+    if (due < todayISO()) {
+      throw new Error("Plan end date is in the past — pick a future end date.");
     }
 
     // Bucket math shared with the backend (lib/money.ts): arrears stay
@@ -390,6 +411,7 @@ export function useMembers(): MembersState {
       amount: result.feesAmount,
       arrearsCarried: result.arrearsClosed,
       paymentStatus: result.paymentStatus,
+      collectedAmount: result.paymentStatus === "Pending" ? 0 : collected,
       renewedOn: todayISO(),
       createdAt: new Date().toISOString(),
     };
@@ -423,8 +445,9 @@ export function useMembers(): MembersState {
               arrearsAmount: result.arrearsAmount,
               advanceAmount: result.advanceAmount,
               totalCollected: result.totalCollected,
-              status: "Active",
+              status: getMembershipStatus(due, result.paymentStatus),
               smsSent3days: false,
+              smsSentWinback: false,
               updatedAt: new Date().toISOString(),
             }
           : member,
@@ -480,7 +503,7 @@ export function useMembers(): MembersState {
     setAttendance((current) => current.filter((entry) => entry.id !== attendanceId));
   }
 
-  async function addPaymentReceipt(memberId: string, input: PaymentReceiptInput): Promise<{ receipt: PaymentReceipt; receiptSms: "sent" | "queued" | "failed" | "demo"; receiptEmail?: "sent" | "queued" | "failed" | "skipped" | "demo"; duplicate?: boolean }> {
+  async function addPaymentReceipt(memberId: string, input: PaymentReceiptInput): Promise<{ receipt: PaymentReceipt; receiptSms: "sent" | "queued" | "failed" | "skipped" | "demo"; receiptEmail?: "sent" | "queued" | "failed" | "skipped" | "demo"; duplicate?: boolean }> {
     assertWritable();
     if (isApiConfigured) {
       const result = await api.createPaymentReceipt(memberId, input);
@@ -547,6 +570,49 @@ export function useMembers(): MembersState {
     return { receipt, receiptSms: "demo" as const };
   }
 
+  async function deletePaymentReceipt(memberId: string, receiptId: string): Promise<void> {
+    assertWritable();
+    if (isApiConfigured) {
+      const updated = await api.deleteReceipt(memberId, receiptId);
+      setPaymentReceipts((current) => current.filter((entry) => entry.id !== receiptId));
+      setMembers((current) => current.map((member) => (member.id === memberId ? updated : member)));
+      return;
+    }
+
+    const member = members.find((candidate) => candidate.id === memberId);
+    const receipt = paymentReceipts.find((entry) => entry.id === receiptId && entry.memberId === memberId);
+    if (!member || !receipt) {
+      throw new Error("Receipt not found");
+    }
+    const reversed = reverseAllocation(
+      bucketsOf(member),
+      { arrearsApplied: receipt.arrearsApplied, cycleApplied: receipt.cycleApplied, advanceApplied: receipt.advanceApplied, amount: receipt.amount },
+      member.totalCollected ?? 0,
+    );
+    setPaymentReceipts((current) => current.filter((entry) => entry.id !== receiptId));
+    setMembers((current) =>
+      current.map((candidate) =>
+        candidate.id === memberId
+          ? {
+              ...candidate,
+              partialPaidAmount: reversed.partialPaidAmount,
+              balanceAmount: reversed.balanceAmount,
+              arrearsAmount: reversed.arrearsAmount,
+              advanceAmount: reversed.advanceAmount,
+              totalCollected: reversed.totalCollected,
+              paymentStatus: statusFromBuckets({
+                feesAmount: candidate.feesAmount,
+                partialPaidAmount: reversed.partialPaidAmount,
+                arrearsAmount: reversed.arrearsAmount,
+                advanceAmount: reversed.advanceAmount,
+              }),
+              updatedAt: new Date().toISOString(),
+            }
+          : candidate,
+      ),
+    );
+  }
+
   async function resendReceipt(memberId: string, receiptId: string, channel: BillChannel): Promise<ResendResult> {
     if (isApiConfigured) {
       return api.resendReceipt(memberId, receiptId, channel);
@@ -608,6 +674,7 @@ export function useMembers(): MembersState {
     addVisit,
     deleteVisit,
     addPaymentReceipt,
+    deletePaymentReceipt,
     resendReceipt,
     sendStatement,
     markSmsSent,

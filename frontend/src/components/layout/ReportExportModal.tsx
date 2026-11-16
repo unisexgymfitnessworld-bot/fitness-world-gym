@@ -2,8 +2,9 @@ import { useMemo, useState } from "react";
 import { AlertTriangle, Calendar, CheckCircle2, Coins, Download, FileSpreadsheet, FileText, TrendingUp, Users, Trash2, type LucideIcon } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
+import { isApiConfigured } from "../../lib/api";
 import { getMemberCollectedAmount, getCollectiblePendingAmount } from "../../lib/analytics";
-import { compareRegistrationNumbers, displayGoal, formatCurrency, formatDisplayDate, formatPhone, getMemberActionDueDate, getMemberDueDatesForMonth, getMemberDueKind } from "../../lib/utils";
+import { compareRegistrationNumbers, displayGoal, formatCurrency, formatDisplayDate, formatPhone, getDisplayStatus, getMemberActionDueDate, getMemberDueDatesForMonth, getMemberDueKind } from "../../lib/utils";
 import { csvCell, htmlEscape } from "../../lib/escape";
 import type { AttendanceEntry, Member, PaymentReceipt, RenewalHistoryEntry } from "../../types";
 
@@ -92,15 +93,17 @@ function monthMatches(date: string, selectedMonth: number, selectedYear: number)
   return date.slice(0, 7) === prefix;
 }
 
+const demoPrefix = isApiConfigured ? "" : "DEMO_";
+
 function reportFileName(reportType: ReportType, selectedYear: number, selectedMonth: number, period: ReportPeriod, extension: "csv" | "pdf", trainingType: string): string {
   const formattedMonth = String(selectedMonth + 1).padStart(2, "0");
   const datePart = period === "month" ? `${selectedYear}_${formattedMonth}` : "all_time";
   const trainingPart = trainingType === "All" ? "" : `_${trainingType.toLowerCase()}`;
-  return `GymOS_Report_${reportType}${trainingPart}_${datePart}.${extension}`;
+  return `${demoPrefix}GymOS_Report_${reportType}${trainingPart}_${datePart}.${extension}`;
 }
 
 function backupFileName(): string {
-  return `GymOS_Backup_${new Date().toISOString().slice(0, 10)}.json`;
+  return `${demoPrefix}GymOS_Backup_${new Date().toISOString().slice(0, 10)}.json`;
 }
 
 function downloadBlob(content: string, type: string, fileName: string): void {
@@ -116,7 +119,7 @@ function downloadBlob(content: string, type: string, fileName: string): void {
   URL.revokeObjectURL(url);
 }
 
-function memberMatchesReport(member: Member, reportType: ReportType, selectedMonth: number, selectedYear: number): boolean {
+function memberMatchesReport(member: Member, reportType: ReportType, selectedMonth: number, selectedYear: number, renewalHistory: RenewalHistoryEntry[] = []): boolean {
   if (member.status === "Deleted" && reportType !== "deleted") {
     return false;
   }
@@ -126,13 +129,13 @@ function memberMatchesReport(member: Member, reportType: ReportType, selectedMon
     case "payments":
       return getCollectiblePendingAmount(member) > 0;
     case "expired":
-      return member.status === "Expired";
+      return getDisplayStatus(member) === "Expired";
     case "active":
-      return member.status === "Active";
+      return getDisplayStatus(member) === "Active";
     case "registrations":
       return monthMatches(member.joinDate, selectedMonth, selectedYear);
     case "renewals":
-      return member.joinDate !== member.membershipStart && monthMatches(member.membershipStart, selectedMonth, selectedYear);
+      return renewalHistory.some((entry) => entry.memberId === member.id && monthMatches(entry.newStartDate, selectedMonth, selectedYear));
     case "dues":
       return getMemberDueDatesForMonth(member, selectedYear, selectedMonth).length > 0;
     case "deleted":
@@ -146,6 +149,7 @@ export function ReportExportModal({ open, members, attendance = [], paymentRecei
 
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [exportError, setExportError] = useState<string | null>(null);
   const [selectedTrainingType, setSelectedTrainingType] = useState<"All" | "General" | "Personal" | "Couple">("All");
   const [reportType, setReportType] = useState<ReportType>("payments");
   const selectedDetails = typeDetails[reportType];
@@ -155,18 +159,18 @@ export function ReportExportModal({ open, members, attendance = [], paymentRecei
   const filteredMembers = useMemo(() => {
     return members
       .filter((member) => {
-        const matchesReport = memberMatchesReport(member, reportType, selectedMonth, selectedYear);
+        const matchesReport = memberMatchesReport(member, reportType, selectedMonth, selectedYear, renewalHistory);
         const matchesTraining = selectedTrainingType === "All" || member.trainingType === selectedTrainingType;
         return matchesReport && matchesTraining;
       })
       .sort((a, b) => compareRegistrationNumbers(a.regNo, b.regNo));
-  }, [members, reportType, selectedMonth, selectedYear, selectedTrainingType]);
+  }, [members, reportType, selectedMonth, selectedYear, selectedTrainingType, renewalHistory]);
 
   const reportCounts = useMemo(() => {
     return reportTypeOrder.reduce<Record<ReportType, number>>(
       (counts, type) => {
         counts[type] = members.filter((member) => {
-          const matchesReport = memberMatchesReport(member, type, selectedMonth, selectedYear);
+          const matchesReport = memberMatchesReport(member, type, selectedMonth, selectedYear, renewalHistory);
           const matchesTraining = selectedTrainingType === "All" || member.trainingType === selectedTrainingType;
           return matchesReport && matchesTraining;
         }).length;
@@ -183,7 +187,7 @@ export function ReportExportModal({ open, members, attendance = [], paymentRecei
         deleted: 0,
       },
     );
-  }, [members, selectedMonth, selectedYear, selectedTrainingType]);
+  }, [members, selectedMonth, selectedYear, selectedTrainingType, renewalHistory]);
 
   const reportSummary = useMemo(() => {
     return filteredMembers.reduce(
@@ -279,7 +283,7 @@ export function ReportExportModal({ open, members, attendance = [], paymentRecei
     const backup = {
       app: "Fitness World GymOS",
       generatedAt: new Date().toISOString(),
-      note: "Full trainer workspace backup for business data safety.",
+      note: `${isApiConfigured ? "" : "DEMO sample data — "}Full trainer workspace backup for business data safety.`,
       counts: {
         members: members.length,
         attendance: attendance.length,
@@ -529,7 +533,11 @@ export function ReportExportModal({ open, members, attendance = [], paymentRecei
       </html>`;
 
     const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
+    if (!printWindow) {
+      setExportError("Popup blocked — allow popups to open the PDF.");
+      return;
+    }
+    setExportError(null);
     printWindow.document.write(reportHtml);
     printWindow.document.close();
     printWindow.focus();
@@ -537,7 +545,7 @@ export function ReportExportModal({ open, members, attendance = [], paymentRecei
   }
 
   return (
-    <Modal open={open} title="Export Trainer Reports" onClose={onClose}>
+    <Modal open={open} title="Export Trainer Reports" onClose={onClose} disableBackdropClose>
       <div className="grid gap-4">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <label className="grid gap-1.5 text-[13px] font-bold text-text-secondary">
@@ -545,7 +553,8 @@ export function ReportExportModal({ open, members, attendance = [], paymentRecei
             <select
               value={selectedMonth}
               onChange={(event) => setSelectedMonth(Number(event.target.value))}
-              className="studio-select h-12 w-full px-3 text-[15px] font-bold"
+              disabled={selectedDetails.period === "all"}
+              className="studio-select h-12 w-full px-3 text-[15px] font-bold disabled:opacity-50"
             >
               {months.map((month) => (
                 <option key={month.value} value={month.value}>
@@ -560,7 +569,8 @@ export function ReportExportModal({ open, members, attendance = [], paymentRecei
             <select
               value={selectedYear}
               onChange={(event) => setSelectedYear(Number(event.target.value))}
-              className="studio-select h-12 w-full px-3 text-[15px] font-bold"
+              disabled={selectedDetails.period === "all"}
+              className="studio-select h-12 w-full px-3 text-[15px] font-bold disabled:opacity-50"
             >
               {years.map((year) => (
                 <option key={year} value={year}>
@@ -670,6 +680,8 @@ export function ReportExportModal({ open, members, attendance = [], paymentRecei
         </div>
 
         <div className="sticky bottom-0 -mx-6 -mb-6 flex flex-wrap items-center justify-end gap-3 border-t border-border-default bg-brand-white/95 px-6 py-4 shadow-[0_-12px_30px_rgba(26,26,46,0.08)] backdrop-blur">
+          {exportError ? <p className="mr-auto text-[12px] font-bold text-status-expired">{exportError}</p> : null}
+          {filteredMembers.length === 0 && !exportError ? <p className="mr-auto text-[12px] font-bold text-text-muted">No records match — adjust filters</p> : null}
           <Button variant="secondary" type="button" className="min-w-28" onClick={onClose}>
             Cancel
           </Button>

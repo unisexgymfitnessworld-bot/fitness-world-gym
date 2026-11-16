@@ -7,13 +7,14 @@ interface AppState {
   selectedMemberId: string | null;
   editingMemberId: string | null;
   smsMemberId: string | null;
-  toast: ToastMessage | null;
+  toasts: ToastMessage[];
   setTrainer: (trainer: Trainer | null) => void;
   setFilter: <K extends keyof MemberFilters>(key: K, value: MemberFilters[K]) => void;
   setSelectedMemberId: (memberId: string | null) => void;
   setEditingMemberId: (memberId: string | null) => void;
   setSmsMemberId: (memberId: string | null) => void;
   pushToast: (message: Omit<ToastMessage, "id">) => void;
+  dismissToast: (id: string) => void;
   clearToast: () => void;
 }
 
@@ -32,7 +33,7 @@ export const useAppStore = create<AppState>((set) => ({
   selectedMemberId: null,
   editingMemberId: null,
   smsMemberId: null,
-  toast: null,
+  toasts: [],
   setTrainer: (trainer) => set({ trainer }),
   setFilter: (key, value) =>
     set((state) => ({
@@ -45,11 +46,9 @@ export const useAppStore = create<AppState>((set) => ({
   setEditingMemberId: (memberId) => set({ editingMemberId: memberId }),
   setSmsMemberId: (memberId) => set({ smsMemberId: memberId }),
   pushToast: (message) =>
-    set({
-      toast: {
-        ...message,
-        id: crypto.randomUUID(),
-      },
-    }),
-  clearToast: () => set({ toast: null }),
+    set((state) => ({
+      toasts: [...state.toasts, { ...message, id: crypto.randomUUID() }].slice(-3),
+    })),
+  dismissToast: (id) => set((state) => ({ toasts: state.toasts.filter((toast) => toast.id !== id) })),
+  clearToast: () => set({ toasts: [] }),
 }));

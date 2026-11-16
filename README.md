@@ -12,9 +12,10 @@ npm run dev
 Frontend: `http://localhost:5173`
 
 Point `VITE_API_BASE_URL` at the deployed Cloudflare Worker API (see `.env.example`).
-Without Supabase environment variables, the frontend shows clearly-labeled demo data
-after sign in so the UI can be reviewed locally. Add the environment variables from
-`.env.example` to connect production services.
+In dev only (`npm run dev`), without Supabase environment variables, the frontend
+shows clearly-labeled demo data after sign in so the UI can be reviewed locally.
+Production builds need the real environment variables — there is no demo mode
+in prod. Add the variables from `.env.example` to connect production services.
 
 ## Structure
 

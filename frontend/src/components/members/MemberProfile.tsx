@@ -26,23 +26,28 @@ interface MemberProfileProps {
   onDeleteMember: (memberId: string) => Promise<void>;
   onPurgeMember: (memberId: string) => Promise<void>;
   onRenew: (memberId: string, start: string, due: string, feesAmount: number, planType: PlanType, paymentStatus: PaymentStatus, collectedAmount: number, method?: PaymentMethod, clientRequestId?: string) => Promise<void>;
-  onAddVisit: (memberId: string, visitDate: string, weightKg?: number) => void;
+  onAddVisit: (memberId: string, visitDate: string, weightKg?: number) => Promise<void>;
   onDeleteVisit: (attendanceId: string) => void;
   paymentReceipts: PaymentReceipt[];
   renewalHistory: RenewalHistoryEntry[];
   onAddPaymentReceipt: (memberId: string, input: PaymentReceiptInput) => Promise<void>;
   onResendReceipt: (memberId: string, receiptId: string, channel: BillChannel) => Promise<ResendResult>;
+  onDeleteReceipt: (memberId: string, receiptId: string) => Promise<void>;
   onSendStatement: (memberId: string, channel: BillChannel, dryRun?: boolean) => Promise<StatementResult>;
 }
 
-export function MemberProfile({ member, attendance, paymentReceipts, renewalHistory, onBack, onEdit, onSms, onRenew, onAddVisit, onDeleteVisit, onAddPaymentReceipt, onResendReceipt, onSendStatement, onSuspend, onRestore, onDeleteMember, onPurgeMember }: MemberProfileProps) {
+export function MemberProfile({ member, attendance, paymentReceipts, renewalHistory, onBack, onEdit, onSms, onRenew, onAddVisit, onDeleteVisit, onAddPaymentReceipt, onResendReceipt, onDeleteReceipt, onSendStatement, onSuspend, onRestore, onDeleteMember, onPurgeMember }: MemberProfileProps) {
   const [isRenewOpen, setIsRenewOpen] = useState(false);
   const [isStatementOpen, setIsStatementOpen] = useState(false);
-  const [confirming, setConfirming] = useState<"suspend" | "delete" | "purge" | null>(null);
+  const [confirming, setConfirming] = useState<"suspend" | "delete" | "purge" | "restore" | null>(null);
   const [purgeUnderstood, setPurgeUnderstood] = useState(false);
   const [purgeBusy, setPurgeBusy] = useState(false);
   const actionDueDate = getMemberActionDueDate(member);
   const memberAttendance = useMemo(() => attendance.filter((entry) => entry.memberId === member.id), [attendance, member.id]);
+  const latestWeighIn = useMemo(
+    () => memberAttendance.filter((entry) => entry.weightKg !== undefined).sort((a, b) => b.visitDate.localeCompare(a.visitDate))[0],
+    [memberAttendance],
+  );
   const memberRenewals = useMemo(() => renewalHistory.filter((entry) => entry.memberId === member.id), [member.id, renewalHistory]);
   const isDeleted = member.status === "Deleted";
   const countdown = dueCountdown(member);
@@ -69,7 +74,7 @@ export function MemberProfile({ member, attendance, paymentReceipts, renewalHist
           </Button>
           {isDeleted ? (
             <>
-              <Button variant="secondary" onClick={() => void onRestore(member.id)}>
+              <Button variant="secondary" onClick={() => setConfirming("restore")}>
                 <UserCheck size={18} />
                 <span className="hidden sm:inline">Restore</span>
               </Button>
@@ -196,7 +201,7 @@ export function MemberProfile({ member, attendance, paymentReceipts, renewalHist
               <ProfileRow label="Plan" value={member.planType} />
               <ProfileRow label="Membership Start" value={formatDisplayDate(member.membershipStart)} />
               <ProfileRow label="BMI" value={`${member.bmi} · ${bmiCategory(member.bmi)}`} />
-              <ProfileRow label="Weight" value={`${member.weightKg} kg`} />
+              <ProfileRow label="Weight" value={latestWeighIn ? `${member.weightKg} kg · as of ${formatDisplayDate(latestWeighIn.visitDate)}` : `${member.weightKg} kg`} />
               <ProfileRow label="Height" value={`${member.heightCm} cm`} />
             </dl>
           </motion.section>
@@ -233,7 +238,7 @@ export function MemberProfile({ member, attendance, paymentReceipts, renewalHist
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.5 }}
       >
-        <PaymentReceiptPanel member={member} receipts={paymentReceipts} onAddPaymentReceipt={onAddPaymentReceipt} onResendReceipt={onResendReceipt} />
+        <PaymentReceiptPanel member={member} receipts={paymentReceipts} onAddPaymentReceipt={onAddPaymentReceipt} onResendReceipt={onResendReceipt} onDeleteReceipt={onDeleteReceipt} />
       </motion.div>
 
       <motion.div
@@ -280,6 +285,19 @@ export function MemberProfile({ member, attendance, paymentReceipts, renewalHist
         onConfirm={async () => {
           setConfirming(null);
           await onSuspend(member.id);
+        }}
+        onClose={() => setConfirming(null)}
+      />
+
+      <ConfirmModal
+        open={confirming === "restore"}
+        title="Restore member?"
+        message={`Bring ${member.name} back to the gym list? Their bills and visits stay saved.`}
+        confirmText="Restore"
+        variant="success"
+        onConfirm={async () => {
+          setConfirming(null);
+          await onRestore(member.id);
         }}
         onClose={() => setConfirming(null)}
       />
@@ -461,11 +479,13 @@ function PaymentReceiptPanel({
   receipts,
   onAddPaymentReceipt,
   onResendReceipt,
+  onDeleteReceipt,
 }: {
   member: Member;
   receipts: PaymentReceipt[];
   onAddPaymentReceipt: (memberId: string, input: PaymentReceiptInput) => Promise<void>;
   onResendReceipt: (memberId: string, receiptId: string, channel: BillChannel) => Promise<ResendResult>;
+  onDeleteReceipt: (memberId: string, receiptId: string) => Promise<void>;
 }) {
   const sortedReceipts = useMemo(
     () =>
@@ -520,12 +540,16 @@ function PaymentReceiptPanel({
       setError("Enter a valid payment amount.");
       return;
     }
+    if (!paidOn || paidOn > todayISO()) {
+      setError("Paid date cannot be in the future.");
+      return;
+    }
 
     setIsSaving(true);
     try {
       await onAddPaymentReceipt(member.id, {
         paidOn,
-        amount: numericAmount,
+        amount: Math.floor(numericAmount),
         method,
         note,
         receiptNo: receiptNo.trim() || undefined,
@@ -543,12 +567,13 @@ function PaymentReceiptPanel({
   }
 
   function handlePrintReceipt(receipt: { receiptNo: string; paidOn: string; amount: number; method: string; note: string; arrearsApplied?: number; cycleApplied?: number; advanceApplied?: number }) {
+    const inr = (value: number): string => `₹${Math.round(value).toLocaleString("en-IN")}`;
     const splitRows =
       receipt.arrearsApplied !== undefined || receipt.cycleApplied !== undefined || receipt.advanceApplied !== undefined
         ? `<table>
-            <tr><td class="label">Old pending</td><td class="value">₹${receipt.arrearsApplied ?? 0}</td></tr>
-            <tr><td class="label">This plan</td><td class="value">₹${receipt.cycleApplied ?? 0}</td></tr>
-            ${(receipt.advanceApplied ?? 0) > 0 ? `<tr><td class="label">Extra paid</td><td class="value">₹${receipt.advanceApplied}</td></tr>` : ""}
+            <tr><td class="label">Old pending</td><td class="value">${inr(receipt.arrearsApplied ?? 0)}</td></tr>
+            <tr><td class="label">This plan</td><td class="value">${inr(receipt.cycleApplied ?? 0)}</td></tr>
+            ${(receipt.advanceApplied ?? 0) > 0 ? `<tr><td class="label">Extra paid</td><td class="value">${inr(receipt.advanceApplied ?? 0)}</td></tr>` : ""}
           </table>
           <div class="divider"></div>`
         : "";
@@ -687,11 +712,23 @@ function PaymentReceiptPanel({
               <td class="label">Method</td>
               <td class="value">${htmlEscape(receipt.method)}</td>
             </tr>
+            <tr>
+              <td class="label">Plan period</td>
+              <td class="value">${formatDisplayDate(member.membershipStart)} → ${formatDisplayDate(member.membershipDue)}</td>
+            </tr>
+            <tr>
+              <td class="label">Plan fee</td>
+              <td class="value">${inr(member.feesAmount)}</td>
+            </tr>
+            <tr>
+              <td class="label">Still to get</td>
+              <td class="value">${inr(balanceAmount)}</td>
+            </tr>
           </table>
           <div class="divider"></div>
           ${splitRows}
           <div class="amount-box">
-            PAID: ₹${receipt.amount}
+            PAID: ${inr(receipt.amount)}
           </div>
           ${receipt.note ? `
             <div class="note-card">
@@ -713,10 +750,12 @@ function PaymentReceiptPanel({
       </html>`;
 
     const printWindow = window.open("", "_blank");
-    if (printWindow) {
-      printWindow.document.write(receiptHtml);
-      printWindow.document.close();
+    if (!printWindow) {
+      setError("Popup blocked — allow popups to print the slip.");
+      return;
     }
+    printWindow.document.write(receiptHtml);
+    printWindow.document.close();
   }
 
   return (
@@ -774,7 +813,7 @@ function PaymentReceiptPanel({
           <fieldset disabled={formLocked} className="grid gap-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <Input label="Amount (extra money = next plan)" type="number" step="1" min="1" value={amount} onChange={(event) => setAmount(event.target.value)} disabled={isSaving} />
-            <Input label="Paid Date" type="date" value={paidOn} onChange={(event) => setPaidOn(event.target.value)} disabled={isSaving} />
+            <Input label="Paid Date" type="date" max={todayISO()} value={paidOn} onChange={(event) => setPaidOn(event.target.value)} disabled={isSaving} />
             <label className="grid gap-2 text-[14px] font-semibold lg:text-[15px]">
               Method
               <select className="studio-input w-full px-3 py-2.5 lg:px-4 lg:py-3" value={method} onChange={(event) => setMethod(event.target.value as PaymentMethod)} disabled={isSaving}>
@@ -851,6 +890,7 @@ function PaymentReceiptPanel({
                 onPrint={() => handlePrintReceipt(receipt)}
                 delivery={receipt.delivery}
                 onResend={(channel) => onResendReceipt(member.id, receipt.id, channel)}
+                onDelete={() => onDeleteReceipt(member.id, receipt.id)}
               />
             ))
           ) : recordedOpeningAmount <= 0 ? (
@@ -884,6 +924,7 @@ function ReceiptRow({
   onPrint,
   delivery,
   onResend,
+  onDelete,
 }: {
   title: string;
   date: string;
@@ -894,9 +935,12 @@ function ReceiptRow({
   onPrint?: () => void;
   delivery?: { sms?: string; email?: string };
   onResend?: (channel: BillChannel) => Promise<unknown>;
+  onDelete?: () => Promise<void>;
 }) {
   const [sending, setSending] = useState<BillChannel | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   async function handleResend(channel: BillChannel): Promise<void> {
     if (!onResend || sending) return;
     setSendError(null);
@@ -921,12 +965,24 @@ function ReceiptRow({
           {onPrint && (
             <button
               type="button"
-              className="focus-ring flex h-11 w-11 items-center justify-center rounded-md border border-slate-200 bg-brand-white text-slate-600 hover:text-brand-primary hover:border-brand-primary/40 transition print:hidden"
+              className="focus-ring flex h-11 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-brand-white px-3 text-[12px] font-black text-slate-600 hover:text-brand-primary hover:border-brand-primary/40 transition print:hidden"
               onClick={onPrint}
               title="Print/Download receipt slip"
               aria-label="Print receipt slip"
             >
               <Printer size={16} />
+              Slip
+            </button>
+          )}
+          {onDelete && (
+            <button
+              type="button"
+              className="focus-ring flex h-11 w-11 items-center justify-center rounded-md border border-slate-200 bg-brand-white text-slate-500 transition hover:border-red-300 hover:text-status-expired disabled:opacity-50 print:hidden"
+              onClick={() => setConfirmingDelete(true)}
+              title="Delete this bill (wrong entry)"
+              aria-label={`Delete bill ${title}`}
+            >
+              <Trash2 size={16} />
             </button>
           )}
         </div>
@@ -957,6 +1013,27 @@ function ReceiptRow({
           </button>
           {sendError ? <span className="text-[11px] font-bold text-status-expired">{sendError}</span> : null}
         </div>
+      ) : null}
+      {deleteError ? <p className="text-[11px] font-bold text-status-expired">{deleteError}</p> : null}
+      {onDelete ? (
+        <ConfirmModal
+          open={confirmingDelete}
+          title="Delete this bill?"
+          message={`Remove bill ${title} (${formatCurrency(amount)})? The member's paid totals go back down. Use this only for wrong entries.`}
+          confirmText="Delete Bill"
+          variant="danger"
+          onConfirm={async () => {
+            if (!onDelete) return;
+            setDeleteError(null);
+            try {
+              await onDelete();
+              setConfirmingDelete(false);
+            } catch (caught: unknown) {
+              setDeleteError(caught instanceof Error ? caught.message : "Could not delete bill");
+            }
+          }}
+          onClose={() => setConfirmingDelete(false)}
+        />
       ) : null}
     </div>
   );

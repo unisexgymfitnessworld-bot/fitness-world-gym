@@ -40,8 +40,14 @@ export function summarizeRenewalHistory(history: RenewalHistoryEntry[]): Renewal
     count: sorted.length,
     latestPlan: latest?.newPlanType ?? "No renewals",
     latestRenewedOn: latest?.renewedOn ?? "",
-    totalAmount: sorted.reduce((sum, entry) => sum + safeAmount(entry.amount), 0),
-    pendingAmount: sorted.reduce((sum, entry) => sum + (entry.paymentStatus === "Paid" ? 0 : safeAmount(entry.amount)), 0),
+    totalAmount: sorted.reduce((sum, entry) => sum + safeAmount(entry.amount) + safeAmount(entry.arrearsCarried), 0),
+    pendingAmount: sorted.reduce((sum, entry) => {
+      const total = safeAmount(entry.amount) + safeAmount(entry.arrearsCarried);
+      if (typeof entry.collectedAmount === "number") {
+        return sum + Math.max(0, total - safeAmount(entry.collectedAmount));
+      }
+      return sum + (entry.paymentStatus === "Paid" ? 0 : total);
+    }, 0),
   };
 }
 

@@ -49,6 +49,36 @@ describe("member insight helpers", () => {
     });
   });
 
+  it("adds carried arrears to the total and subtracts collected cash from pending", () => {
+    const history: RenewalHistoryEntry[] = [
+      {
+        id: "r-3",
+        memberId: "m-1",
+        oldPlanType: "1 Month",
+        newPlanType: "1 Month",
+        oldStartDate: "2026-10-01",
+        oldDueDate: "2026-11-01",
+        newStartDate: "2026-11-01",
+        newDueDate: "2026-12-01",
+        amount: 1800,
+        arrearsCarried: 1800,
+        collectedAmount: 2000,
+        oldAmount: 1800,
+        paymentStatus: "Partially Paid",
+        renewedOn: "2026-11-01",
+        createdAt: "2026-11-01T05:00:00.000Z",
+      },
+    ];
+
+    assert.deepEqual(summarizeRenewalHistory(history), {
+      count: 1,
+      latestPlan: "1 Month",
+      latestRenewedOn: "2026-11-01",
+      totalAmount: 3600,
+      pendingAmount: 1600,
+    });
+  });
+
   it("builds progress points in date order and calculates change from first to latest weight", () => {
     const attendance: AttendanceEntry[] = [
       { id: "a-2", memberId: "m-1", visitDate: "2026-06-10", weightKg: 79, createdAt: "2026-06-10T05:00:00.000Z" },

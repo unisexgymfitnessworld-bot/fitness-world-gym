@@ -387,3 +387,69 @@ ALTER TABLE IF EXISTS public.sms_logs
   ADD COLUMN IF NOT EXISTS email_html text;
 ALTER TABLE IF EXISTS public.sms_logs
   ADD COLUMN IF NOT EXISTS email_pdf_name text;
+
+-- ── 19) tail hardening: constraints, triggers, indexes ───────────────────────
+-- NOTE: VALIDATE errors on old rows are acceptable — the NOT VALID constraint
+-- still guards every new write. Fix or accept the flagged old rows separately.
+create or replace function public.reset_sms_sent_on_renewal()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if old.membership_due is distinct from new.membership_due then
+    new.sms_sent_3days = false;
+    new.sms_sent_winback = false;
+  end if;
+  return new;
+end;
+$$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'members_weight_range') THEN
+    ALTER TABLE public.members ADD CONSTRAINT members_weight_range CHECK (weight_kg BETWEEN 20 AND 250) NOT VALID;
+  END IF;
+END $$;
+ALTER TABLE public.members VALIDATE CONSTRAINT members_weight_range;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'members_height_range') THEN
+    ALTER TABLE public.members ADD CONSTRAINT members_height_range CHECK (height_cm BETWEEN 90 AND 240) NOT VALID;
+  END IF;
+END $$;
+ALTER TABLE public.members VALIDATE CONSTRAINT members_height_range;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'members_due_after_start') THEN
+    ALTER TABLE public.members ADD CONSTRAINT members_due_after_start CHECK (membership_due >= membership_start) NOT VALID;
+  END IF;
+END $$;
+ALTER TABLE public.members VALIDATE CONSTRAINT members_due_after_start;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'attendance_member_not_null') THEN
+    ALTER TABLE public.attendance ADD CONSTRAINT attendance_member_not_null CHECK (member_id IS NOT NULL) NOT VALID;
+  END IF;
+END $$;
+ALTER TABLE public.attendance VALIDATE CONSTRAINT attendance_member_not_null;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'members_owner_not_null') THEN
+    ALTER TABLE public.members ADD CONSTRAINT members_owner_not_null CHECK (owner_user_id IS NOT NULL) NOT VALID;
+  END IF;
+END $$;
+ALTER TABLE public.members VALIDATE CONSTRAINT members_owner_not_null;
+
+COMMENT ON COLUMN public.members.owner_user_id IS 'Audit trail: Supabase Auth user that created this member record. NOT a workspace boundary — all trainers share one gym workspace.';
+
+DROP TRIGGER IF EXISTS set_system_settings_updated_at ON public.system_settings;
+CREATE TRIGGER set_system_settings_updated_at
+BEFORE UPDATE ON public.system_settings
+FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+CREATE INDEX IF NOT EXISTS idx_members_status_due_sms3
+  ON public.members (status, membership_due, sms_sent_3days);
+CREATE INDEX IF NOT EXISTS idx_members_status_due_winback
+  ON public.members (status, membership_due, sms_sent_winback);
+CREATE INDEX IF NOT EXISTS idx_sms_logs_status_next_retry
+  ON public.sms_logs (status, next_retry_at);

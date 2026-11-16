@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { FilterBar } from "../components/filters/FilterBar";
 import { FollowUpQueue } from "../components/followups/FollowUpQueue";
 import { FloatingActionButton } from "../components/layout/FloatingActionButton";
-import { Toast } from "../components/layout/Toast";
+import { ToastStack } from "../components/layout/Toast";
 import { TopBar } from "../components/layout/TopBar";
 import { MemberProfile } from "../components/members/MemberProfile";
 import { MemberSheet } from "../components/members/MemberSheet";
@@ -20,25 +20,25 @@ import { getCollectiblePendingAmount, getMembersForAnalyticsRange, summarizeAnal
 import { api, isApiConfigured } from "../lib/api";
 import { buildTodayFollowUps } from "../lib/followUps";
 import type { MessageTemplateId } from "../lib/messageTemplates";
-import { daysUntil, formatCurrency, formatDisplayDate, getMemberActionDueDate, todayISO } from "../lib/utils";
+import { daysUntil, formatCurrency, formatDisplayDate, getDisplayStatus, getMemberActionDueDate, todayISO } from "../lib/utils";
 import { useAppStore } from "../store/useAppStore";
 import type { BillChannel, MemberInput, NotifyChannelChoice, PaymentMethod, PaymentReceiptInput, PaymentStatus, PlanType, ResendResult, SmsSendResult, StatementResult } from "../types";
 
 export function Dashboard() {
   const { signOut } = useAuth();
-  const { members, attendance, paymentReceipts, renewalHistory, stats, loading, loadError, retryLoad, isDemo, upsertMember, upsertMembers, suspendMember, restoreMember, deleteMember, purgeMember, wipeAll, renewMember, addVisit, deleteVisit, addPaymentReceipt, resendReceipt, sendStatement, markSmsSent } = useMembers();
+  const { members, attendance, paymentReceipts, renewalHistory, stats, loading, loadError, retryLoad, isDemo, upsertMember, upsertMembers, suspendMember, restoreMember, deleteMember, purgeMember, wipeAll, renewMember, addVisit, deleteVisit, addPaymentReceipt, deletePaymentReceipt, resendReceipt, sendStatement, markSmsSent } = useMembers();
   const trainer = useAppStore((state) => state.trainer);
   const filters = useAppStore((state) => state.filters);
   const selectedMemberId = useAppStore((state) => state.selectedMemberId);
   const editingMemberId = useAppStore((state) => state.editingMemberId);
   const smsMemberId = useAppStore((state) => state.smsMemberId);
-  const toast = useAppStore((state) => state.toast);
   const setFilter = useAppStore((state) => state.setFilter);
   const setSelectedMemberId = useAppStore((state) => state.setSelectedMemberId);
   const setEditingMemberId = useAppStore((state) => state.setEditingMemberId);
   const setSmsMemberId = useAppStore((state) => state.setSmsMemberId);
   const pushToast = useAppStore((state) => state.pushToast);
   const [confirmingSuspendId, setConfirmingSuspendId] = useState<string | null>(null);
+  const [confirmingRestoreId, setConfirmingRestoreId] = useState<string | null>(null);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
@@ -47,7 +47,10 @@ export function Dashboard() {
   const [activeMetricFilter, setActiveMetricFilter] = useState<string | null>(null);
 
   const dashboardSummary = useMemo(() => summarizeMemberAnalytics(members, new Date(), paymentReceipts, renewalHistory), [members, paymentReceipts, renewalHistory]);
-  const analysisMembers = useMemo(() => getMembersForAnalyticsRange(members, analysisRange), [analysisRange, members]);
+  const analysisMembers = useMemo(
+    () => getMembersForAnalyticsRange(members, analysisRange, new Date(), paymentReceipts, renewalHistory),
+    [analysisRange, members, paymentReceipts, renewalHistory],
+  );
   const rangeMemberIds = useMemo(
     () => new Set(analysisMembers.map((member) => member.id)),
     [analysisMembers],
@@ -67,7 +70,7 @@ export function Dashboard() {
 
   const baseFilteredMembers = useMemo(() => {
     return members.filter((member) => {
-      const statusMatch = filters.status === "All" ? member.status !== "Deleted" : member.status === filters.status;
+      const statusMatch = filters.status === "All" ? getDisplayStatus(member) !== "Deleted" : getDisplayStatus(member) === filters.status;
       const goalMatch = filters.goal === "All Goals" || member.goal === filters.goal;
       const paymentMatch = filters.payment === "All Payments" || member.paymentStatus === filters.payment;
       const dueMatch =
@@ -138,6 +141,7 @@ export function Dashboard() {
   }, [members, filters.month, paymentReceipts, renewalHistory]);
 
   const confirmingMember = members.find((member) => member.id === confirmingSuspendId) ?? null;
+  const confirmingRestoreMember = members.find((member) => member.id === confirmingRestoreId) ?? null;
   const confirmingDeleteMember = members.find((member) => member.id === confirmingDeleteId) ?? null;
 
   const selectedMember = members.find((member) => member.id === selectedMemberId) ?? null;
@@ -227,7 +231,11 @@ export function Dashboard() {
     const member = members.find((m) => m.id === memberId);
     const wasSuspended = member?.status === "Suspended";
     try {
-      await suspendMember(memberId);
+      if (wasSuspended) {
+        await restoreMember(memberId);
+      } else {
+        await suspendMember(memberId);
+      }
       pushToast({
         title: wasSuspended ? "Member restored" : "Member suspended",
         message: wasSuspended ? "Member status was restored based on due date." : "Status changed successfully.",
@@ -334,7 +342,7 @@ export function Dashboard() {
           message: `${channelLabel} is not actually sent in demo mode.`,
           tone: "info",
         });
-        return;
+        return { requestId: null, status: "demo" };
       }
       const member = members.find((candidate) => candidate.id === memberId) ?? null;
       if (channel === "email" && !member?.email) {
@@ -420,6 +428,7 @@ export function Dashboard() {
         message: error instanceof Error ? error.message : "Unable to log visit",
         tone: "error",
       });
+      throw error;
     }
   }
 
@@ -437,6 +446,24 @@ export function Dashboard() {
         message: error instanceof Error ? error.message : "Unable to remove visit",
         tone: "error",
       });
+    }
+  }
+
+  async function handleDeleteReceipt(memberId: string, receiptId: string): Promise<void> {
+    try {
+      await deletePaymentReceipt(memberId, receiptId);
+      pushToast({
+        title: "Bill deleted",
+        message: "The bill was removed and paid totals updated.",
+        tone: "success",
+      });
+    } catch (error) {
+      pushToast({
+        title: "Delete bill failed",
+        message: error instanceof Error ? error.message : "Unable to delete bill",
+        tone: "error",
+      });
+      throw error;
     }
   }
 
@@ -537,10 +564,11 @@ export function Dashboard() {
           onDeleteMember={(memberId) => handleProfileDelete(memberId)}
           onPurgeMember={(memberId) => handlePurgeMember(memberId)}
           onRenew={(memberId, start, due, feesAmount, planType, paymentStatus, collectedAmount, method, clientRequestId) => handleRenew(memberId, start, due, feesAmount, planType, paymentStatus, collectedAmount, method, clientRequestId)}
-          onAddVisit={(memberId, visitDate, weightKg) => void handleAddVisit(memberId, visitDate, weightKg)}
+          onAddVisit={handleAddVisit}
           onDeleteVisit={(attendanceId) => void handleDeleteVisit(attendanceId)}
           onAddPaymentReceipt={(memberId, input) => handleAddPaymentReceipt(memberId, input)}
           onResendReceipt={(memberId, receiptId, channel) => handleResendReceipt(memberId, receiptId, channel)}
+          onDeleteReceipt={(memberId, receiptId) => handleDeleteReceipt(memberId, receiptId)}
           onSendStatement={(memberId, channel, dryRun) => handleSendStatement(memberId, channel, dryRun)}
         />
         <MemberSheet open={editingMemberId !== null} member={editingMember} onClose={() => setEditingMemberId(null)} onSave={saveMember} existingReceiptCount={editingReceiptCount} />
@@ -554,7 +582,7 @@ export function Dashboard() {
           renewalHistory={renewalHistory}
           onClose={() => setIsExportOpen(false)}
         />
-        <Toast toast={toast} />
+        <ToastStack />
       </>
     );
   }
@@ -589,7 +617,23 @@ export function Dashboard() {
               </button>
             </div>
           ) : null}
-          <section aria-label="Today's money" className="studio-dark grid grid-cols-3 overflow-hidden rounded-[var(--radius-panel)] border border-text-primary">
+          <nav aria-label="Desk sections" className="sticky top-16 z-20 flex gap-1.5 overflow-x-auto rounded-[var(--radius-card)] border border-border-default bg-brand-white/95 p-1.5 shadow-sm backdrop-blur print:hidden">
+            {[
+              { label: "Overview", target: "desk-overview" },
+              { label: "Follow-ups", target: "desk-followups" },
+              { label: "Members", target: "desk-members" },
+            ].map((item) => (
+              <button
+                key={item.target}
+                type="button"
+                onClick={() => document.getElementById(item.target)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                className="shrink-0 rounded-full px-4 py-1.5 text-[13px] font-black text-text-secondary transition hover:bg-surface-raised hover:text-brand-primary"
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
+          <section id="desk-overview" aria-label="Today's money" className="studio-dark grid scroll-mt-32 grid-cols-3 overflow-hidden rounded-[var(--radius-panel)] border border-text-primary">
             <div className="border-l-4 border-l-brand-primary px-3 py-2.5 sm:px-4 sm:py-3">
               <p className="text-[10px] font-bold uppercase tracking-wider text-white/60 sm:text-[11px]">Got today</p>
               <p className="mt-0.5 truncate text-[16px] font-black text-white sm:text-[20px]">{formatCurrency(collectedToday)}</p>
@@ -759,11 +803,35 @@ export function Dashboard() {
             </aside>
           </motion.section>
 
-          <FollowUpQueue
-            items={todayFollowUps}
-            onView={setSelectedMemberId}
-            onMessage={(memberId, template) => openSms(memberId, template)}
-          />
+          {urgentMembers.length > 0 ? (
+            <section aria-label="Plans ending soon" className="studio-card flex items-center gap-2 overflow-x-auto rounded-[var(--radius-panel)] p-3 sm:p-4 xl:hidden">
+              <span className="flex shrink-0 items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-status-due">
+                <AlertTriangle size={14} />
+                Ending soon
+              </span>
+              {urgentMembers.map((member) => (
+                <button
+                  key={member.id}
+                  type="button"
+                  onClick={() => setSelectedMemberId(member.id)}
+                  className="focus-ring flex shrink-0 items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-left transition hover:border-brand-primary/40"
+                >
+                  <span className="text-[13px] font-black text-text-primary">{member.name}</span>
+                  <span className="text-[11px] font-bold text-status-due">
+                    {formatDisplayDate(getMemberActionDueDate(member))} · {daysUntil(getMemberActionDueDate(member))}d left
+                  </span>
+                </button>
+              ))}
+            </section>
+          ) : null}
+
+          <div id="desk-followups" className="scroll-mt-32">
+            <FollowUpQueue
+              items={todayFollowUps}
+              onView={setSelectedMemberId}
+              onMessage={(memberId, template) => openSms(memberId, template)}
+            />
+          </div>
 
           <motion.section
             className="studio-card grid gap-3 rounded-[var(--radius-panel)] p-3 sm:p-4 lg:grid-cols-[260px_1fr] lg:gap-5 lg:p-5"
@@ -959,6 +1027,7 @@ export function Dashboard() {
             </div>
           )}
 
+          <div id="desk-members" className="scroll-mt-32">
           <MemberTable
             members={baseFilteredMembers}
             query={filters.query}
@@ -967,9 +1036,10 @@ export function Dashboard() {
             onEdit={setEditingMemberId}
             onSms={(memberId) => openSms(memberId)}
             onSuspend={setConfirmingSuspendId}
-            onRestore={(memberId) => void handleRestore(memberId)}
+            onRestore={setConfirmingRestoreId}
             onDelete={setConfirmingDeleteId}
             isDbEmpty={members.length === 0}
+            loadFailed={loadError !== null && !loading}
             onAddClick={() => setEditingMemberId("new")}
             onClearFilters={() => {
               setActiveMetricFilter(null);
@@ -983,6 +1053,7 @@ export function Dashboard() {
               setFilter("planType", "All Plans");
             }}
           />
+          </div>
         </div>
       </main>
       <FloatingActionButton onClick={() => setEditingMemberId("new")} />
@@ -1005,6 +1076,24 @@ export function Dashboard() {
           }
         }}
         onClose={() => setConfirmingSuspendId(null)}
+      />
+      <ConfirmModal
+        open={confirmingRestoreId !== null}
+        title={confirmingRestoreMember?.status === "Suspended" ? "Unsuspend Member" : "Restore Member"}
+        message={
+          confirmingRestoreMember?.status === "Suspended"
+            ? `${confirmingRestoreMember?.name ?? "This member"} will be able to train again. Dues stay as they are.`
+            : `Bring ${confirmingRestoreMember?.name ?? "this member"} back to the gym list? Their bills and visits stay saved.`
+        }
+        confirmText={confirmingRestoreMember?.status === "Suspended" ? "Unsuspend" : "Restore"}
+        variant="success"
+        onConfirm={async () => {
+          if (confirmingRestoreId) {
+            await handleRestore(confirmingRestoreId);
+            setConfirmingRestoreId(null);
+          }
+        }}
+        onClose={() => setConfirmingRestoreId(null)}
       />
       <ConfirmModal
         open={confirmingDeleteId !== null}
@@ -1042,7 +1131,7 @@ export function Dashboard() {
         renewalHistory={renewalHistory}
         onClose={() => setIsExportOpen(false)}
       />
-      <Toast toast={toast} />
+      <ToastStack />
     </>
   );
 }

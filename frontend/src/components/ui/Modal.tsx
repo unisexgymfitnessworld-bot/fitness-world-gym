@@ -9,9 +9,10 @@ interface ModalProps {
   title: string;
   children: ReactNode;
   onClose: () => void;
+  disableBackdropClose?: boolean;
 }
 
-export function Modal({ open, title, children, onClose }: ModalProps) {
+export function Modal({ open, title, children, onClose, disableBackdropClose = false }: ModalProps) {
   useScrollLock(open);
 
   useEffect(() => {
@@ -33,7 +34,7 @@ export function Modal({ open, title, children, onClose }: ModalProps) {
         <motion.div
           className="fixed inset-0 z-50 grid place-items-center bg-brand-dark/60 px-4 py-8 backdrop-blur-sm"
           onClick={(event) => {
-            if (event.target === event.currentTarget) {
+            if (!disableBackdropClose && event.target === event.currentTarget) {
               onClose();
             }
           }}

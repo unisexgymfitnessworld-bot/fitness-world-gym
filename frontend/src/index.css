@@ -432,7 +432,16 @@ button, a {
   background: var(--surface-overlay);
   color: var(--text-primary);
   border-radius: var(--radius-card);
-  transition: border-color 200ms ease, background 200ms ease, box-shadow 200ms ease, transform 200ms ease;
+  transition: border-color 200ms ease, background 200ms ease, box-shadow 200ms ease;
+}
+
+/* 16px minimum on form controls: smaller text triggers iOS focus zoom.
+   Element-qualified to win over size utilities on the same node. */
+input.studio-input,
+select.studio-input,
+textarea.studio-input,
+select.studio-select {
+  font-size: 16px;
 }
 
 .studio-input:hover {
@@ -448,7 +457,6 @@ button, a {
   background: var(--brand-white);
   box-shadow: 0 0 0 4px rgba(232, 23, 93, 0.12), 0 4px 16px rgba(232, 23, 93, 0.06);
   outline: none;
-  transform: translateY(-1px);
 }
 
 .studio-select {

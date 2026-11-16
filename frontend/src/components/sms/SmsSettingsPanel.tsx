@@ -107,16 +107,18 @@ export function SmsSettingsPanel({ variant = "light", onSaved }: SmsSettingsPane
     }
   }, []);
 
+  const [logStatusFilter, setLogStatusFilter] = useState("all");
+  const [logLimit, setLogLimit] = useState(10);
   const loadLogs = useCallback(async () => {
     setLogsLoading(true);
     try {
-      setLogs(await api.smsLogs({ limit: 10 }));
+      setLogs(await api.smsLogs({ status: logStatusFilter === "all" ? undefined : logStatusFilter, limit: logLimit }));
     } catch {
       setLogs([]);
     } finally {
       setLogsLoading(false);
     }
-  }, []);
+  }, [logStatusFilter, logLimit]);
 
   useEffect(() => {
     let mounted = true;
@@ -248,11 +250,14 @@ export function SmsSettingsPanel({ variant = "light", onSaved }: SmsSettingsPane
           throw new Error("Enter a valid email address.");
         }
       } else {
-        const digits = testTo.replace(/\D/g, "").slice(-10);
-        if (digits.length !== 10) {
-          throw new Error("Enter a valid 10-digit mobile number.");
+        const digits = testTo.replace(/\D/g, "");
+        if (/^91\d{10}$/.test(digits)) {
+          to = digits.slice(2);
+        } else if (/^\d{10}$/.test(digits)) {
+          to = digits;
+        } else {
+          throw new Error("Enter a valid 10-digit mobile number (91 prefix allowed).");
         }
-        to = digits;
       }
       if (!testMessage.trim()) {
         throw new Error("Enter a test message.");
@@ -337,7 +342,7 @@ export function SmsSettingsPanel({ variant = "light", onSaved }: SmsSettingsPane
           </p>
           <p className={cn("mt-1 text-[12px] font-semibold leading-relaxed", dark ? "text-white/60" : "text-text-secondary")}>
             {anyReady
-              ? "Automatic reminders use the first ready channel below, with fallback. SMS needs the gym phone on and online."
+              ? "Automatic reminders use the first ready channel below, with fallback. SMS needs the gym phone on and online. Stopped and removed members never get auto-reminders."
               : "Configure at least one channel below, save, then send a test."}
           </p>
         </div>
@@ -715,22 +720,54 @@ export function SmsSettingsPanel({ variant = "light", onSaved }: SmsSettingsPane
               Recent Messages
             </p>
             <p className={cn("mt-1 text-[12px] font-semibold", dark ? "text-white/60" : "text-text-secondary")}>
-              Last 10 sends. Queued messages retry automatically.
+              {logs.length} shown. Queued messages retry automatically.
             </p>
           </div>
+          <div className="flex items-center gap-2">
+            <select
+              aria-label="Filter messages by status"
+              value={logStatusFilter}
+              onChange={(event) => {
+                setLogStatusFilter(event.target.value);
+                setLogLimit(10);
+              }}
+              className={cn(
+                "rounded-lg px-2 py-1.5 text-[12px] font-bold",
+                dark ? "bg-white/10 text-white/80" : "bg-brand-primary/10 text-brand-primary",
+              )}
+            >
+              <option value="all">All</option>
+              <option value="sent">Sent</option>
+              <option value="delivered">Delivered</option>
+              <option value="queued">Queued</option>
+              <option value="failed">Failed</option>
+            </select>
+            <button
+              type="button"
+              onClick={() => void loadLogs()}
+              disabled={logsLoading}
+              className={cn(
+                "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-bold transition-colors",
+                dark ? "bg-white/10 text-white/80 hover:bg-white/15" : "bg-brand-primary/10 text-brand-primary hover:bg-brand-primary/15",
+              )}
+            >
+              <RefreshCw size={13} className={logsLoading ? "animate-spin" : ""} />
+              Refresh
+            </button>
+          </div>
+        </div>
+        {logs.length >= logLimit && !logsLoading ? (
           <button
             type="button"
-            onClick={() => void loadLogs()}
-            disabled={logsLoading}
+            onClick={() => setLogLimit((current) => current + 10)}
             className={cn(
-              "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-bold transition-colors",
+              "mt-3 w-full rounded-lg px-2.5 py-2 text-[12px] font-bold transition-colors",
               dark ? "bg-white/10 text-white/80 hover:bg-white/15" : "bg-brand-primary/10 text-brand-primary hover:bg-brand-primary/15",
             )}
           >
-            <RefreshCw size={13} className={logsLoading ? "animate-spin" : ""} />
-            Refresh
+            View more
           </button>
-        </div>
+        ) : null}
 
         <div className="mt-4 grid gap-2">
           {logsLoading && logs.length === 0 ? (

@@ -133,10 +133,6 @@ async function handleRequest(request, env) {
     return jsonResponse(request, env, { success: true, data: { trainer: trainerFromUser(authUser) } });
   }
 
-  if (path === "/auth/logout" && method === "POST") {
-    return jsonResponse(request, env, { success: true, data: { message: "Logged out" } });
-  }
-
   if (path === "/developer/diagnostics" && method === "GET") {
     assertDeveloper(authUser);
     return jsonResponse(request, env, { success: true, data: await developerDiagnostics(env) });
@@ -144,19 +140,18 @@ async function handleRequest(request, env) {
 
   if (path === "/developer/settings" && method === "POST") {
     assertDeveloper(authUser);
-    const body = await parseJsonBody(request);
-    if (body && typeof body === "object" && body.smsgate_password !== undefined) {
-      const password = String(body.smsgate_password).trim();
-      if (password.length > 200) {
-        throw new ApiError(400, "INVALID_INPUT", "smsgate_password is too long");
-      }
-      if (password) {
-        body.smsgate_password = await encryptStoredSecret(env, password);
-      } else {
-        delete body.smsgate_password;
-      }
+    const rawBody = await parseJsonBody(request);
+    await assertSmsCredsWhenEnabling(env, rawBody);
+    const body = validateSmsSettingsInput(rawBody);
+    if (body.smsgate_password) {
+      body.smsgate_password = await encryptStoredSecret(env, body.smsgate_password);
+    } else if (body.smsgate_password !== undefined) {
+      delete body.smsgate_password;
     }
-    await saveSystemSettings(env, body);
+    const saved = await saveSystemSettings(env, body);
+    if (saved === 0) {
+      throw new ApiError(400, "INVALID_INPUT", "No known settings keys were provided");
+    }
     return jsonResponse(request, env, { success: true, data: { message: "Settings saved successfully" } });
   }
 
@@ -166,11 +161,9 @@ async function handleRequest(request, env) {
     const body = await parseJsonBody(request);
     const phone = requiredString(body.phone, "phone number");
     const message = requiredString(body.message, "test message");
-    if (message.length > SMS_MAX_LENGTH) {
-      throw new ApiError(400, "INVALID_SMS_MESSAGE", `Test message must be ${SMS_MAX_LENGTH} characters or less`);
-    }
+    assertTestMessage(message, SMS_MAX_LENGTH);
 
-    const result = await dispatchSms(env, { phone, message, kind: "test" });
+    const result = await dispatchSms(env, { phone, message, kind: "test", clientRequestId: optionalClientRequestId(body.clientRequestId ?? body.client_request_id) });
     logInfo("developer_test_notification", { phone: maskPhone(phone), requestId: result.requestId, status: result.status });
     return jsonResponse(request, env, { success: true, data: { requestId: result.requestId, status: result.status } });
   }
@@ -276,6 +269,7 @@ async function handleRequest(request, env) {
   if (path === "/sms/settings" && method === "POST") {
     await applyRateLimit(request, env, "sms-settings", RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX_SMS_SETTINGS);
     const rawBody = await parseJsonBody(request);
+    await assertSmsCredsWhenEnabling(env, rawBody);
     if (roleFromUser(authUser) !== "developer") {
       const attempted = rawBody && typeof rawBody === "object"
         ? Object.keys(rawBody).filter((key) => DEVELOPER_SETTING_KEYS.has(key) && String(rawBody[key] ?? "").trim() !== "")
@@ -298,7 +292,10 @@ async function handleRequest(request, env) {
         delete body[key];
       }
     }
-    await saveSystemSettings(env, body);
+    const saved = await saveSystemSettings(env, body);
+    if (saved === 0) {
+      throw new ApiError(400, "INVALID_INPUT", "No known settings keys were provided");
+    }
     logInfo("sms_settings_saved", { by: authUser.email });
     return jsonResponse(request, env, { success: true, data: { message: "SMS settings saved successfully" } });
   }
@@ -308,10 +305,8 @@ async function handleRequest(request, env) {
     const body = await parseJsonBody(request);
     const phone = requiredString(body.phone, "phone number");
     const message = requiredString(body.message, "test message");
-    if (message.length > SMS_MAX_LENGTH) {
-      throw new ApiError(400, "INVALID_SMS_MESSAGE", `Test message must be ${SMS_MAX_LENGTH} characters or less`);
-    }
-    const result = await dispatchSms(env, { phone, message, kind: "test" });
+    assertTestMessage(message, SMS_MAX_LENGTH);
+    const result = await dispatchSms(env, { phone, message, kind: "test", clientRequestId: optionalClientRequestId(body.clientRequestId ?? body.client_request_id) });
     logInfo("sms_test_sent", { phone: maskPhone(phone), requestId: result.requestId, status: result.status });
     return jsonResponse(request, env, { success: true, data: { requestId: result.requestId, status: result.status } });
   }
@@ -353,15 +348,15 @@ async function handleRequest(request, env) {
   assertTrainerWorkspace(authUser);
 
   if (path === "/members/payments/all" && method === "GET") {
-    return jsonResponse(request, env, { success: true, data: await listAllPaymentReceipts(env, authUser) });
+    return jsonResponse(request, env, { success: true, data: await listAllPaymentReceipts(env, authUser, url.searchParams) });
   }
 
   if (path === "/members/renewals/all" && method === "GET") {
-    return jsonResponse(request, env, { success: true, data: await listAllRenewalHistory(env, authUser) });
+    return jsonResponse(request, env, { success: true, data: await listAllRenewalHistory(env, authUser, url.searchParams) });
   }
 
   if (path === "/attendance" && method === "GET") {
-    return jsonResponse(request, env, { success: true, data: await listAllAttendance(env, authUser) });
+    return jsonResponse(request, env, { success: true, data: await listAllAttendance(env, authUser, url.searchParams) });
   }
 
   if (path === "/members" && method === "GET") {
@@ -369,6 +364,7 @@ async function handleRequest(request, env) {
   }
 
   if (path === "/members" && method === "POST") {
+    await applyRateLimit(request, env, "members-write", RATE_LIMIT_WINDOW_MS, 30);
     const body = validateMemberInput(await parseJsonBody(request));
     const { member } = await createMember(env, authUser, body);
     return jsonResponse(request, env, { success: true, data: member }, 201);
@@ -413,19 +409,23 @@ async function handleRequest(request, env) {
     }
 
     if (!action && method === "PUT") {
+      await applyRateLimit(request, env, "members-write", RATE_LIMIT_WINDOW_MS, 30);
       const body = validateMemberInput(await parseJsonBody(request));
       return jsonResponse(request, env, { success: true, data: await updateMember(env, authUser, memberId, body) });
     }
 
     if (!action && method === "DELETE") {
+      await applyRateLimit(request, env, "members-write", RATE_LIMIT_WINDOW_MS, 30);
       return jsonResponse(request, env, { success: true, data: await deleteMember(env, authUser, memberId) });
     }
 
     if (action === "suspend" && method === "PATCH") {
+      await applyRateLimit(request, env, "members-write", RATE_LIMIT_WINDOW_MS, 30);
       return jsonResponse(request, env, { success: true, data: await suspendMember(env, authUser, memberId) });
     }
 
     if (action === "restore" && method === "PATCH") {
+      await applyRateLimit(request, env, "members-write", RATE_LIMIT_WINDOW_MS, 30);
       return jsonResponse(request, env, { success: true, data: await restoreMember(env, authUser, memberId) });
     }
 
@@ -446,6 +446,13 @@ async function handleRequest(request, env) {
       await applyRateLimit(request, env, "payments", RATE_LIMIT_WINDOW_MS, 60);
       const body = validatePaymentReceiptInput(await parseJsonBody(request));
       return jsonResponse(request, env, { success: true, data: await createPaymentReceipt(env, authUser, memberId, body) }, 201);
+    }
+
+    if (action === "receipt" && method === "DELETE") {
+      await applyRateLimit(request, env, "members-write", RATE_LIMIT_WINDOW_MS, 30);
+      const body = await parseJsonBody(request);
+      const receiptId = assertUuid(body.receiptId ?? body.receipt_id, "receipt id");
+      return jsonResponse(request, env, { success: true, data: await deletePaymentReceipt(env, authUser, memberId, receiptId) });
     }
 
     if (action === "renew" && method === "PATCH") {
@@ -484,19 +491,17 @@ async function handleRequest(request, env) {
   }
 
   if (path === "/attendance" && method === "POST") {
+    await applyRateLimit(request, env, "members-write", RATE_LIMIT_WINDOW_MS, 30);
     const body = validateAttendanceInput(await parseJsonBody(request));
     return jsonResponse(request, env, { success: true, data: await createAttendance(env, authUser, body.memberId, body.visitDate, body.weightKg) }, 201);
   }
 
   const attendanceDeleteMatch = path.match(/^\/attendance\/entry\/([^/]+)$/);
   if (attendanceDeleteMatch && method === "DELETE") {
+    await applyRateLimit(request, env, "members-write", RATE_LIMIT_WINDOW_MS, 30);
     const attendanceId = assertUuid(attendanceDeleteMatch[1], "attendance id");
     await deleteAttendance(env, authUser, attendanceId);
     return jsonResponse(request, env, { success: true, data: { message: "Deleted" } });
-  }
-
-  if (path === "/dashboard/stats" && method === "GET") {
-    return jsonResponse(request, env, { success: true, data: await getDashboardStats(env, authUser) });
   }
 
   if (path === "/notify/test" && method === "POST") {
@@ -509,11 +514,9 @@ async function handleRequest(request, env) {
     const to = requiredString(body.to ?? body.phone ?? body.email, "destination");
     const message = requiredString(body.message, "test message");
     const maxLength = channel === "email" ? 2000 : SMS_MAX_LENGTH;
-    if (message.length > maxLength) {
-      throw new ApiError(400, "INVALID_SMS_MESSAGE", `Test message must be ${maxLength} characters or less`);
-    }
+    assertTestMessage(message, maxLength);
     const provider = channel === "whatsapp" ? "openwa" : channel === "email" ? "appscript" : "smsgate";
-    const result = await dispatchSms(env, { phone: to, message, kind: "test", provider });
+    const result = await dispatchSms(env, { phone: to, message, kind: "test", provider, clientRequestId: optionalClientRequestId(body.clientRequestId ?? body.client_request_id) });
     logInfo("notify_test_sent", { channel, requestId: result.requestId, status: result.status });
     return jsonResponse(request, env, { success: true, data: { requestId: result.requestId, status: result.status, channel } });
   }
@@ -597,18 +600,9 @@ async function handleScheduled(controller, env) {
     return;
   }
 
-  const [expiry, sms] = await Promise.allSettled([runExpireStatus(env), runSmsReminder(env)]);
-  if (expiry.status === "rejected") {
-    logError("scheduled_expiry_failed", expiry.reason);
-  }
-  if (sms.status === "rejected") {
-    logError("scheduled_sms_failed", sms.reason);
-  }
-  logInfo("scheduled_maintenance_complete", {
-    startedAt,
-    expired: expiry.status === "fulfilled" ? expiry.value : -1,
-    sms: sms.status === "fulfilled" ? sms.value : null,
-  });
+  // Unknown schedules must never mass-run jobs: the retry sweep above already
+  // ran (it rides every tick by design), so there is nothing left to do here.
+  logWarn("scheduled_unknown_cron", { startedAt, cron: controller.cron ?? null });
 }
 
 function normalizeApiPath(pathname) {
@@ -620,13 +614,21 @@ function normalizeApiPath(pathname) {
 }
 
 async function parseJsonBody(request) {
-  const length = Number(request.headers.get("content-length") ?? "0");
-  if (length > 1_000_000) {
+  const claimed = Number(request.headers.get("content-length") ?? "0");
+  if (claimed > 1_000_000) {
     throw new ApiError(413, "BODY_TOO_LARGE", "Request body is too large");
   }
 
+  const text = await request.text();
+  // Measure actual bytes: chunked bodies carry no content-length.
+  if (new TextEncoder().encode(text).length > 1_000_000) {
+    throw new ApiError(413, "BODY_TOO_LARGE", "Request body is too large");
+  }
+  if (!text) {
+    throw new ApiError(400, "INVALID_JSON", "Request body must be valid JSON");
+  }
   try {
-    return await request.json();
+    return JSON.parse(text);
   } catch {
     throw new ApiError(400, "INVALID_JSON", "Request body must be valid JSON");
   }
@@ -640,12 +642,18 @@ async function authenticateTrainer(request, env) {
   }
 
   const key = supabasePublishableKey(env);
-  const response = await fetch(`${supabaseUrl(env)}/auth/v1/user`, {
-    headers: {
-      apikey: key,
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  let response;
+  try {
+    response = await fetch(`${supabaseUrl(env)}/auth/v1/user`, {
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${token}`,
+      },
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch (caught) {
+    throw new ApiError(503, "AUTH_UNAVAILABLE", "Sign-in service is unreachable. Please try again.");
+  }
 
   if (!response.ok) {
     throw new ApiError(401, "UNAUTHORIZED", "Invalid or expired session");
@@ -688,6 +696,9 @@ async function loginTrainer(env, body) {
     };
   } catch (error) {
     if (error instanceof ApiError && error.status === 400) {
+      throw error;
+    }
+    if (error instanceof ApiError && error.status >= 500) {
       throw error;
     }
     // Generic response: must not reveal whether the email exists, is
@@ -1084,7 +1095,7 @@ async function addExtraTrainerEmail(env, email, actorEmail) {
   if (!clean || !clean.includes("@")) {
     throw new ApiError(400, "INVALID_EMAIL", "Account email is invalid");
   }
-  const settings = await getSystemSettings(env);
+  const settings = await getSystemSettings(env, { required: true });
   const current = String(settings.trainer_emails_extra ?? "")
     .split(",").map(normalizeEmail).filter(Boolean);
   if (!current.includes(clean)) {
@@ -1097,7 +1108,7 @@ async function addExtraTrainerEmail(env, email, actorEmail) {
 
 async function removeExtraTrainerEmail(env, email) {
   const clean = normalizeEmail(email);
-  const settings = await getSystemSettings(env);
+  const settings = await getSystemSettings(env, { required: true });
   const current = String(settings.trainer_emails_extra ?? "")
     .split(",").map(normalizeEmail).filter(Boolean);
   if (current.includes(clean)) {
@@ -1201,9 +1212,18 @@ async function listMembers(env, user, params) {
       restParams.set("or", `(name.ilike.*${clean}*,phone.ilike.*${clean}*,reg_no.ilike.*${clean}*)`);
     }
   }
-  if (status && status !== "All" && STATUS_VALUES.has(status)) restParams.set("status", `eq.${status}`);
-  if (goal && goal !== "All Goals" && GOALS.has(goal)) restParams.set("goal", `eq.${goal}`);
-  if (payment && payment !== "All Payments" && PAYMENT_STATUSES.has(payment)) restParams.set("payment_status", `eq.${payment}`);
+  if (status && status !== "All" && !STATUS_VALUES.has(status)) {
+    throw new ApiError(400, "INVALID_FILTER", `Unknown status filter: ${status}`);
+  }
+  if (goal && goal !== "All Goals" && !GOALS.has(goal)) {
+    throw new ApiError(400, "INVALID_FILTER", `Unknown goal filter: ${goal}`);
+  }
+  if (payment && payment !== "All Payments" && !PAYMENT_STATUSES.has(payment)) {
+    throw new ApiError(400, "INVALID_FILTER", `Unknown payment filter: ${payment}`);
+  }
+  if (status && status !== "All") restParams.set("status", `eq.${status}`);
+  if (goal && goal !== "All Goals") restParams.set("goal", `eq.${goal}`);
+  if (payment && payment !== "All Payments") restParams.set("payment_status", `eq.${payment}`);
   if (dueSoon) {
     // Same 7-day window as the desk's Plans Ending count: one ending-soon number.
     restParams.set("status", "eq.Active");
@@ -1212,9 +1232,11 @@ async function listMembers(env, user, params) {
   }
 
   restParams.set("order", sortOrder(sort));
-  if (page && limit) {
-    restParams.set("offset", String((page - 1) * limit));
-    restParams.set("limit", String(limit));
+  const safeLimit = Math.min(Math.max(limit ?? 50, 1), 200);
+  const safePage = Math.max(page ?? 1, 1);
+  if (params.get("page") !== null || params.get("limit") !== null) {
+    restParams.set("offset", String((safePage - 1) * safeLimit));
+    restParams.set("limit", String(safeLimit));
   }
 
   const rows = await supabaseJson(env, `/members?${restParams.toString()}`);
@@ -1381,6 +1403,12 @@ async function updateMember(env, user, memberId, input) {
   // Paid mark with dues outstanding is corrected to Partially Paid.
   const editArrears = moneyNum(current.arrearsAmount);
   const editPartial = Math.min(moneyNum(input.partialPaidAmount), moneyNum(input.feesAmount));
+  // Lowering paid below saved bills would silently desync the ledger: the
+  // correction path is deleting the wrong bill, not editing around it.
+  const receiptedCycle = await paymentReceiptCycleTotal(env, user, memberId, current.membershipStart);
+  if (editPartial < receiptedCycle) {
+    throw new ApiError(400, "RECEIPTS_EXCEED_PAID", `Rs.${receiptedCycle} is already in saved bills — delete the wrong bill first, then edit.`);
+  }
   const editBalance = editArrears + Math.max(moneyNum(input.feesAmount) - editPartial, 0);
   const editStatus = editBalance > 0 && input.paymentStatus === "Paid" ? "Partially Paid" : input.paymentStatus;
   const rows = await supabaseJson(env, `/members?id=eq.${encodeURIComponent(memberId)}&owner_user_id=${ownerFilter(user)}&select=*`, {
@@ -1409,6 +1437,31 @@ async function updateMember(env, user, memberId, input) {
 
 async function ensureEditReceipt(env, user, memberRow, input, delta) {
   const bucketsOn = await bucketColumnsAvailable(env);
+  // Deterministic key from the resulting figures: a retried or double-tapped
+  // identical save replays the same key instead of double-recording cash.
+  // (Concurrent *different* edits are genuinely two operations.)
+  const editKey = (await idempotencyAvailable(env, "payment_receipts"))
+    ? `edit:${memberRow.id}:${moneyNum(memberRow.feesAmount)}:${moneyNum(memberRow.partialPaidAmount)}:${moneyNum(memberRow.balanceAmount)}`
+    : null;
+  try {
+    if (editKey && (await findReceiptByRequestKey(env, user, memberRow.id, editKey))) {
+      const fresh = await getMember(env, user, memberRow.id);
+      const expected = moneyNum(memberRow.totalCollected) + delta;
+      if (moneyNum(fresh.totalCollected) < expected) {
+        await supabaseJson(env, `/members?id=eq.${encodeURIComponent(memberRow.id)}&select=id`, {
+          method: "PATCH",
+          body: JSON.stringify({ total_collected: expected }),
+        });
+        memberRow.totalCollected = expected;
+      }
+      return;
+    }
+  } catch (error) {
+    if (error instanceof ApiError && error.status !== 404) {
+      logError("edit_receipt_lookup_failed", error, { memberId: memberRow.id });
+    }
+    // Lookup failed: fall through and attempt the insert (409-safe).
+  }
   try {
     await supabaseJson(env, "/payment_receipts?select=id", {
       method: "POST",
@@ -1421,9 +1474,13 @@ async function ensureEditReceipt(env, user, memberRow, input, delta) {
         method: input.method ?? "Cash",
         note: `Payment recorded: ${input.planType} plan`,
         ...(bucketsOn ? { arrears_applied: 0, cycle_applied: delta, advance_applied: 0 } : {}),
+        ...(editKey ? { client_request_id: editKey } : {}),
       }),
     });
   } catch (error) {
+    if (editKey && isUniqueViolation(error) && /client_request_id/.test(error.message)) {
+      return;
+    }
     logError("edit_receipt_create_failed", error, { memberId: memberRow.id });
     return;
   }
@@ -1441,33 +1498,50 @@ async function ensureEditReceipt(env, user, memberRow, input, delta) {
   }
 }
 
-async function listAllPaymentReceipts(env, user) {
-  const params = new URLSearchParams({
+function pageParams(params, fallbackLimit = 1000, maxLimit = 5000) {
+  const limit = Math.min(numberParam(params.get("limit")) ?? fallbackLimit, maxLimit);
+  const offset = numberParam(params.get("offset")) ?? 0;
+  return { limit, offset };
+}
+
+function applyPaging(params, restParams, fallbackLimit = 1000, maxLimit = 5000) {
+  const { limit, offset } = pageParams(params, fallbackLimit, maxLimit);
+  restParams.set("limit", String(limit));
+  if (offset > 0) {
+    restParams.set("offset", String(offset));
+  }
+}
+
+async function listAllPaymentReceipts(env, user, params = new URLSearchParams()) {
+  const restParams = new URLSearchParams({
     select: "*",
     owner_user_id: ownerFilter(user),
     order: "paid_on.desc,created_at.desc",
   });
-  const rows = await supabaseJson(env, `/payment_receipts?${params.toString()}`);
+  applyPaging(params, restParams);
+  const rows = await supabaseJson(env, `/payment_receipts?${restParams.toString()}`);
   return rows.map(mapPaymentReceipt);
 }
 
-async function listAllRenewalHistory(env, user) {
-  const params = new URLSearchParams({
+async function listAllRenewalHistory(env, user, params = new URLSearchParams()) {
+  const restParams = new URLSearchParams({
     select: "*",
     owner_user_id: ownerFilter(user),
     order: "renewed_on.desc,created_at.desc",
   });
-  const rows = await supabaseJson(env, `/renewal_history?${params.toString()}`);
+  applyPaging(params, restParams);
+  const rows = await supabaseJson(env, `/renewal_history?${restParams.toString()}`);
   return rows.map(mapRenewalHistory);
 }
 
-async function listAllAttendance(env, user) {
-  const params = new URLSearchParams({
+async function listAllAttendance(env, user, params = new URLSearchParams()) {
+  const restParams = new URLSearchParams({
     select: "*,members!inner(owner_user_id)",
     "members.owner_user_id": ownerFilter(user),
     order: "visit_date.desc",
   });
-  const rows = await supabaseJson(env, `/attendance?${params.toString()}`);
+  applyPaging(params, restParams);
+  const rows = await supabaseJson(env, `/attendance?${restParams.toString()}`);
   return rows.map(mapAttendance);
 }
 
@@ -1508,10 +1582,99 @@ async function paymentReceiptTotal(env, user, memberId, membershipStart) {
     owner_user_id: ownerFilter(user),
   });
   if (membershipStart) {
-    params.set("paid_on", `gte.${membershipStart}`);
+    // Creation date, not the editable paid-on: backdated bills still count.
+    params.set("created_at", `gte.${membershipStart}`);
   }
   const rows = await supabaseJson(env, `/payment_receipts?${params.toString()}`);
   return rows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+}
+
+// Cycle-paid cash already in saved bills: the floor an edit may not go under.
+// Scoped by creation date so backdated bills still count.
+async function paymentReceiptCycleTotal(env, user, memberId, membershipStart) {
+  const params = new URLSearchParams({
+    select: "amount,cycle_applied",
+    member_id: `eq.${memberId}`,
+    owner_user_id: ownerFilter(user),
+  });
+  if (membershipStart) {
+    params.set("created_at", `gte.${membershipStart}`);
+  }
+  const rows = await supabaseJson(env, `/payment_receipts?${params.toString()}`);
+  return (rows ?? []).reduce(
+    (sum, row) => sum + (row.cycle_applied === null || row.cycle_applied === undefined ? Number(row.amount || 0) : Number(row.cycle_applied || 0)),
+    0,
+  );
+}
+
+function reverseReceiptBuckets(member, receipt) {
+  const arrearsApplied = moneyNum(receipt.arrears_applied);
+  // Pre-bucket bills stored no split: the whole amount paid the cycle.
+  const cycleApplied = receipt.cycle_applied === null || receipt.cycle_applied === undefined ? moneyNum(receipt.amount) : moneyNum(receipt.cycle_applied);
+  const advanceApplied = moneyNum(receipt.advance_applied);
+  const partial = Math.max(moneyNum(member.partialPaidAmount) - cycleApplied, 0);
+  const arrears = moneyNum(member.arrearsAmount) + arrearsApplied;
+  const advance = Math.max(moneyNum(member.advanceAmount) - advanceApplied, 0);
+  return {
+    partial_paid_amount: partial,
+    arrears_amount: arrears,
+    advance_amount: advance,
+    total_collected: Math.max(moneyNum(member.totalCollected) - moneyNum(receipt.amount), 0),
+    balance_amount: arrears + Math.max(moneyNum(member.feesAmount) - partial, 0),
+    payment_status: statusFromBuckets(member.feesAmount, partial, arrears, advance),
+  };
+}
+
+// Correction path for a wrong bill: exact reversal of its bucket application.
+// Delivery logs stay as history. Reversing a bill whose money a later renewal
+// consumed is approximate by design (floors at zero).
+async function deletePaymentReceipt(env, user, memberId, receiptId) {
+  const found = await supabaseJson(
+    env,
+    `/payment_receipts?id=eq.${encodeURIComponent(receiptId)}&member_id=eq.${encodeURIComponent(memberId)}&owner_user_id=${ownerFilter(user)}&select=*`,
+  );
+  if (!found[0]) throw new ApiError(404, "RECEIPT_NOT_FOUND", "Receipt not found");
+  const member = await getMember(env, user, memberId);
+  const bucketsOn = await bucketColumnsAvailable(env);
+  const next = reverseReceiptBuckets(member, found[0]);
+  const patch = bucketsOn
+    ? next
+    : {
+        partial_paid_amount: next.partial_paid_amount,
+        total_collected: next.total_collected,
+        balance_amount: next.balance_amount,
+        payment_status: next.payment_status,
+      };
+  const snapshot = {
+    partial_paid_amount: moneyNum(member.partialPaidAmount),
+    arrears_amount: moneyNum(member.arrearsAmount),
+    advance_amount: moneyNum(member.advanceAmount),
+    total_collected: moneyNum(member.totalCollected),
+    balance_amount: moneyNum(member.balanceAmount),
+    payment_status: member.paymentStatus,
+  };
+  const updated = await supabaseJson(env, `/members?id=eq.${encodeURIComponent(memberId)}&owner_user_id=${ownerFilter(user)}&select=*`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(patch),
+  });
+  if (!updated[0]) throw new ApiError(404, "MEMBER_NOT_FOUND", "Member not found");
+  try {
+    await supabaseJson(env, `/payment_receipts?id=eq.${encodeURIComponent(receiptId)}&owner_user_id=${ownerFilter(user)}`, {
+      method: "DELETE",
+    });
+  } catch (error) {
+    try {
+      await supabaseJson(env, `/members?id=eq.${encodeURIComponent(memberId)}&owner_user_id=${ownerFilter(user)}&select=id`, {
+        method: "PATCH",
+        body: JSON.stringify(bucketsOn ? snapshot : { partial_paid_amount: snapshot.partial_paid_amount, total_collected: snapshot.total_collected, balance_amount: snapshot.balance_amount, payment_status: snapshot.payment_status }),
+      });
+    } catch {
+      // Compensation is best-effort; the original error below is the truth.
+    }
+    throw error;
+  }
+  return mapMember(updated[0]);
 }
 
 async function findReceiptByRequestKey(env, user, memberId, clientRequestId) {
@@ -1796,6 +1959,9 @@ async function resumeRenewalFromHistory(env, user, member, historyRow, clientReq
 async function renewMember(env, user, memberId, membershipStart, membershipDue, feesAmount, planType, paymentStatus = "Pending", collectedAmount = 0, method = "Cash", clientRequestId = null) {
   const member = await getMember(env, user, memberId);
   assertNotDeleted(member);
+  if (membershipDue < isoDateInTimeZone()) {
+    throw new ApiError(400, "RENEWAL_ALREADY_EXPIRED", "Plan end date is in the past — pick a future end date");
+  }
   // Idempotency first: a retried PATCH resumes an interrupted renewal or
   // returns the current state instead of duplicating history rows, receipts,
   // and arrears. Receipt notifications are keyed per receipt, so resuming
@@ -2051,11 +2217,15 @@ function assertNotDeleted(member) {
 async function suspendMember(env, user, memberId) {
   const member = await getMember(env, user, memberId);
   assertNotDeleted(member);
-  const nextStatus = member.status === "Suspended" ? (member.membershipDue < isoDateInTimeZone() ? "Expired" : "Active") : "Suspended";
+  // Suspend-only and idempotent: unsuspend goes through restore, never a
+  // second tap here.
+  if (member.status === "Suspended") {
+    return member;
+  }
   const rows = await supabaseJson(env, `/members?id=eq.${encodeURIComponent(memberId)}&owner_user_id=${ownerFilter(user)}&select=*`, {
     method: "PATCH",
     headers: { Prefer: "return=representation" },
-    body: JSON.stringify({ status: nextStatus }),
+    body: JSON.stringify({ status: "Suspended" }),
   });
   if (!rows[0]) throw new ApiError(404, "MEMBER_NOT_FOUND", "Member not found");
   return mapMember(rows[0]);
@@ -2073,8 +2243,8 @@ async function deleteMember(env, user, memberId) {
 
 async function restoreMember(env, user, memberId) {
   const member = await getMember(env, user, memberId);
-  if (member.status !== "Deleted") {
-    return member;
+  if (member.status !== "Deleted" && member.status !== "Suspended") {
+    throw new ApiError(409, "NOT_DELETED", "Only a deleted or stopped member can be restored");
   }
   const rows = await supabaseJson(env, `/members?id=eq.${encodeURIComponent(memberId)}&owner_user_id=${ownerFilter(user)}&select=*`, {
     method: "PATCH",
@@ -2137,7 +2307,7 @@ async function listAttendance(env, user, memberId, month) {
     member_id: `eq.${memberId}`,
     order: "visit_date.desc",
   });
-  if (month && /^\d{4}-\d{2}$/.test(month)) {
+  if (month && /^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
     const [filterYear, filterMonth] = month.split("-").map(Number);
     const nextMonth = filterMonth === 12 ? `${filterYear + 1}-01` : `${filterYear}-${String(filterMonth + 1).padStart(2, "0")}`;
     params.set("visit_date", `gte.${month}-01`);
@@ -2185,36 +2355,6 @@ async function deleteAttendance(env, user, attendanceId) {
   await supabaseJson(env, `/attendance?id=eq.${encodeURIComponent(attendanceId)}`, {
     method: "DELETE",
   });
-}
-
-async function getDashboardStats(env, user) {
-  const today = isoDateInTimeZone();
-  const weekEnd = isoDateInTimeZone(addDays(new Date(), 7));
-  const monthStart = `${today.slice(0, 8)}01`;
-
-  const [total, active, expired, pending, partiallyPaid, due, newThisMonth] = await Promise.all([
-    countRows(env, "members", [["owner_user_id", ownerFilter(user)], ["status", "neq.Deleted"]]),
-    countRows(env, "members", [["owner_user_id", ownerFilter(user)], ["status", "eq.Active"]]),
-    countRows(env, "members", [["owner_user_id", ownerFilter(user)], ["status", "eq.Expired"]]),
-    countRows(env, "members", [["owner_user_id", ownerFilter(user)], ["status", "neq.Deleted"], ["payment_status", "eq.Pending"]]),
-    countRows(env, "members", [["owner_user_id", ownerFilter(user)], ["status", "neq.Deleted"], ["payment_status", "eq.Partially Paid"]]),
-    countRows(env, "members", [
-      ["owner_user_id", ownerFilter(user)],
-      ["status", "eq.Active"],
-      ["membership_due", `gte.${today}`],
-      ["membership_due", `lte.${weekEnd}`],
-    ]),
-    countRows(env, "members", [["owner_user_id", ownerFilter(user)], ["status", "neq.Deleted"], ["created_at", `gte.${monthStart}`]]),
-  ]);
-
-  return {
-    total_members: total,
-    active,
-    expired,
-    due_this_week: due,
-    pending_payments: pending + partiallyPaid,
-    new_this_month: newThisMonth,
-  };
 }
 
 async function runExpireStatus(env) {
@@ -2380,6 +2520,9 @@ async function runSmsReminder(env) {
 }
 
 function tallyReminderOutcome(result, outcome, memberId, event) {
+  if (outcome.duplicate === true) {
+    return;
+  }
   if (outcome.status === "sent") {
     result.sent += 1;
     return;
@@ -2512,7 +2655,7 @@ async function keepSupabaseAlive(env) {
 }
 
 async function smsStatus(env, includeSecrets = true) {
-  const settings = await getSystemSettings(env);
+  const settings = await getSystemSettings(env, { required: true });
   // Trainers learn working/not-working only: usernames, URLs, device ids and
   // session ids never leave the backend for non-developers.
   const secret = (value) => (includeSecrets ? value : "");
@@ -2552,6 +2695,21 @@ async function smsStatus(env, includeSecrets = true) {
   };
 }
 
+// Enabling SMS without credentials guarantees SMS_NOT_CONFIGURED on every
+// send: reject it here with the merged (saved + incoming + env) truth.
+async function assertSmsCredsWhenEnabling(env, body) {
+  const enabling = body && typeof body === "object" && String(body.sms_enabled) === "true";
+  if (!enabling) {
+    return;
+  }
+  const settings = await getSystemSettings(env);
+  const username = String(body.smsgate_username ?? settings.smsgate_username ?? env.SMSGATE_USERNAME ?? "").trim();
+  const password = String(body.smsgate_password ?? settings.smsgate_password ?? env.SMSGATE_PASSWORD ?? "").trim();
+  if (!username || !password) {
+    throw new ApiError(400, "INVALID_INPUT", "Add the SMSGate username and password before enabling SMS");
+  }
+}
+
 export function validateSmsSettingsInput(body) {
   if (!body || typeof body !== "object") {
     throw new ApiError(400, "INVALID_INPUT", "Settings are required");
@@ -2578,6 +2736,19 @@ export function validateSmsSettingsInput(body) {
   }
   if (body.sms_auto_reminder_paused !== undefined) {
     out.sms_auto_reminder_paused = assertFlag(body.sms_auto_reminder_paused, "sms_auto_reminder_paused");
+  }
+  if (body.db_keep_alive_enabled !== undefined) {
+    out.db_keep_alive_enabled = assertFlag(body.db_keep_alive_enabled, "db_keep_alive_enabled");
+  }
+  if (body.trainer_emails_extra !== undefined) {
+    const pieces = String(body.trainer_emails_extra)
+      .split(",")
+      .map((piece) => piece.trim())
+      .filter(Boolean);
+    if (pieces.some((piece) => !/^\S+@\S+\.\S+$/.test(piece))) {
+      throw new ApiError(400, "INVALID_INPUT", "trainer_emails_extra must be a comma-separated list of emails");
+    }
+    out.trainer_emails_extra = pieces.join(", ");
   }
   if (body.wa_enabled !== undefined) {
     out.wa_enabled = assertFlag(body.wa_enabled, "wa_enabled");
@@ -2801,7 +2972,11 @@ function sleep(ms) {
 }
 
 function smsgateAuthHeader(account) {
-  return `Basic ${btoa(`${account.username}:${account.password}`)}`;
+  try {
+    return `Basic ${btoa(`${account.username}:${account.password}`)}`;
+  } catch {
+    throw new ApiError(400, "SMS_AUTH_FAILED", "SMSGate username or password uses characters Basic auth cannot encode — use Latin letters, digits, and symbols");
+  }
 }
 
 async function smsgateRequest(account, path, options = {}) {
@@ -3356,6 +3531,27 @@ async function claimDueSmsLogs(env, limit) {
   return (rows ?? []).map(mapSmsLog);
 }
 
+// Conditional lease: only the isolate whose write matches processes the row,
+// so overlapping isolates/cron ticks never work the same row concurrently.
+// The lease is just a pushed next_retry_at that success/failure paths
+// overwrite anyway; a dead worker's rows become due again after 5 minutes.
+async function claimSmsLogRow(env, row) {
+  const params = new URLSearchParams({
+    id: `eq.${row.id}`,
+    status: "eq.queued",
+    select: "id",
+  });
+  if (row.nextRetryAt) {
+    params.set("next_retry_at", `eq.${row.nextRetryAt}`);
+  }
+  const rows = await supabaseJson(env, `/sms_logs?${params.toString()}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({ next_retry_at: new Date(Date.now() + 5 * 60 * 1000).toISOString() }),
+  });
+  return (rows ?? []).length > 0;
+}
+
 export function retryDelayForAttempt(attemptsUsed) {
   // attemptsUsed is 1-based (1 = first attempt just failed): the first delay
   // is 5 min, growing to 24 h.
@@ -3655,8 +3851,8 @@ async function dispatchSmart(env, { phone, email, message, kind, memberId = null
 }
 
 // Ask SMSGate what it actually has for this provider id and reconcile the
-// row. Returns "accepted" | "failed" | "missing" | "unknown". Read-only except
-// for our own bookkeeping — it never sends.
+// row. Returns "accepted" | "pending" | "failed" | "missing" | "unknown".
+// Read-only except for our own bookkeeping — it never sends.
 async function observeProviderState(env, account, row) {
   if (!row.providerMessageId) {
     return "missing";
@@ -3707,8 +3903,9 @@ async function observeProviderState(env, account, row) {
     return "failed";
   }
   // Pending / Cancelling / unrecognized: SMSGate holds it, keep waiting.
+  // Distinct from accepted: still undelivered, must not count as sent.
   await updateSmsLog(env, row.id, { smsgate_state: providerState || row.smsgateState });
-  return "accepted";
+  return "pending";
 }
 
 async function runSmsRetrySweep(env) {
@@ -3751,8 +3948,11 @@ async function runSmsRetrySweep(env) {
 
   const due = await claimDueSmsLogs(env, SMS_RETRY_SWEEP_BATCH);
   for (const row of due) {
-    result.processed += 1;
     try {
+      if (!(await claimSmsLogRow(env, row))) {
+        continue;
+      }
+      result.processed += 1;
       const rowProvider = row.provider ?? "smsgate";
       // SMSGate rows with a provider id may already be in SMSGate's hands
       // (timeout on the first try): verify before any re-post so a retry
@@ -3766,7 +3966,7 @@ async function runSmsRetrySweep(env) {
             result.sent += 1;
             continue;
           }
-          if (observed === "unknown") {
+          if (observed === "pending" || observed === "unknown") {
             result.queued += 1;
             continue;
           }
@@ -3832,7 +4032,7 @@ async function refreshRecentSentLogs(env, account) {
       continue;
     }
     const observed = await observeProviderState(env, account, mapped);
-    if (observed === "accepted") {
+    if (observed === "accepted" || observed === "pending") {
       refreshed += 1;
     } else if (observed === "failed" && mapped.attempts < SMS_RETRY_MAX_ATTEMPTS) {
       // SMSGate says the send failed after we recorded success: requeue for a
@@ -3988,7 +4188,7 @@ async function emailHealth(env, settings) {
 // degrades to an error string so one failing check can't hide the others.
 async function smsHealth(env) {
   const startedAt = Date.now();
-  const settings = await getSystemSettings(env);
+  const settings = await getSystemSettings(env, { required: true });
   const health = {
     configured: smsSendingConfigured(env, settings),
     smsEnabled: settings.sms_enabled !== "false",
@@ -4251,6 +4451,10 @@ ${receipt.note ? `<p style="margin:16px 0 0;font-size:12px;color:#4b5563;">Note:
 // the UI can show per-channel state. Never throws — money is already saved.
 async function sendReceiptNotifications(env, member, receipt) {
   const outcome = { sms: "failed", email: "skipped" };
+  if (member.status === "Deleted") {
+    outcome.sms = "skipped";
+    return outcome;
+  }
   try {
     const sms = await dispatchSms(env, {
       phone: member.phone,
@@ -4633,17 +4837,17 @@ function validateMemberInput(body) {
     planType: assertEnum(body.planType ?? body.plan_type, PLAN_TYPES, "plan type"),
     membershipStart: requiredDate(body.membershipStart ?? body.membership_start, "membership start"),
     membershipDue: requiredDate(body.membershipDue ?? body.membership_due, "membership due"),
-    feesAmount: requiredNumber(body.feesAmount ?? body.fees_amount, "fees amount", 0),
+    feesAmount: requiredInteger(body.feesAmount ?? body.fees_amount, "fees amount", 0),
     paymentStatus: assertEnum(body.paymentStatus ?? body.payment_status, PAYMENT_STATUSES, "payment status"),
     method: body.method !== undefined ? assertEnum(body.method, PAYMENT_METHODS, "payment method") : undefined,
     avatar: typeof body.avatar === "string" ? body.avatar : undefined,
     trainingType: assertEnum(body.trainingType ?? body.training_type ?? "General", TRAINING_TYPES, "training type"),
     address: typeof body.address === "string" ? body.address.trim() : "",
     partialPaidAmount: body.partialPaidAmount !== undefined || body.partial_paid_amount !== undefined
-      ? requiredNumber(body.partialPaidAmount ?? body.partial_paid_amount, "partial paid amount", 0)
+      ? requiredInteger(body.partialPaidAmount ?? body.partial_paid_amount, "partial paid amount", 0)
       : 0,
     balanceAmount: body.balanceAmount !== undefined || body.balance_amount !== undefined
-      ? requiredNumber(body.balanceAmount ?? body.balance_amount, "balance amount", 0)
+      ? requiredInteger(body.balanceAmount ?? body.balance_amount, "balance amount", 0)
       : 0,
     clientRequestId: optionalClientRequestId(body.clientRequestId ?? body.client_request_id),
   };
@@ -4651,6 +4855,14 @@ function validateMemberInput(body) {
   if (!/^\d{10}$/.test(input.phone)) {
     throw new ApiError(400, "INVALID_PHONE", "Phone number must be 10 digits");
   }
+
+  // Giant values break SMS templates and bloat rows: cap everything textual.
+  assertMaxLength(input.name, 120, "name");
+  assertMaxLength(input.address, 500, "address");
+  for (const key of ["goalOther", "healthProblem", "specialInstruction", "warmupExercises", "flexibilityTraining", "cardioTraining"]) {
+    assertMaxLength(input[key], 2000, key);
+  }
+  assertMaxLength(input.avatar, 204800, "avatar");
 
   // Balance may exceed the cycle fee when old pending exists (it always
   // includes arrears); only the cycle-paid figure is capped here.
@@ -4693,13 +4905,13 @@ export function validateRenewInput(body) {
   const input = {
     membershipStart: requiredDate(body.membershipStart ?? body.membership_start, "membership start"),
     membershipDue: requiredDate(body.membershipDue ?? body.membership_due, "membership due"),
-    feesAmount: requiredNumber(body.feesAmount ?? body.fees_amount, "fees amount", 0),
+    feesAmount: requiredInteger(body.feesAmount ?? body.fees_amount, "fees amount", 0),
     planType: body.planType ?? body.plan_type ? assertEnum(body.planType ?? body.plan_type, PLAN_TYPES, "plan type") : undefined,
     paymentStatus: body.paymentStatus ?? body.payment_status ? assertEnum(body.paymentStatus ?? body.payment_status, PAYMENT_STATUSES, "payment status") : "Pending",
     // New clients send collectedAmount (total cash incl. possible advance);
     // old clients send partialPaidAmount. Old carryForward flags are ignored:
     // arrears always stay visible now, never merged, never dropped.
-    collectedAmount: requiredNumber(
+    collectedAmount: requiredInteger(
       body.collectedAmount ?? body.collected_amount ?? body.partialPaidAmount ?? body.partial_paid_amount ?? 0,
       "collected amount",
       0,
@@ -4748,14 +4960,25 @@ export function validatePaymentReceiptInput(body) {
     throw new ApiError(400, "INVALID_PAYMENT_NOTE", "Payment note must be 180 characters or less");
   }
 
+  const paidOn = requiredDate(body.paidOn ?? body.paid_on, "payment date");
+  if (paidOn > isoDateInTimeZone()) {
+    throw new ApiError(400, "INVALID_DATE", "Payment date cannot be in the future");
+  }
+
   return {
-    paidOn: requiredDate(body.paidOn ?? body.paid_on, "payment date"),
-    amount: requiredNumber(body.amount, "payment amount", 1, 1_000_000),
+    paidOn,
+    amount: requiredInteger(body.amount, "payment amount", 1, 1_000_000),
     method: assertEnum(body.method, PAYMENT_METHODS, "payment method"),
     note: note ?? "",
     receiptNo,
     clientRequestId: optionalClientRequestId(body.clientRequestId ?? body.client_request_id),
   };
+}
+
+function assertTestMessage(message, maxLength) {
+  if (message.length < SMS_MIN_LENGTH || message.length > maxLength) {
+    throw new ApiError(400, "INVALID_SMS_MESSAGE", `Test message must be ${SMS_MIN_LENGTH} to ${maxLength} characters`);
+  }
 }
 
 function optionalClientRequestId(value) {
@@ -4796,8 +5019,8 @@ function isUniqueViolation(error) {
 }
 
 function assertDueDateOrder(startDate, dueDate) {
-  if (dueDate < startDate) {
-    throw new ApiError(400, "INVALID_MEMBERSHIP_DATES", "Due date must be on or after the start date");
+  if (dueDate <= startDate) {
+    throw new ApiError(400, "INVALID_MEMBERSHIP_DATES", "Due date must be after the start date");
   }
 }
 
@@ -4823,9 +5046,13 @@ function daysInUtcMonth(year, monthIndex) {
 }
 
 function validateAttendanceInput(body) {
+  const visitDate = requiredDate(body.visitDate ?? body.visit_date, "visit date");
+  if (visitDate > isoDateInTimeZone()) {
+    throw new ApiError(400, "INVALID_DATE", "Visit date cannot be in the future");
+  }
   return {
     memberId: assertUuid(body.memberId ?? body.member_id, "member id"),
-    visitDate: requiredDate(body.visitDate ?? body.visit_date, "visit date"),
+    visitDate,
     weightKg: body.weightKg === undefined && body.weight_kg === undefined ? undefined : requiredNumber(body.weightKg ?? body.weight_kg, "weight", 20, 250),
   };
 }
@@ -5080,6 +5307,7 @@ function mapRenewalHistory(row) {
     amount: Number(row.amount || 0),
     arrearsCarried: Number(row.arrears_carried || 0),
     paymentStatus: row.payment_status,
+    collectedAmount: row.collected_amount === null || row.collected_amount === undefined ? undefined : Number(row.collected_amount),
     renewedOn: row.renewed_on,
     createdAt: row.created_at,
   };
@@ -5106,10 +5334,25 @@ function optionalText(value) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
 
+function assertMaxLength(value, max, label) {
+  if (value !== undefined && value !== null && String(value).length > max) {
+    throw new ApiError(400, "INVALID_INPUT", `${label} is too long (max ${max} characters)`);
+  }
+}
+
 function requiredNumber(value, label, min, max = Number.POSITIVE_INFINITY) {
   const number = Number(value);
   if (!Number.isFinite(number) || number < min || number > max) {
     throw new ApiError(400, "INVALID_INPUT", `${label} is invalid`);
+  }
+  return number;
+}
+
+// Gym money is whole rupees everywhere: no paise in, no decimals out.
+function requiredInteger(value, label, min, max = Number.POSITIVE_INFINITY) {
+  const number = requiredNumber(value, label, min, max);
+  if (!Number.isInteger(number)) {
+    throw new ApiError(400, "INVALID_INPUT", `${label} must be whole rupees`);
   }
   return number;
 }
@@ -5171,7 +5414,10 @@ function toDbColumn(column) {
     updatedAt: "updated_at",
   };
   const safe = columns[column];
-  return safe ?? "created_at";
+  if (!safe) {
+    throw new ApiError(400, "INVALID_FILTER", `Unknown sort column: ${column}`);
+  }
+  return safe;
 }
 
 export function addDays(date, days) {
@@ -5207,14 +5453,24 @@ function errorResponse(request, env, error) {
     logError("unhandled_request_error", error);
   }
 
+  // Raw Postgres/PostgREST codes leak internals: sanitize at the boundary,
+  // keep the detail in server logs. Internal handlers match codes before here.
+  let code = apiError.code;
+  let message = apiError.message;
+  if (/^(PGRST\d+|\d{5})$/.test(code)) {
+    logError("sanitized_upstream_error", error, { code, status: apiError.status });
+    code = apiError.status === 409 ? "CONFLICT" : apiError.status >= 500 ? "UPSTREAM_ERROR" : "INVALID_INPUT";
+    message = apiError.status === 409 ? "This record conflicts with existing data" : apiError.status >= 500 ? "A backend service failed. Please try again." : "The request was invalid";
+  }
+
   return jsonResponse(
     request,
     env,
     {
       success: false,
       error: {
-        code: apiError.code,
-        message: apiError.message,
+        code,
+        message,
       },
     },
     apiError.status,
@@ -5285,7 +5541,7 @@ function logError(event, error, details = {}) {
   addLog("error", event, message, details);
 }
 
-async function getSystemSettings(env) {
+async function getSystemSettings(env, options = {}) {
   try {
     const rows = await supabaseJson(env, "/system_settings?select=key,value");
     const settings = {};
@@ -5297,6 +5553,9 @@ async function getSystemSettings(env) {
     return settings;
   } catch (err) {
     logError("get_system_settings_failed", err);
+    if (options.required === true) {
+      throw new ApiError(503, "SETTINGS_UNAVAILABLE", "System settings are unreachable. Please try again.");
+    }
   }
   return {};
 }
@@ -5340,7 +5599,7 @@ async function saveSystemSettings(env, settings) {
     }
   }
   if (rows.length === 0) {
-    return;
+    return 0;
   }
 
   await supabaseJson(env, "/system_settings", {
@@ -5351,4 +5610,5 @@ async function saveSystemSettings(env, settings) {
     },
     body: JSON.stringify(rows)
   });
+  return rows.length;
 }

@@ -229,7 +229,7 @@ export function SettingsModal({ open, trainer, onClose, dataCounts, onWipeAll }:
   }
 
   return (
-    <Modal open={open} title="Fitness World Settings" onClose={onClose}>
+    <Modal open={open} title="Fitness World Settings" onClose={onClose} disableBackdropClose>
       {/* Premium Tabbed Navigation */}
       <div className="sticky top-0 bg-brand-white z-20 flex overflow-x-auto scrollbar-hide flex-nowrap border-b border-border-default/60 mb-5 pb-0 pt-1 -mx-6 px-6">
 

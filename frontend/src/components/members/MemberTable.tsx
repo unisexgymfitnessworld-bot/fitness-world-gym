@@ -11,8 +11,9 @@ import {
 import { Eye, MessageCircle, MessageSquare, Pencil, UserX, SearchX, Plus, Download, UserCheck, Trash2 } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
-import { compareRegistrationNumbers, displayGoal, displayMemberStatus, displayPaymentStatus, formatDisplayDate, formatPhone, getDueTone, getMemberActionDueDate, getMemberDueKind, initials, formatCurrency, todayISO } from "../../lib/utils";
+import { compareRegistrationNumbers, displayGoal, displayMemberStatus, displayPaymentStatus, formatDisplayDate, formatPhone, getDisplayStatus, getDueTone, getMemberActionDueDate, getMemberDueKind, initials, formatCurrency, todayISO } from "../../lib/utils";
 import { csvCell, downloadCsv } from "../../lib/escape";
+import { isApiConfigured } from "../../lib/api";
 import { getCollectiblePendingAmount } from "../../lib/analytics";
 import type { Member } from "../../types";
 import { Badge } from "../ui/Badge";
@@ -31,6 +32,7 @@ interface MemberTableProps {
   onRestore: (memberId: string) => void;
   onDelete: (memberId: string) => void;
   isDbEmpty?: boolean;
+  loadFailed?: boolean;
   onAddClick?: () => void;
   onClearFilters?: () => void;
 }
@@ -52,7 +54,11 @@ const memberGlobalFilter: FilterFn<Member> = (row, _columnId, filterValue) => {
     return true;
   }
   const member = row.original;
-  return [member.name, member.phone, member.regNo].some((value) => value.toLowerCase().includes(query));
+  if ([member.name, member.phone, member.regNo].some((value) => value.toLowerCase().includes(query))) {
+    return true;
+  }
+  const queryDigits = query.replace(/\D/g, "");
+  return queryDigits.length > 0 && member.phone.replace(/\D/g, "").includes(queryDigits);
 };
 
 export function MemberTable({
@@ -66,6 +72,7 @@ export function MemberTable({
   onRestore,
   onDelete,
   isDbEmpty = false,
+  loadFailed = false,
   onAddClick,
   onClearFilters,
 }: MemberTableProps) {
@@ -113,18 +120,18 @@ export function MemberTable({
         member.phone,
         member.age,
         member.gender,
-        member.joinDate,
+        formatDisplayDate(member.joinDate),
         member.weightKg,
         member.heightCm,
         member.bmi,
         displayGoal(member),
         member.planType,
-        member.membershipStart,
-        getMemberActionDueDate(member),
+        formatDisplayDate(member.membershipStart),
+        formatDisplayDate(getMemberActionDueDate(member)),
         getMemberDueKind(member),
         member.feesAmount,
-        member.paymentStatus,
-        member.status,
+        displayPaymentStatus(member.paymentStatus),
+        displayMemberStatus(getDisplayStatus(member)),
         member.trainingType || "General",
         member.address || "",
         member.partialPaidAmount ?? 0,
@@ -133,7 +140,7 @@ export function MemberTable({
       csvRows.push(row.map(csvCell).join(","));
     }
 
-    downloadCsv(csvRows.join("\n"), `fitness_world_members_${new Date().toISOString().slice(0, 10)}.csv`);
+    downloadCsv(csvRows.join("\n"), `${isApiConfigured ? "" : "DEMO_"}fitness_world_members_${new Date().toISOString().slice(0, 10)}.csv`);
   }
 
   useEffect(() => {
@@ -247,21 +254,7 @@ export function MemberTable({
       columnHelper.accessor("status", {
         header: "Status",
         cell: (info) => {
-          const status = info.getValue();
-          const member = info.row.original;
-          const today = todayISO();
-          
-          let displayStatus = status;
-          if (status === "Active") {
-            const isDueTodayOrPast = member.membershipDue <= today;
-            const isUnpaid = member.paymentStatus === "Pending" || member.paymentStatus === "Partially Paid";
-            if (isDueTodayOrPast && isUnpaid) {
-              displayStatus = "Expired";
-            } else if (member.membershipDue < today) {
-              displayStatus = "Expired";
-            }
-          }
-          
+          const displayStatus = getDisplayStatus(info.row.original);
           return (
             <Badge tone={displayStatus === "Active" ? "active" : displayStatus === "Expired" ? "expired" : "neutral"}>
               {displayMemberStatus(displayStatus)}
@@ -272,6 +265,7 @@ export function MemberTable({
       columnHelper.display({
         id: "actions",
         header: "Actions",
+        enableSorting: false,
         cell: (info) => {
           const member = info.row.original;
           return (
@@ -380,9 +374,11 @@ export function MemberTable({
   if (loading) {
     return (
       <section className="grid gap-3">
-        <SkeletonRow />
-        <SkeletonRow />
-        <SkeletonRow />
+        <div aria-busy="true" aria-label="Loading members" className="grid gap-1.5">
+          {Array.from({ length: 12 }, (_, index) => (
+            <SkeletonRow key={index} />
+          ))}
+        </div>
       </section>
     );
   }
@@ -431,11 +427,16 @@ export function MemberTable({
             <p className="mt-2.5 max-w-md text-[14px] font-semibold text-text-secondary leading-relaxed sm:text-[15px]">
               Start by registering your first member to track their plans, body metrics, BMI, and daily attendance.
             </p>
-            {onAddClick && (
+            {onAddClick && !loadFailed && (
               <Button className="mt-6 px-6 py-2.5" onClick={onAddClick}>
                 <Plus size={18} />
                 Add First Member
               </Button>
+            )}
+            {loadFailed && (
+              <p className="mt-6 max-w-md text-[14px] font-bold text-status-expired">
+                Could not reach gym data — fix the connection above first.
+              </p>
             )}
           </div>
         ) : (
@@ -463,6 +464,7 @@ export function MemberTable({
           const dueTone = getDueTone(member);
           const nextDueDate = getMemberActionDueDate(member);
           const nextDueKind = getMemberDueKind(member);
+          const cardStatus = getDisplayStatus(member);
           return (
             <article
               key={row.id}
@@ -489,8 +491,8 @@ export function MemberTable({
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono text-[11px] font-bold text-brand-primary">{member.regNo}</span>
-                    <Badge tone={member.status === "Active" ? "active" : member.status === "Expired" ? "expired" : "neutral"}>
-                      {displayMemberStatus(member.status)}
+                    <Badge tone={cardStatus === "Active" ? "active" : cardStatus === "Expired" ? "expired" : "neutral"}>
+                      {displayMemberStatus(cardStatus)}
                     </Badge>
                     {member.smsSent3days && (
                       <span className="inline-flex items-center gap-1 text-[10px] font-bold text-brand-primary bg-brand-primary-light px-1.5 py-0.5 rounded-md uppercase tracking-wider">SMS Sent</span>
@@ -640,8 +642,19 @@ export function MemberTable({
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
-                  <th key={header.id} className="border-b border-border-default px-4 py-3.5 text-[12px] font-bold uppercase tracking-wider text-text-muted">
-                    {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                  <th
+                    key={header.id}
+                    aria-sort={header.column.getIsSorted() === "asc" ? "ascending" : header.column.getIsSorted() === "desc" ? "descending" : undefined}
+                    className="border-b border-border-default px-4 py-3.5 text-[12px] font-bold uppercase tracking-wider text-text-muted"
+                  >
+                    {header.isPlaceholder ? null : header.column.getCanSort() ? (
+                      <button type="button" onClick={header.column.getToggleSortingHandler()} className="focus-ring inline-flex items-center gap-1 uppercase tracking-wider hover:text-text-primary" aria-label={`Sort by ${typeof header.column.columnDef.header === "string" ? header.column.columnDef.header : header.id}`}>
+                        {flexRender(header.column.columnDef.header, header.getContext())}
+                        <span aria-hidden="true">{header.column.getIsSorted() === "asc" ? "▲" : header.column.getIsSorted() === "desc" ? "▼" : "⇅"}</span>
+                      </button>
+                    ) : (
+                      flexRender(header.column.columnDef.header, header.getContext())
+                    )}
                   </th>
                 ))}
               </tr>

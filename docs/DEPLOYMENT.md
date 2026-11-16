@@ -44,6 +44,8 @@ Update these placeholders once the production environments are provisioned:
    - `202606270001_statement_kind_and_member_idempotency.sql` (statement kind + member keys)
    - `202606280001_wipe_owner_scope.sql` (wipe scoped to one owner)
    - `202606290001_renew_resume_columns.sql` (renew crash-resume columns)
+   - `202606300001_sms_logs_email_html.sql` (rich email body on the outbox)
+   - `202606310001_tail_hardening.sql` (CHECKs, triggers, composite indexes; safe rerun)
 
    Shortcut for existing projects: paste `supabase/APPLY_MISSING_MIGRATIONS.sql` (idempotent, safe to re-run) instead. It covers everything above section 13 onward plus the early pieces older DBs may lack.
 3. **Copy Secrets**: Retrieve the following from **Settings** → **API**:

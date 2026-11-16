@@ -71,7 +71,7 @@ export function StatementModal({ open, memberName, memberEmail, onClose, onPrevi
   }
 
   return (
-    <Modal open={open} title={`Send Bill To ${memberName}`} onClose={onClose}>
+    <Modal open={open} title={`Send Bill To ${memberName}`} onClose={onClose} disableBackdropClose>
       <div className="grid gap-4">
         <div className="grid grid-cols-3 gap-2">
           {channels.map((entry) => (

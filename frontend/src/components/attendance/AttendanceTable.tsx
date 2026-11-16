@@ -10,7 +10,7 @@ import { Input } from "../ui/Input";
 interface AttendanceTableProps {
   memberId: string;
   attendance: AttendanceEntry[];
-  onAddVisit: (memberId: string, visitDate: string, weightKg?: number) => void;
+  onAddVisit: (memberId: string, visitDate: string, weightKg?: number) => Promise<void>;
   onDeleteVisit: (attendanceId: string) => void;
 }
 
@@ -29,30 +29,69 @@ export function AttendanceTable({ memberId, attendance, onAddVisit, onDeleteVisi
   const [visitDate, setVisitDate] = useState(todayISO());
   const [weight, setWeight] = useState("");
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const visits = attendance.filter((entry) => entry.memberId === memberId);
+  const visits = attendance
+    .filter((entry) => entry.memberId === memberId)
+    .sort((a, b) => b.visitDate.localeCompare(a.visitDate));
 
-  function submitVisit(): void {
-    if (saving || !visitDate || visitDate > todayISO()) {
+  function validate(): { visitDate: string; weightKg?: number } | null {
+    if (!visitDate) {
+      setFormError("Pick the visit date.");
+      return null;
+    }
+    if (visitDate > todayISO()) {
+      setFormError("Pick today or a past date.");
+      return null;
+    }
+    if (attendance.some((entry) => entry.memberId === memberId && entry.visitDate === visitDate)) {
+      setFormError("A visit is already logged for this date.");
+      return null;
+    }
+    if (weight.trim() !== "") {
+      const parsed = Number(weight);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        setFormError("Weight must be a number above 0.");
+        return null;
+      }
+      return { visitDate, weightKg: parsed };
+    }
+    return { visitDate };
+  }
+
+  async function submitVisit(event: React.FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (saving) {
       return;
     }
-    const parsedWeight = weight ? Number(weight) : undefined;
-    const validWeight = parsedWeight !== undefined && Number.isFinite(parsedWeight) && parsedWeight > 0 ? parsedWeight : undefined;
+    const valid = validate();
+    if (!valid) {
+      return;
+    }
+    setFormError(null);
     setSaving(true);
-    onAddVisit(memberId, visitDate, validWeight);
-    setWeight("");
-    window.setTimeout(() => setSaving(false), 1500);
+    try {
+      await onAddVisit(memberId, valid.visitDate, valid.weightKg);
+      setWeight("");
+    } catch (caught) {
+      setFormError(caught instanceof Error ? caught.message : "Unable to log visit.");
+    } finally {
+      setSaving(false);
+    }
   }
+
+  const dateInvalid = !visitDate || visitDate > todayISO();
 
   return (
     <section className="grid gap-3 lg:gap-4">
-      <div className="studio-card grid gap-2 rounded-[var(--radius-card)] p-3 md:grid-cols-[1fr_1fr_auto] lg:gap-3 lg:p-4 print:hidden">
+      <form onSubmit={(event) => void submitVisit(event)} className="studio-card grid gap-2 rounded-[var(--radius-card)] p-3 md:grid-cols-[1fr_1fr_auto] lg:gap-3 lg:p-4 print:hidden">
         <Input label="Visit Date" className="studio-input" type="date" max={todayISO()} value={visitDate} onChange={(event) => setVisitDate(event.target.value)} />
         <Input label="Weight kg" className="studio-input" type="number" step="0.01" min="1" value={weight} onChange={(event) => setWeight(event.target.value)} />
-        <Button className="self-end" onClick={submitVisit} disabled={saving}>
+        <Button className="self-end" type="submit" disabled={saving || dateInvalid}>
           {saving ? "Adding..." : "Add Visit"}
         </Button>
-      </div>
+        {formError ? <p className="text-[12px] font-bold text-status-expired md:col-span-3">{formError}</p> : null}
+      </form>
 
       <motion.div
         className="studio-card overflow-hidden rounded-[var(--radius-card)]"

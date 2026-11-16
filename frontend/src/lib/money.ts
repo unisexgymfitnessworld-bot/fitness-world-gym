@@ -87,6 +87,38 @@ export function applyAllocation(
   };
 }
 
+export interface ReceiptApplied {
+  arrearsApplied?: number;
+  cycleApplied?: number;
+  advanceApplied?: number;
+  amount: number;
+}
+
+/**
+ * Exact inverse of applyAllocation for deleting a wrong bill: arrears reopen,
+ * cycle/advance/total decrease. Pre-bucket receipts stored no split, so the
+ * whole amount reverses from the cycle. Reversing a bill whose money was
+ * later consumed by a renewal is approximate by design (floors at zero).
+ */
+export function reverseAllocation(
+  buckets: MoneyBuckets,
+  applied: ReceiptApplied,
+  totalCollectedBefore: number,
+): AppliedBuckets {
+  const cycle = applied.cycleApplied ?? applied.amount;
+  const arrearsAmount = safeMoney(buckets.arrearsAmount) + safeMoney(applied.arrearsApplied);
+  const partialPaidAmount = Math.max(safeMoney(buckets.partialPaidAmount) - safeMoney(cycle), 0);
+  const advanceAmount = Math.max(safeMoney(buckets.advanceAmount) - safeMoney(applied.advanceApplied), 0);
+  const balanceAmount = arrearsAmount + Math.max(safeMoney(buckets.feesAmount) - partialPaidAmount, 0);
+  return {
+    partialPaidAmount,
+    arrearsAmount,
+    advanceAmount,
+    balanceAmount,
+    totalCollected: Math.max(safeMoney(totalCollectedBefore) - safeMoney(applied.amount), 0),
+  };
+}
+
 export type SimplePaymentStatus = "Paid" | "Pending" | "Partially Paid";
 
 export function statusFromBuckets(

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { paymentMethodOptions, type Member, type PaymentMethod, type PaymentStatus, type PlanType, type RenewalHistoryEntry } from "../../types";
 import { allocatePayment, cycleDue } from "../../lib/money";
-import { calculateDueDate, calculateNextRenewalStart, cn, formatCurrency, formatDisplayDate } from "../../lib/utils";
+import { calculateDueDate, calculateNextRenewalStart, cn, formatCurrency, formatDisplayDate, todayISO } from "../../lib/utils";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Modal } from "../ui/Modal";
@@ -39,6 +39,9 @@ export function RenewModal({ open, member, renewalHistory, onClose, onConfirm }:
   const [method, setMethod] = useState<PaymentMethod>("Cash");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [overlapAck, setOverlapAck] = useState(false);
+  const overlapsCurrentPlan = Boolean(membershipStart) && membershipStart <= member.membershipDue;
+  const endsInPast = Boolean(membershipDue) && membershipDue < todayISO();
   // One idempotency key per modal open (the modal remounts every open): every
   // submit attempt of this renewal shares it, so double-taps and timeout
   // retaps hit the server dedup instead of renewing twice.
@@ -82,8 +85,16 @@ export function RenewModal({ open, member, renewalHistory, onClose, onConfirm }:
       setError("Pick the plan start and end dates.");
       return;
     }
-    if (membershipDue < membershipStart) {
-      setError("Plan end date cannot be before the start date.");
+    if (membershipDue <= membershipStart) {
+      setError("Plan end date must be after the start date.");
+      return;
+    }
+    if (endsInPast) {
+      setError("Plan end date is in the past — pick a future end date.");
+      return;
+    }
+    if (overlapsCurrentPlan && !overlapAck) {
+      setError("Start date overlaps the current plan — tick the box below to confirm.");
       return;
     }
     if (!Number.isFinite(feesAmount) || feesAmount < 0) {
@@ -123,7 +134,7 @@ export function RenewModal({ open, member, renewalHistory, onClose, onConfirm }:
   const showCollected = paymentStatus !== "Pending";
 
   return (
-    <Modal open={open} title="Renew Membership" onClose={onClose}>
+    <Modal open={open} title="Renew Membership" onClose={onClose} disableBackdropClose>
       <form onSubmit={handleRenewSubmit} className="flex flex-col gap-4">
         <div className="rounded-[var(--radius-card)] bg-brand-primary-light/40 border border-brand-primary/10 p-3 lg:p-4 text-brand-primary">
           <p className="text-[12px] font-bold uppercase tracking-wider">Where The Money Goes</p>
@@ -271,6 +282,13 @@ export function RenewModal({ open, member, renewalHistory, onClose, onConfirm }:
                   </option>
                 ))}
               </select>
+            </label>
+          )}
+
+          {overlapsCurrentPlan && (
+            <label className="flex cursor-pointer items-start gap-2.5 rounded-[var(--radius-card)] border border-amber-200 bg-amber-50 px-3 py-2.5 text-[13px] font-bold text-amber-800 sm:col-span-2">
+              <input type="checkbox" className="mt-0.5 h-4 w-4 accent-brand-primary" checked={overlapAck} onChange={(event) => setOverlapAck(event.target.checked)} />
+              <span>Start date overlaps the current plan (ends {formatDisplayDate(member.membershipDue)}). Tick to confirm this is intentional.</span>
             </label>
           )}
 

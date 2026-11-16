@@ -1,4 +1,4 @@
-import { formatCurrency, formatDisplayDate, getMemberActionDueDate, getMemberDueKind } from "./utils";
+import { displayGoal, formatCurrency, formatDisplayDate, getMemberActionDueDate, getMemberDueKind } from "./utils";
 import type { Member } from "../types";
 
 export type MessageTemplateId =
@@ -64,7 +64,7 @@ export function createMessageForTemplate(member: Member, templateId: MessageTemp
     case "inactive-member":
       return `Hi ${member.name}, we have not seen you at Fitness World recently. Please visit the gym so we can keep your fitness progress on track. - Fitness World`;
     case "progress-follow-up":
-      return `Hi ${member.name}, checking in on your ${member.goal.toLowerCase()} progress at Fitness World. Visit the gym and we will review your workout and body progress. - Fitness World`;
+      return `Hi ${member.name}, checking in on your ${displayGoal(member).toLowerCase()} progress at Fitness World. Visit the gym and we will review your workout and body progress. - Fitness World`;
   }
 }
 

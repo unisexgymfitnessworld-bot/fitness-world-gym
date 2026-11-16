@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { summarizePeriod } from "./analytics";
+import { getMembersForAnalyticsRange, summarizePeriod } from "./analytics";
 import type { Member, PaymentReceipt, RenewalHistoryEntry } from "../types";
 
 const PERIOD = { start: new Date(2026, 10, 1), end: new Date(2026, 10, 30) };
@@ -79,5 +79,41 @@ describe("summarizePeriod population scoping", () => {
     assert.equal(summary.collectedAmount, 0);
     assert.equal(summary.expectedAmount, 0);
     assert.equal(summary.collectionRate, 0);
+  });
+});
+
+describe("money-touch membership", () => {
+  const oldMember = () =>
+    member({
+      id: "m-old",
+      joinDate: "2026-06-05",
+      membershipStart: "2026-06-05",
+      membershipDue: "2026-09-05",
+      feesAmount: 1800,
+      paymentStatus: "Partially Paid",
+      partialPaidAmount: 1000,
+      balanceAmount: 800,
+    });
+
+  it("includes an old member who paid cash inside the range", () => {
+    const inRange = getMembersForAnalyticsRange([oldMember()], "1m", new Date(2026, 10, 15), [
+      receipt({ id: "rc-nov", memberId: "m-old", paidOn: "2026-11-10", amount: 800 }),
+    ]);
+    assert.equal(inRange.length, 1);
+    const outRange = getMembersForAnalyticsRange([oldMember()], "1m", new Date(2026, 10, 15), [
+      receipt({ id: "rc-oct", memberId: "m-old", paidOn: "2026-10-10", amount: 800 }),
+    ]);
+    assert.equal(outRange.length, 0);
+  });
+
+  it("attributes the old member's cash and fees together, keeping the rate sane", () => {
+    const summary = summarizePeriod("This Month", [oldMember()], new Date(2026, 10, 15), {
+      receipts: [receipt({ id: "rc-nov", memberId: "m-old", paidOn: "2026-11-10", amount: 800 })],
+      renewals: [],
+      period: PERIOD,
+    });
+    assert.equal(summary.collectedAmount, 800);
+    assert.equal(summary.expectedAmount, 1800);
+    assert.ok(summary.collectionRate <= 100);
   });
 });

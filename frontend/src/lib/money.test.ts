@@ -6,6 +6,7 @@ import {
   applyRenewal,
   cycleDue,
   receiptLines,
+  reverseAllocation,
   splitMergedBalance,
   statusFromBuckets,
   totalBalance,
@@ -137,6 +138,39 @@ describe("money buckets", () => {
       feesAmount: 1800,
       partialPaidAmount: 0,
       arrearsAmount: 1200,
+    });
+  });
+
+  it("reverses a bill exactly (apply then reverse is identity)", () => {
+    const before = { feesAmount: 1800, partialPaidAmount: 500, arrearsAmount: 700, advanceAmount: 0 };
+    const alloc = allocatePayment(700, 1800, 500, 1000);
+    const applied = applyAllocation(before, alloc, 500);
+    const reversed = reverseAllocation(
+      { feesAmount: 1800, partialPaidAmount: applied.partialPaidAmount, arrearsAmount: applied.arrearsAmount, advanceAmount: applied.advanceAmount },
+      { arrearsApplied: alloc.arrearsApplied, cycleApplied: alloc.cycleApplied, advanceApplied: alloc.advanceApplied, amount: alloc.total },
+      applied.totalCollected,
+    );
+    assert.deepEqual(reversed, {
+      partialPaidAmount: 500,
+      arrearsAmount: 700,
+      advanceAmount: 0,
+      balanceAmount: 2000,
+      totalCollected: 500,
+    });
+  });
+
+  it("reverses a legacy bill without a split from the cycle", () => {
+    const reversed = reverseAllocation(
+      { feesAmount: 1800, partialPaidAmount: 1800, arrearsAmount: 0, advanceAmount: 0 },
+      { amount: 1800 },
+      1800,
+    );
+    assert.deepEqual(reversed, {
+      partialPaidAmount: 0,
+      arrearsAmount: 0,
+      advanceAmount: 0,
+      balanceAmount: 1800,
+      totalCollected: 0,
     });
   });
 

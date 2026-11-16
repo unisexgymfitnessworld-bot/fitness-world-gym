@@ -1,4 +1,4 @@
-import type { ApiEnvelope, AttendanceEntry, BillChannel, DashboardStats, DeveloperDiagnostics, LogEntry, Member, MemberInput, NotifyChannel, NotifyChannelChoice, PaymentReceipt, PaymentReceiptInput, RenewalHistoryEntry, ResendResult, SmsHealth, SmsLog, SmsSendResult, SmsSettingsState, SmsStatus, StatementResult, Trainer, TrainerAccount, SystemConfigSettings } from "../types";
+import type { ApiEnvelope, AttendanceEntry, BillChannel, DeveloperDiagnostics, LogEntry, Member, MemberInput, NotifyChannel, NotifyChannelChoice, PaymentReceipt, PaymentReceiptInput, RenewalHistoryEntry, ResendResult, SmsHealth, SmsLog, SmsSendResult, SmsSettingsState, SmsStatus, StatementResult, Trainer, TrainerAccount, SystemConfigSettings } from "../types";
 import { supabase } from "./supabase";
 
 export const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
@@ -47,6 +47,21 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return payload.data;
 }
 
+const BULK_PAGE_SIZE = 1000;
+
+async function fetchAll<T>(path: string): Promise<T[]> {
+  const out: T[] = [];
+  let offset = 0;
+  for (;;) {
+    const page = await request<T[]>(`${path}?limit=${BULK_PAGE_SIZE}&offset=${offset}`);
+    out.push(...page);
+    if (page.length < BULK_PAGE_SIZE) {
+      return out;
+    }
+    offset += page.length;
+  }
+}
+
 export const api = {
   login: (email: string, password: string) =>
     request<{ token: string; trainer: Trainer }>("/auth/login", {
@@ -65,7 +80,7 @@ export const api = {
   testNotification: (phone: string, message: string) =>
     request<SmsSendResult>("/developer/test-notification", {
       method: "POST",
-      body: JSON.stringify({ phone, message }),
+      body: JSON.stringify({ phone, message, clientRequestId: crypto.randomUUID() }),
     }),
   runDeveloperFix: (action: "expire-members" | "send-sms-reminder") =>
     request<{ message: string; changed?: number; sent?: number; failed?: number; queued?: number }>("/developer/fix", {
@@ -142,18 +157,23 @@ export const api = {
       body: JSON.stringify(input),
     }),
   renewMember: (id: string, membershipStart: string, membershipDue: string, feesAmount: number, planType?: string, paymentStatus?: string, collectedAmount?: number, method?: string, clientRequestId?: string) =>
-    request<{ member: Member; receipt: PaymentReceipt | null; receiptSms?: "sent" | "queued" | "failed"; receiptEmail?: "sent" | "queued" | "failed" | "skipped"; duplicate?: boolean }>(`/members/${id}/renew`, {
+    request<{ member: Member; receipt: PaymentReceipt | null; receiptSms?: "sent" | "queued" | "failed" | "skipped"; receiptEmail?: "sent" | "queued" | "failed" | "skipped"; duplicate?: boolean }>(`/members/${id}/renew`, {
       method: "PATCH",
       body: JSON.stringify({ membershipStart, membershipDue, feesAmount, planType, paymentStatus, collectedAmount, method, clientRequestId }),
     }),
   paymentReceipts: (memberId: string) => request<PaymentReceipt[]>(`/members/${memberId}/payments`),
-  allPaymentReceipts: () => request<PaymentReceipt[]>("/members/payments/all"),
+  allPaymentReceipts: () => fetchAll<PaymentReceipt>("/members/payments/all"),
   renewalHistory: (memberId: string) => request<RenewalHistoryEntry[]>(`/members/${memberId}/renewals`),
-  allRenewalHistory: () => request<RenewalHistoryEntry[]>("/members/renewals/all"),
+  allRenewalHistory: () => fetchAll<RenewalHistoryEntry>("/members/renewals/all"),
   createPaymentReceipt: (memberId: string, input: PaymentReceiptInput) =>
-    request<{ receipt: PaymentReceipt; member: Member; receiptSms?: "sent" | "queued" | "failed"; receiptEmail?: "sent" | "queued" | "failed" | "skipped"; duplicate?: boolean }>(`/members/${memberId}/payments`, {
+    request<{ receipt: PaymentReceipt; member: Member; receiptSms?: "sent" | "queued" | "failed" | "skipped"; receiptEmail?: "sent" | "queued" | "failed" | "skipped"; duplicate?: boolean }>(`/members/${memberId}/payments`, {
       method: "POST",
       body: JSON.stringify(input),
+    }),
+  deleteReceipt: (memberId: string, receiptId: string) =>
+    request<Member>(`/members/${memberId}/receipt`, {
+      method: "DELETE",
+      body: JSON.stringify({ receiptId }),
     }),
   suspendMember: (id: string) =>
     request<Member>(`/members/${id}/suspend`, {
@@ -177,9 +197,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ confirm: "ERASE ALL" }),
     }),
-  dashboardStats: () => request<DashboardStats>("/dashboard/stats"),
   attendance: (memberId: string) => request<AttendanceEntry[]>(`/attendance/${memberId}`),
-  allAttendance: () => request<AttendanceEntry[]>("/attendance"),
+  allAttendance: () => fetchAll<AttendanceEntry>("/attendance"),
   createAttendance: (memberId: string, visitDate: string, weightKg?: number) =>
     request<AttendanceEntry>("/attendance", {
       method: "POST",
@@ -238,7 +257,7 @@ export const api = {
   notifyTest: (channel: NotifyChannel, to: string, message: string) =>
     request<SmsSendResult & { channel: NotifyChannel }>("/notify/test", {
       method: "POST",
-      body: JSON.stringify({ channel, to, message }),
+      body: JSON.stringify({ channel, to, message, clientRequestId: crypto.randomUUID() }),
     }),
   resendReceipt: (memberId: string, receiptId: string, channel: BillChannel) =>
     request<ResendResult>(`/members/${memberId}/resend-receipt`, {

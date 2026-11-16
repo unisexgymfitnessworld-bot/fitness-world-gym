@@ -1,7 +1,7 @@
 import { CalendarClock, IndianRupee, Search, SlidersHorizontal, X, ChevronDown, ChevronUp } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
-import { cn, daysUntil, displayMemberStatus, displayPaymentStatus, getMemberActionDueDate } from "../../lib/utils";
+import { cn, daysUntil, displayMemberStatus, displayPaymentStatus, getDisplayStatus, getMemberActionDueDate } from "../../lib/utils";
 import { goalOptions, type MemberFilters, paymentOptions, type Member, trainingTypeOptions, planOptions } from "../../types";
 
 interface FilterBarProps {
@@ -16,11 +16,11 @@ export function FilterBar({ filters, resultCount, onChange, members }: FilterBar
 
   const statusHelp: Record<"All" | "Active" | "Expired" | "Suspended" | "Deleted", string> = useMemo(
     () => ({
-      All: `Show all ${members.filter((member) => member.status !== "Deleted").length} members in this trainer workspace`,
-      Active: `Show ${members.filter((member) => member.status === "Active").length} training members`,
-      Expired: `Show ${members.filter((member) => member.status === "Expired").length} ended members`,
-      Suspended: `Show ${members.filter((member) => member.status === "Suspended").length} stopped members`,
-      Deleted: `Show ${members.filter((member) => member.status === "Deleted").length} removed members`,
+      All: `Show all ${members.filter((member) => getDisplayStatus(member) !== "Deleted").length} members in this trainer workspace`,
+      Active: `Show ${members.filter((member) => getDisplayStatus(member) === "Active").length} training members`,
+      Expired: `Show ${members.filter((member) => getDisplayStatus(member) === "Expired").length} ended members`,
+      Suspended: `Show ${members.filter((member) => getDisplayStatus(member) === "Suspended").length} stopped members`,
+      Deleted: `Show ${members.filter((member) => getDisplayStatus(member) === "Deleted").length} removed members`,
     }),
     [members],
   );
@@ -55,6 +55,11 @@ export function FilterBar({ filters, resultCount, onChange, members }: FilterBar
 
   // Keep advanced filters panel open if any advanced filter is currently active
   const [isOpen, setIsOpen] = useState(hasAdvancedFiltersActive);
+  useEffect(() => {
+    if (hasAdvancedFiltersActive) {
+      setIsOpen(true);
+    }
+  }, [hasAdvancedFiltersActive]);
 
   // Debounce search so each keystroke doesn't re-filter the full dataset.
   const [draft, setDraft] = useState(filters.query);
@@ -314,7 +319,7 @@ export function FilterBar({ filters, resultCount, onChange, members }: FilterBar
 
               {/* Month Select */}
               <div className="flex flex-col gap-1">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-text-muted">Joining Month</span>
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-text-muted">Join/Start Month</span>
                 <select
                   aria-label="Month filter"
                   value={filters.month}

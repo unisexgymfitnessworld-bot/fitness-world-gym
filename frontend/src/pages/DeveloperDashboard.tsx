@@ -3,7 +3,7 @@ import { AlertTriangle, CheckCircle2, Loader2, Save, ShieldCheck, Trash2, UserPl
 import { motion } from "motion/react";
 import { SmsSettingsPanel } from "../components/sms/SmsSettingsPanel";
 import { SettingsModal } from "../components/layout/SettingsModal";
-import { Toast } from "../components/layout/Toast";
+import { ToastStack } from "../components/layout/Toast";
 import { TopBar } from "../components/layout/TopBar";
 import { Button } from "../components/ui/Button";
 import { ConfirmModal } from "../components/ui/ConfirmModal";
@@ -12,14 +12,13 @@ import { useAuth } from "../hooks/useAuth";
 import { api } from "../lib/api";
 import { accountCreateSchema, accountUpdateSchema } from "../lib/validations";
 import { useAppStore } from "../store/useAppStore";
-import type { DeveloperDiagnostics, TrainerAccount, LogEntry } from "../types";
+import type { DeveloperDiagnostics, TrainerAccount, LogEntry, Member } from "../types";
 
 type AccountRole = "developer" | "trainer";
 
 export function DeveloperDashboard() {
   const { signOut } = useAuth();
   const trainer = useAppStore((state) => state.trainer);
-  const toast = useAppStore((state) => state.toast);
   const pushToast = useAppStore((state) => state.pushToast);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [diagnostics, setDiagnostics] = useState<DeveloperDiagnostics | null>(null);
@@ -41,8 +40,10 @@ export function DeveloperDashboard() {
   });
   const [savingSettings, setSavingSettings] = useState(false);
 
-  // Playground Sandbox state
-  const [testPhone, setTestPhone] = useState<string>("");
+  // Playground Sandbox state: member-path test (raw-phone testing lives in
+  // Trainer Desk → Settings → SMS Notifications).
+  const [testMembers, setTestMembers] = useState<Member[]>([]);
+  const [testMemberId, setTestMemberId] = useState<string>("");
   const [testMessage, setTestMessage] = useState<string>("Hello from GymOS Developer Playground!");
   const [testingNotification, setTestingNotification] = useState<boolean>(false);
 
@@ -67,12 +68,15 @@ export function DeveloperDashboard() {
   async function loadDeveloperData(): Promise<void> {
     setLoading(true);
     try {
-      const [nextDiagnostics, nextAccounts, nextLogs] = await Promise.all([
+      const [nextDiagnostics, nextAccounts, nextLogs, nextMembers] = await Promise.all([
         api.developerDiagnostics(),
         api.trainerAccounts(),
         api.developerLogs(),
+        api.members({ limit: 500 }).catch(() => [] as Member[]),
       ]);
       setDiagnostics(nextDiagnostics);
+      setTestMembers(nextMembers);
+      setTestMemberId((current) => current || nextMembers[0]?.id || "");
       if (nextDiagnostics.settings) {
         setSettingsForm({
           db_keep_alive_enabled: nextDiagnostics.settings.db_keep_alive_enabled === "true",
@@ -195,22 +199,22 @@ export function DeveloperDashboard() {
   }
 
   async function handleSendTestNotification(): Promise<void> {
-    if (!testPhone) {
+    if (!testMemberId) {
       pushToast({
         title: "Validation Error",
-        message: "Please enter a destination phone number.",
+        message: "Pick a member to message.",
         tone: "error",
       });
       return;
     }
     setTestingNotification(true);
     try {
-      const res = await api.testNotification(testPhone, testMessage);
+      const res = await api.sendSms(testMemberId, testMessage, false, crypto.randomUUID(), "sms");
       pushToast({
         title: res.status === "sent" ? "Test Sent" : "Test Queued",
         message:
           res.status === "sent"
-            ? `Notification dispatch triggered successfully.${res.requestId ? ` Request ID: ${res.requestId}` : ""}`
+            ? `Member-path send works.${res.requestId ? ` Request ID: ${res.requestId}` : ""}`
             : "Phone unreachable — queued for automatic retry. See SMS Notifications → Recent Messages.",
         tone: "success",
       });
@@ -439,7 +443,7 @@ export function DeveloperDashboard() {
                   </label>
                 </div>
                 <p className="mt-1.5 text-[12px] font-semibold leading-normal text-text-secondary">
-                  Automatically query Supabase every 30 minutes. Prevents database from entering inactivity pause/sleep mode.
+                  Automatically query Supabase every 10 minutes. Prevents database from entering inactivity pause/sleep mode.
                 </p>
                 <div className="mt-6 flex items-center justify-center p-4 border border-dashed border-white/10 rounded-lg bg-[#080913]/30">
                   <div className="text-center">
@@ -475,20 +479,28 @@ export function DeveloperDashboard() {
             >
               <div className="flex items-center gap-2.5">
                 <Terminal size={20} className="text-brand-primary" />
-                <h2 className="text-[18px] font-black text-white">SMS Playground</h2>
+                <h2 className="text-[18px] font-black text-white">Member SMS Test</h2>
               </div>
               <p className="mt-1 text-[13px] font-semibold text-text-secondary">
-                Dispatch a manual test SMS to check provider credentials instantly.
+                Send through the real member path to verify end-to-end delivery. Raw-number tests live in Trainer Desk → Settings → SMS Notifications.
               </p>
 
               <div className="mt-5 grid gap-4">
-                <Input
-                  label="Destination Phone (10-digit mobile number)"
-                  variant="dark"
-                  value={testPhone}
-                  onChange={(e) => setTestPhone(e.target.value)}
-                  placeholder="e.g. 9876543210"
-                />
+                <label className="grid gap-2 text-[14px] font-semibold text-white/80">
+                  Member
+                  <select
+                    value={testMemberId}
+                    onChange={(e) => setTestMemberId(e.target.value)}
+                    className="focus-ring w-full rounded-[var(--radius-card)] border border-white/10 bg-[#080913]/40 px-4 py-3 text-[14px] font-semibold text-white focus:border-brand-primary"
+                  >
+                    {testMembers.length === 0 ? <option value="">Loading members…</option> : null}
+                    {testMembers.map((member) => (
+                      <option key={member.id} value={member.id}>
+                        {member.name} · {member.phone}
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
                 <label className="grid gap-2 text-[14px] font-semibold text-white/80">
                   Test Message
@@ -582,7 +594,7 @@ export function DeveloperDashboard() {
                 <h2 className="text-[18px] font-black text-white">Live System Logs</h2>
               </div>
               <Button
-                onClick={() => void loadDeveloperData()}
+                onClick={() => void api.developerLogs().then(setLogs).catch(() => setLogs([]))}
                 variant="ghost"
                 className="!h-9 !min-h-0 bg-white/5 hover:bg-white/10 border border-white/5 text-[11px] text-white/80 font-bold uppercase py-1 px-3"
               >
@@ -781,7 +793,7 @@ export function DeveloperDashboard() {
         onClose={() => setDeleteAccount(null)}
       />
 
-      <Toast toast={toast} />
+      <ToastStack />
     </>
   );
 }

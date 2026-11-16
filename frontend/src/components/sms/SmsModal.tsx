@@ -1,4 +1,4 @@
-import { CheckCircle2, Clock3, Send } from "lucide-react";
+import { CheckCircle2, Clock3, Info, Send } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { formatPhone } from "../../lib/utils";
@@ -33,7 +33,10 @@ export function SmsModal({ member, open, initialTemplate, onClose, onSend }: Sms
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
   const [queued, setQueued] = useState(false);
+  const [demoNotSent, setDemoNotSent] = useState(false);
   const [sending, setSending] = useState(false);
+  const [confirmOverwrite, setConfirmOverwrite] = useState(false);
+  const [pendingTemplate, setPendingTemplate] = useState<MessageTemplateId | null>(null);
 
   const resetKey = `${open ? "open" : "closed"}-${member?.id ?? "none"}-${initialTemplate ?? "default"}`;
   useEffect(() => {
@@ -47,13 +50,22 @@ export function SmsModal({ member, open, initialTemplate, onClose, onSend }: Sms
     setError(null);
     setSent(false);
     setQueued(false);
+    setDemoNotSent(false);
     setSending(false);
+    setConfirmOverwrite(false);
     setChannel("auto");
     setSentVia(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetKey]);
 
-  function chooseTemplate(nextTemplate: MessageTemplateId): void {
+  function chooseTemplate(nextTemplate: MessageTemplateId, force = false): void {
+    if (member && !force && message !== "" && message !== createMessageForTemplate(member, templateId)) {
+      setPendingTemplate(nextTemplate);
+      setConfirmOverwrite(true);
+      return;
+    }
+    setConfirmOverwrite(false);
+    setPendingTemplate(null);
     setTemplateId(nextTemplate);
     if (member) {
       setMessage(createMessageForTemplate(member, nextTemplate));
@@ -61,6 +73,7 @@ export function SmsModal({ member, open, initialTemplate, onClose, onSend }: Sms
     setError(null);
     setSent(false);
     setQueued(false);
+    setDemoNotSent(false);
   }
 
   async function submit(): Promise<void> {
@@ -86,6 +99,8 @@ export function SmsModal({ member, open, initialTemplate, onClose, onSend }: Sms
       setSentVia(via);
       if (result && typeof result === "object" && result.status === "queued") {
         setQueued(true);
+      } else if (result && typeof result === "object" && result.status === "demo") {
+        setDemoNotSent(true);
       } else {
         setSent(true);
       }
@@ -98,7 +113,7 @@ export function SmsModal({ member, open, initialTemplate, onClose, onSend }: Sms
   }
 
   return (
-    <Modal open={open && member !== null} title="Message Member" onClose={onClose}>
+    <Modal open={open && member !== null} title="Message Member" onClose={onClose} disableBackdropClose>
       {member ? (
         <div className="grid gap-5">
           <div className="rounded-[var(--radius-card)] bg-surface-raised p-4">
@@ -142,6 +157,18 @@ export function SmsModal({ member, open, initialTemplate, onClose, onSend }: Sms
             </span>
           </label>
 
+          {confirmOverwrite && pendingTemplate ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-[var(--radius-card)] border border-amber-200 bg-amber-50 px-3 py-2.5">
+              <span className="text-[13px] font-bold text-amber-800">Replace your edited message with this template?</span>
+              <Button variant="secondary" className="!px-3 !py-1.5 text-[13px]" onClick={() => chooseTemplate(pendingTemplate, true)}>
+                Replace
+              </Button>
+              <Button variant="secondary" className="!px-3 !py-1.5 text-[13px]" onClick={() => { setConfirmOverwrite(false); setPendingTemplate(null); }}>
+                Keep mine
+              </Button>
+            </div>
+          ) : null}
+
           <label className="grid gap-2 text-[15px] font-semibold text-text-primary">
             Message
             <textarea
@@ -149,13 +176,16 @@ export function SmsModal({ member, open, initialTemplate, onClose, onSend }: Sms
               onChange={(event) => setMessage(event.target.value)}
               className="studio-input min-h-36 px-4 py-3 text-[15px] font-normal text-text-primary placeholder:text-text-muted"
             />
+            <span className="text-[12px] font-semibold text-text-muted">
+              {message.length} characters · ~{Math.max(1, Math.ceil(message.length / 160))} SMS segment{Math.max(1, Math.ceil(message.length / 160)) === 1 ? "" : "s"}
+            </span>
             {error ? <span className="text-[13px] font-semibold text-status-expired">{error}</span> : null}
           </label>
 
           {sent ? (
             <motion.div className="flex items-center gap-3 rounded-[var(--radius-card)] bg-green-50 p-4 text-status-active" initial={{ scale: 0 }} animate={{ scale: [0, 1.2, 1] }} transition={{ duration: 0.3 }}>
               <CheckCircle2 size={22} />
-              <span className="text-[15px] font-bold">{sentVia ?? "Message"} sent{sentVia === "SMS" ? ` to ${formatPhone(member.phone)}` : ""}</span>
+              <span className="text-[15px] font-bold">{sentVia ?? "Message"} accepted{sentVia === "SMS" ? ` for ${formatPhone(member.phone)}` : ""} — track delivery in Recent Messages.</span>
             </motion.div>
           ) : null}
 
@@ -166,10 +196,23 @@ export function SmsModal({ member, open, initialTemplate, onClose, onSend }: Sms
             </motion.div>
           ) : null}
 
-          <Button onClick={() => void submit()} disabled={sent || queued || sending} className="w-full text-[15px] font-bold">
-            <Send size={16} />
-            {sending ? "Sending..." : channel === "auto" ? "Send" : `Send via ${channel === "whatsapp" ? "WhatsApp" : channel === "email" ? "Email" : "SMS"}`}
-          </Button>
+          {demoNotSent ? (
+            <motion.div className="flex items-center gap-3 rounded-[var(--radius-card)] bg-sky-50 p-4 text-sky-700" initial={{ scale: 0 }} animate={{ scale: [0, 1.2, 1] }} transition={{ duration: 0.3 }}>
+              <Info size={22} />
+              <span className="text-[15px] font-bold">Demo mode — this message preview was not actually sent.</span>
+            </motion.div>
+          ) : null}
+
+          {sent || queued || demoNotSent ? (
+            <Button onClick={onClose} className="w-full text-[15px] font-bold">
+              Done
+            </Button>
+          ) : (
+            <Button onClick={() => void submit()} disabled={sending} className="w-full text-[15px] font-bold">
+              <Send size={16} />
+              {sending ? "Sending..." : channel === "auto" ? "Send" : `Send via ${channel === "whatsapp" ? "WhatsApp" : channel === "email" ? "Email" : "SMS"}`}
+            </Button>
+          )}
         </div>
       ) : null}
     </Modal>

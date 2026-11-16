@@ -1,5 +1,6 @@
-import { AlertTriangle, CalendarClock, Eye, IndianRupee, MessageCircle, UserRoundX } from "lucide-react";
+import { AlertTriangle, CalendarClock, ChevronLeft, ChevronRight, Eye, IndianRupee, MessageCircle, UserRoundX } from "lucide-react";
 import { motion } from "motion/react";
+import { useRef, useState } from "react";
 import { formatDisplayDate, getMemberActionDueDate } from "../../lib/utils";
 import type { FollowUpItem, FollowUpKind } from "../../lib/followUps";
 import type { MessageTemplateId } from "../../lib/messageTemplates";
@@ -41,6 +42,21 @@ const kindStyles: Record<FollowUpKind, { icon: typeof AlertTriangle; tone: "expi
 };
 
 export function FollowUpQueue({ items, onView, onMessage }: FollowUpQueueProps) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [atStart, setAtStart] = useState(true);
+  const [atEnd, setAtEnd] = useState(false);
+
+  function updateEdges(): void {
+    const track = trackRef.current;
+    if (!track) return;
+    setAtStart(track.scrollLeft <= 4);
+    setAtEnd(track.scrollLeft + track.clientWidth >= track.scrollWidth - 4);
+  }
+
+  function nudge(direction: 1 | -1): void {
+    trackRef.current?.scrollBy({ left: direction * 330, behavior: "smooth" });
+  }
+
   return (
     <section className="studio-card grid gap-4 rounded-[var(--radius-panel)] p-3 sm:p-4 lg:grid-cols-[250px_1fr] lg:gap-5 lg:p-5">
       <div className="grid content-start gap-2">
@@ -57,7 +73,35 @@ export function FollowUpQueue({ items, onView, onMessage }: FollowUpQueueProps) 
         </div>
       </div>
 
-      <div className="scrollbar-soft flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scroll-smooth min-w-0">
+      <div className="grid gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[12px] font-black uppercase tracking-wider text-text-muted">
+          {items.length} to do{!atEnd && items.length > 0 ? " · scroll for more →" : ""}
+        </span>
+        {items.length > 1 ? (
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              onClick={() => nudge(-1)}
+              disabled={atStart}
+              aria-label="Scroll follow-ups back"
+              className="focus-ring grid h-9 w-9 place-items-center rounded-full border border-border-default bg-brand-white text-text-secondary transition enabled:hover:border-brand-primary/50 enabled:hover:text-brand-primary disabled:opacity-40"
+            >
+              <ChevronLeft size={17} />
+            </button>
+            <button
+              type="button"
+              onClick={() => nudge(1)}
+              disabled={atEnd}
+              aria-label="Scroll follow-ups forward"
+              className="focus-ring grid h-9 w-9 place-items-center rounded-full border border-border-default bg-brand-white text-text-secondary transition enabled:hover:border-brand-primary/50 enabled:hover:text-brand-primary disabled:opacity-40"
+            >
+              <ChevronRight size={17} />
+            </button>
+          </div>
+        ) : null}
+      </div>
+      <div ref={trackRef} onScroll={updateEdges} className="scrollbar-soft flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scroll-smooth min-w-0">
         {items.length > 0 ? (
           items.map((item, index) => {
             const style = kindStyles[item.kind];
@@ -108,6 +152,7 @@ export function FollowUpQueue({ items, onView, onMessage }: FollowUpQueueProps) 
             <p className="mt-1 text-[13px] font-semibold text-text-secondary">No money to collect, no plans ending, everyone is coming.</p>
           </div>
         )}
+      </div>
       </div>
     </section>
   );

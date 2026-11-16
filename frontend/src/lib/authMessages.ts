@@ -23,6 +23,18 @@ export function friendlyAuthError(error: unknown): string {
     return "Too many attempts. Wait a few minutes and try again.";
   }
 
+  if (lower.includes("otp_expired") || lower.includes("otp_disabled") || lower.includes("expired")) {
+    return "That security code expired. Ask for a new one and try again.";
+  }
+
+  if (lower.includes("otp_invalid") || lower.includes("invalid otp") || lower.includes("token has expired") || lower.includes("invalid token")) {
+    return "That code does not match. Check the digits and try again.";
+  }
+
+  if (lower.includes("401") || lower.includes("missing") && lower.includes("session") || lower.includes("invalid") && lower.includes("session")) {
+    return "Your sign-in ran out. Please sign in again.";
+  }
+
   // Supabase cold-start / database waking up
   if (
     lower.includes("failed to fetch") ||

@@ -29,9 +29,14 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           <section className="max-w-md rounded-[var(--radius-card)] border border-border-default bg-surface-base p-6 text-center shadow-sm">
             <h1 className="text-[22px] font-bold text-text-primary">Something went wrong</h1>
             <p className="mt-2 text-[15px] text-text-secondary">Reload the page and continue from the latest saved state.</p>
-            <Button className="mt-5" onClick={() => window.location.reload()}>
-              Reload
-            </Button>
+            <div className="mt-5 flex justify-center gap-3">
+              <Button onClick={() => window.location.reload()}>
+                Reload
+              </Button>
+              <Button variant="secondary" onClick={() => { window.location.href = "/"; }}>
+                Sign in again
+              </Button>
+            </div>
           </section>
         </main>
       );

@@ -35,6 +35,7 @@ interface CouplePartnerValues {
   partnerFlexibilityTraining?: string;
   partnerCardioTraining?: string;
   partnerAddress: string;
+  partnerAvatar: string;
 }
 
 type MemberSheetValues = MemberInputValues & CouplePartnerValues;
@@ -84,6 +85,7 @@ const partnerDefaults = {
   partnerFlexibilityTraining: "",
   partnerCardioTraining: "",
   partnerAddress: "",
+  partnerAvatar: "",
 } as const satisfies CouplePartnerValues;
 
 const partnerErrorFieldMap = {
@@ -214,7 +216,7 @@ function partnerToMemberInput(values: MemberSheetValues, shared: MemberInput): M
     warmupExercises: values.partnerWarmupExercises,
     flexibilityTraining: values.partnerFlexibilityTraining,
     cardioTraining: values.partnerCardioTraining,
-    avatar: "",
+    avatar: values.partnerAvatar || "",
     trainingType: "Couple",
     address: values.partnerAddress,
   };
@@ -233,10 +235,17 @@ function applyCouplePaymentSplit(input: MemberInput, index: 0 | 1): MemberInput 
   };
 }
 
+const SHEET_SECTIONS = ["Training Type", "Bio Data", "Body Metrics", "Goal", "Health Notes", "Membership"] as const;
+
+function sectionId(title: string): string {
+  return `sheet-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+}
+
 function Section({ title, children, delay = 0 }: { title: string; children: React.ReactNode; delay?: number }) {
   return (
     <motion.section
-      className="grid gap-3 border-b border-border-default px-4 py-4 last:border-b-0 lg:gap-4 lg:px-6 lg:py-6"
+      id={sectionId(title)}
+      className="grid gap-3 border-b border-border-default px-4 py-4 last:border-b-0 lg:gap-4 lg:px-6 lg:py-6 scroll-mt-2"
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay }}
@@ -254,26 +263,41 @@ export function MemberSheet({ open, member, onClose, onSave, existingReceiptCoun
   useScrollLock(open);
 
   const [showCloseWarning, setShowCloseWarning] = useState(false);
+  const [photoWarning, setPhotoWarning] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const partnerFileInputRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  function jumpToSection(id: string): void {
+    formRef.current?.querySelector(`#${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
   // One idempotency key per sheet open (two for couples): a retried save
   // after a timeout replays the same key instead of duplicating the member.
   const createKeysRef = useRef<string[]>([crypto.randomUUID(), crypto.randomUUID()]);
 
-  const handleImageFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageFile = async (e: React.ChangeEvent<HTMLInputElement>, field: "avatar" | "partnerAvatar" = "avatar") => {
     const file = e.target.files?.[0];
-    if (file) {
-      try {
-        const compressed = await compressImage(file);
-        setValue("avatar", compressed, { shouldDirty: true });
-      } catch (err) {
-        console.error("Image compression failed:", err);
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setValue("avatar", reader.result as string, { shouldDirty: true });
-        };
-        reader.readAsDataURL(file);
-      }
+    if (!file) {
+      return;
+    }
+    setPhotoWarning(null);
+    try {
+      const compressed = await compressImage(file);
+      setValue(field, compressed, { shouldDirty: true });
+    } catch (err) {
+      console.error("Image compression failed:", err);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const raw = reader.result as string;
+        if (raw.length > 500 * 1024) {
+          setPhotoWarning("Photo is too large uncompressed (over 500KB). Pick a smaller photo.");
+          return;
+        }
+        setValue(field, raw, { shouldDirty: true });
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -290,13 +314,24 @@ export function MemberSheet({ open, member, onClose, onSave, existingReceiptCoun
     defaultValues: initialValues,
   });
 
+  const lastResetKeyRef = useRef<string>("");
   useEffect(() => {
+    // Reset only when the sheet opens or a different member is picked: any
+    // other identity change (background refresh, flag flip) must not wipe
+    // in-flight edits.
+    const resetKey = open ? `open:${member?.id ?? "new"}` : "closed";
+    if (resetKey === lastResetKeyRef.current) {
+      return;
+    }
+    lastResetKeyRef.current = resetKey;
     reset(initialValues);
     setShowCloseWarning(false);
     if (open) {
       createKeysRef.current = [crypto.randomUUID(), crypto.randomUUID()];
     }
-  }, [initialValues, reset, open]);
+    // initialValues/member intentionally excluded: see comment above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, member?.id, reset]);
 
   const weight = watch("weightKg");
   const height = watch("heightCm");
@@ -311,9 +346,22 @@ export function MemberSheet({ open, member, onClose, onSave, existingReceiptCoun
   const partnerGoal = watch("partnerGoal");
   const partnerWeight = watch("partnerWeightKg");
   const partnerHeight = watch("partnerHeightCm");
+  const avatarValue = watch("avatar");
+  const nameValue = watch("name");
+  const partnerAvatarValue = watch("partnerAvatar");
   const bmi = calculateBmi(Number(weight), Number(height));
   const partnerBmi = calculateBmi(Number(partnerWeight), Number(partnerHeight));
   const isNewCouple = !member && trainingType === "Couple";
+  const sectionChips = [
+    { label: "Type", id: sectionId("Training Type") },
+    { label: "Bio", id: sectionId(isNewCouple ? "Member 1 Details" : "Bio Data") },
+    { label: "Metrics", id: sectionId(isNewCouple ? "Member 1 Body Metrics" : "Body Metrics") },
+    { label: "Goal", id: sectionId(isNewCouple ? "Member 1 Goal" : "Goal") },
+    { label: "Notes", id: sectionId(isNewCouple ? "Member 1 Health Notes" : "Health Notes") },
+    ...(isNewCouple ? [{ label: "Member 2", id: sectionId("Member 2 Details") }] : []),
+    ...(member && member.trainingType === "Couple" && !isNewCouple ? [{ label: "Partner", id: sectionId("Partner Record") }] : []),
+    { label: "Plan", id: sectionId("Membership") },
+  ];
   const planDueSummary = createPlanDueSummary(membershipStart, planType, membershipDue);
   const isCustomPlan = planType === "Custom";
 
@@ -350,15 +398,28 @@ export function MemberSheet({ open, member, onClose, onSave, existingReceiptCoun
     onClose();
   }
 
+  function focusFirstError(keys: Array<string | number>): void {
+    const first = keys[0];
+    if (first === undefined) {
+      return;
+    }
+    const target = formRef.current?.querySelector<HTMLElement>(`[name="${String(first)}"]`);
+    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+    target?.focus({ preventScroll: true });
+  }
+
   async function submit(values: MemberSheetValues): Promise<void> {
     const parsed = memberInputSchema.safeParse(valuesToMemberInput(values));
     if (!parsed.success) {
+      const failedKeys: string[] = [];
       parsed.error.issues.forEach((issue) => {
         const key = issue.path[0];
         if (key !== undefined && isMemberInputField(key)) {
           setError(key, { type: "manual", message: issue.message });
+          failedKeys.push(key);
         }
       });
+      focusFirstError(failedKeys);
       return;
     }
 
@@ -366,15 +427,18 @@ export function MemberSheet({ open, member, onClose, onSave, existingReceiptCoun
       const partnerInput = partnerToMemberInput(values, parsed.data);
       const parsedPartner = memberInputSchema.safeParse(partnerInput);
       if (!parsedPartner.success) {
+        const failedPartnerKeys: string[] = [];
         parsedPartner.error.issues.forEach((issue) => {
           const key = issue.path[0];
           if (key !== undefined && isMemberInputField(key)) {
             if (isPartnerMappedField(key)) {
               const partnerKey = partnerErrorFieldMap[key];
               setError(partnerKey, { type: "manual", message: issue.message });
+              failedPartnerKeys.push(partnerKey);
             }
           }
         });
+        focusFirstError(failedPartnerKeys);
         return;
       }
 
@@ -383,7 +447,8 @@ export function MemberSheet({ open, member, onClose, onSave, existingReceiptCoun
           { ...applyCouplePaymentSplit(parsed.data, 0), clientRequestId: createKeysRef.current[0] },
           { ...applyCouplePaymentSplit(parsedPartner.data, 1), clientRequestId: createKeysRef.current[1] },
         ]);
-      } catch {
+      } catch (caught) {
+        setSaveError(caught instanceof Error ? caught.message : "Unable to save member.");
         return;
       }
       reset(defaults(null));
@@ -391,9 +456,11 @@ export function MemberSheet({ open, member, onClose, onSave, existingReceiptCoun
       return;
     }
 
+    setSaveError(null);
     try {
       await onSave(member ? parsed.data : { ...parsed.data, clientRequestId: createKeysRef.current[0] }, member?.id);
-    } catch {
+    } catch (caught) {
+      setSaveError(caught instanceof Error ? caught.message : "Unable to save member.");
       return;
     }
     reset(defaults(member));
@@ -436,16 +503,28 @@ export function MemberSheet({ open, member, onClose, onSave, existingReceiptCoun
               </Button>
             </header>
 
-            <form className="modal-scroll scrollbar-soft flex-1 overflow-y-auto pb-28" onSubmit={handleSubmit(submit)}>
+            <form ref={formRef} className="modal-scroll scrollbar-soft flex-1 overflow-y-auto pb-28" onSubmit={handleSubmit(submit)}>
+              <div className="sticky top-0 z-10 flex gap-1.5 overflow-x-auto border-b border-border-default bg-brand-white/95 px-4 py-2 backdrop-blur lg:px-6">
+                {sectionChips.map((chip) => (
+                  <button
+                    key={chip.id}
+                    type="button"
+                    onClick={() => jumpToSection(chip.id)}
+                    className="shrink-0 rounded-full border border-border-default bg-surface-raised px-3 py-1 text-[12px] font-bold text-text-secondary transition hover:border-brand-primary/50 hover:text-brand-primary"
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
               <div className="flex flex-col items-center justify-center border-b border-border-default bg-surface-raised py-6">
                 <div 
                   className="relative group flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border border-border-default bg-brand-white shadow-sm ring-4 ring-brand-primary-light cursor-pointer"
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  {watch("avatar") ? (
-                    <img src={watch("avatar")} alt="Profile preview" className="h-full w-full object-cover" />
+                  {avatarValue ? (
+                    <img src={avatarValue} alt="Profile preview" className="h-full w-full object-cover" />
                   ) : (
-                    <span className="text-[20px] font-black text-text-muted">{watch("name") ? initials(watch("name")) : "FW"}</span>
+                    <span className="text-[20px] font-black text-text-muted">{nameValue ? initials(nameValue) : "FW"}</span>
                   )}
                   <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 opacity-0 transition-opacity group-hover:opacity-100">
                     <span className="text-[12px] font-bold text-white uppercase">Upload</span>
@@ -488,7 +567,7 @@ export function MemberSheet({ open, member, onClose, onSave, existingReceiptCoun
                   </button>
                 </div>
 
-                {watch("avatar") && (
+                {avatarValue && (
                   <button
                     type="button"
                     className="mt-2 text-[12px] font-bold text-status-expired hover:underline cursor-pointer"
@@ -500,6 +579,9 @@ export function MemberSheet({ open, member, onClose, onSave, existingReceiptCoun
                     Remove Photo
                   </button>
                 )}
+                {photoWarning && (
+                  <p className="mt-2 max-w-xs text-center text-[12px] font-bold text-status-expired">{photoWarning}</p>
+                )}
               </div>
 
               <Section title="Training Type" delay={0.05}>
@@ -508,26 +590,25 @@ export function MemberSheet({ open, member, onClose, onSave, existingReceiptCoun
                     Training Type
                     <select className="studio-input w-full px-3 py-2.5 lg:px-4 lg:py-3" {...register("trainingType")}>
                       {trainingTypeOptions.map((option) => (
-                        <option key={option}>{option}</option>
+                        <option key={option} value={option} disabled={option === "Couple" && member !== null}>
+                          {option}
+                        </option>
                       ))}
                     </select>
+                    {member ? <span className="text-[12px] font-semibold text-text-muted">Couple entry is for new members only — add both partners together from Add Member.</span> : null}
+                    {errors.trainingType?.message && <span className="text-[12px] font-medium text-status-expired">{errors.trainingType.message}</span>}
                   </label>
                 </div>
               </Section>
 
               <Section title={isNewCouple ? "Member 1 Details" : "Bio Data"} delay={0.1}>
                 <div className="grid gap-3 md:grid-cols-2 lg:gap-4">
-                  <Input label="Name" error={errors.name?.message} {...register("name")} />
+                  <Input label="Name" maxLength={120} error={errors.name?.message} {...register("name")} />
                   <Input
                     label="Phone"
                     inputMode="numeric"
                     error={errors.phone?.message}
-                    {...register("phone", {
-                      onChange: (event) => {
-                        const target = event.target as HTMLInputElement;
-                        target.value = normalizePhone(target.value);
-                      },
-                    })}
+                    {...register("phone")}
                   />
                   <Input label="Email (for email reminders)" type="email" error={errors.email?.message} {...register("email")} />
                   <Input label="Age" type="number" error={errors.age?.message} {...register("age", { valueAsNumber: true })} />
@@ -538,6 +619,7 @@ export function MemberSheet({ open, member, onClose, onSave, existingReceiptCoun
                         <option key={option}>{option}</option>
                       ))}
                     </select>
+                    {errors.gender?.message && <span className="text-[12px] font-medium text-status-expired">{errors.gender.message}</span>}
                   </label>
                   <Input label="Join Date" type="date" error={errors.joinDate?.message} {...register("joinDate")} />
                   <Input label="Reg No" value={member?.regNo ?? "Auto generated"} readOnly />
@@ -548,6 +630,7 @@ export function MemberSheet({ open, member, onClose, onSave, existingReceiptCoun
                     <textarea
                       className="studio-input min-h-20 w-full px-3 py-2.5 text-[14px] font-normal lg:min-h-24 lg:px-4 lg:py-3 lg:text-[15px]"
                       placeholder="Enter member's address..."
+                      maxLength={500}
                       {...register("address")}
                     />
                     {errors.address?.message && <p className="text-[12px] font-medium text-status-expired">{errors.address.message}</p>}
@@ -561,7 +644,7 @@ export function MemberSheet({ open, member, onClose, onSave, existingReceiptCoun
                   <Input label="Height cm" type="number" step="0.01" error={errors.heightCm?.message} {...register("heightCm", { valueAsNumber: true })} />
                   <div className="rounded-[var(--radius-card)] bg-brand-primary-light p-3 lg:p-4">
                     <p className="text-[12px] font-bold uppercase tracking-wider text-brand-primary">BMI</p>
-                    <p className="mt-1.5 text-[26px] font-black text-text-primary lg:mt-2 lg:text-[28px]">{bmi || "0.00"}</p>
+                    <p className="mt-1.5 text-[26px] font-black text-text-primary lg:mt-2 lg:text-[28px]">{bmi > 0 ? bmi : "—"}</p>
                   </div>
                 </div>
               </Section>
@@ -591,30 +674,52 @@ export function MemberSheet({ open, member, onClose, onSave, existingReceiptCoun
                   ).map(([name, label]) => (
                     <label key={name} className="grid gap-2 text-[14px] font-semibold lg:text-[15px]">
                       {label}
-                      <textarea className="studio-input min-h-20 w-full px-3 py-2.5 text-[14px] font-normal lg:min-h-24 lg:px-4 lg:py-3 lg:text-[15px]" {...register(name)} />
+                      <textarea className="studio-input min-h-20 w-full px-3 py-2.5 text-[14px] font-normal lg:min-h-24 lg:px-4 lg:py-3 lg:text-[15px]" maxLength={500} {...register(name)} />
+                      {errors[name]?.message && <span className="text-[12px] font-medium text-status-expired">{errors[name]?.message}</span>}
                     </label>
                   ))}
                 </div>
               </Section>
+
+              {member && member.trainingType === "Couple" && !isNewCouple ? (
+                <Section title="Partner Record" delay={0.28}>
+                  <div className="rounded-[var(--radius-card)] border border-border-default bg-surface-raised px-3 py-2.5 text-[12px] font-bold leading-5 text-text-secondary lg:px-4">
+                    This member joined as a couple. The partner is a separate member record — search their name in the members list to view or edit them. Fee totals on this record belong to this member only.
+                  </div>
+                </Section>
+              ) : null}
 
               {isNewCouple ? (
                 <Section title="Member 2 Details" delay={0.28}>
                   <div className="rounded-[var(--radius-card)] border border-brand-primary/15 bg-brand-primary-light/35 px-3 py-2.5 text-[12px] font-bold leading-5 text-brand-primary lg:px-4">
                     Couple entry creates two member records and splits the shared fee totals for clean reports.
                   </div>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="file"
+                      ref={partnerFileInputRef}
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(event) => void handleImageFile(event, "partnerAvatar")}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => partnerFileInputRef.current?.click()}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-default bg-brand-white text-[12px] font-bold text-text-primary hover:bg-surface-raised shadow-sm transition-all cursor-pointer"
+                    >
+                      <Upload size={13} className="text-text-secondary" />
+                      {partnerAvatarValue ? "Change Member 2 Photo" : "Upload Member 2 Photo"}
+                    </button>
+                    {partnerAvatarValue ? <span className="text-[12px] font-bold text-status-active">Photo added ✓</span> : null}
+                  </div>
                   <div className="grid gap-3 md:grid-cols-2 lg:gap-4">
-                    <Input id="partner-name" label="Name" error={errors.partnerName?.message} {...register("partnerName")} />
+                    <Input id="partner-name" label="Name" maxLength={120} error={errors.partnerName?.message} {...register("partnerName")} />
                     <Input
                       id="partner-phone"
                       label="Phone"
                       inputMode="numeric"
                       error={errors.partnerPhone?.message}
-                      {...register("partnerPhone", {
-                        onChange: (event) => {
-                          const target = event.target as HTMLInputElement;
-                          target.value = normalizePhone(target.value);
-                        },
-                      })}
+                      {...register("partnerPhone")}
                     />
                     <Input id="partner-age" label="Age" type="number" error={errors.partnerAge?.message} {...register("partnerAge", { valueAsNumber: true })} />
                     <label className="grid gap-2 text-[15px] font-semibold">
@@ -624,11 +729,12 @@ export function MemberSheet({ open, member, onClose, onSave, existingReceiptCoun
                           <option key={option}>{option}</option>
                         ))}
                       </select>
+                      {errors.partnerGender?.message && <span className="text-[12px] font-medium text-status-expired">{errors.partnerGender.message}</span>}
                     </label>
                     <Input id="partner-join-date" label="Join Date" type="date" error={errors.partnerJoinDate?.message} {...register("partnerJoinDate")} />
                     <div className="rounded-[var(--radius-card)] bg-brand-primary-light p-3 lg:p-4">
                       <p className="text-[12px] font-bold uppercase tracking-wider text-brand-primary">BMI</p>
-                      <p className="mt-1.5 text-[26px] font-black text-text-primary lg:mt-2 lg:text-[28px]">{partnerBmi || "0.00"}</p>
+                      <p className="mt-1.5 text-[26px] font-black text-text-primary lg:mt-2 lg:text-[28px]">{partnerBmi > 0 ? partnerBmi : "—"}</p>
                     </div>
                     <Input id="partner-weight-kg" label="Weight kg" type="number" step="0.01" error={errors.partnerWeightKg?.message} {...register("partnerWeightKg", { valueAsNumber: true })} />
                     <Input id="partner-height-cm" label="Height cm" type="number" step="0.01" error={errors.partnerHeightCm?.message} {...register("partnerHeightCm", { valueAsNumber: true })} />
@@ -639,6 +745,7 @@ export function MemberSheet({ open, member, onClose, onSave, existingReceiptCoun
                       <textarea
                         className="studio-input min-h-20 w-full px-3 py-2.5 text-[14px] font-normal lg:min-h-24 lg:px-4 lg:py-3 lg:text-[15px]"
                         placeholder="Enter partner member's address..."
+                        maxLength={500}
                         {...register("partnerAddress")}
                       />
                       {errors.partnerAddress?.message && <p className="text-[12px] font-medium text-status-expired">{errors.partnerAddress.message}</p>}
@@ -665,7 +772,8 @@ export function MemberSheet({ open, member, onClose, onSave, existingReceiptCoun
                     ).map(([name, label]) => (
                       <label key={name} className="grid gap-2 text-[14px] font-semibold lg:text-[15px]">
                         {label}
-                        <textarea className="studio-input min-h-20 w-full px-3 py-2.5 text-[14px] font-normal lg:min-h-24 lg:px-4 lg:py-3 lg:text-[15px]" {...register(name)} />
+                        <textarea className="studio-input min-h-20 w-full px-3 py-2.5 text-[14px] font-normal lg:min-h-24 lg:px-4 lg:py-3 lg:text-[15px]" maxLength={500} {...register(name)} />
+                        {errors[name]?.message && <span className="text-[12px] font-medium text-status-expired">{errors[name]?.message}</span>}
                       </label>
                     ))}
                   </div>
@@ -691,6 +799,7 @@ export function MemberSheet({ open, member, onClose, onSave, existingReceiptCoun
                         <option key={option}>{option}</option>
                       ))}
                     </select>
+                    {errors.planType?.message && <span className="text-[12px] font-medium text-status-expired">{errors.planType.message}</span>}
                   </label>
                   <Input label="Start Date" type="date" error={errors.membershipStart?.message} {...register("membershipStart")} />
                   <Input
@@ -699,8 +808,9 @@ export function MemberSheet({ open, member, onClose, onSave, existingReceiptCoun
                     error={errors.membershipDue?.message}
                     {...register("membershipDue")}
                     readOnly={!isCustomPlan}
+                    min={membershipStart}
                   />
-                  <Input label="Fees" type="number" step="1" error={errors.feesAmount?.message} {...register("feesAmount", { valueAsNumber: true })} />
+                  <Input label="Fees (₹)" type="number" step="1" min={0} error={errors.feesAmount?.message} {...register("feesAmount", { valueAsNumber: true })} />
                   <label className="grid gap-2 text-[14px] font-semibold lg:text-[15px]">
                     Payment Status
                     <select className="studio-input w-full px-3 py-2.5 lg:px-4 lg:py-3" {...register("paymentStatus")}>
@@ -708,6 +818,7 @@ export function MemberSheet({ open, member, onClose, onSave, existingReceiptCoun
                         <option key={option}>{option}</option>
                       ))}
                     </select>
+                    {errors.paymentStatus?.message && <span className="text-[12px] font-medium text-status-expired">{errors.paymentStatus.message}</span>}
                   </label>
                   {!member && paymentStatus !== "Pending" && (
                     <label className="grid gap-2 text-[14px] font-semibold lg:text-[15px]">
@@ -717,6 +828,7 @@ export function MemberSheet({ open, member, onClose, onSave, existingReceiptCoun
                           <option key={option}>{option}</option>
                         ))}
                       </select>
+                      {errors.method?.message && <span className="text-[12px] font-medium text-status-expired">{errors.method.message}</span>}
                     </label>
                   )}
                   {paymentStatus === "Partially Paid" && (
@@ -768,6 +880,7 @@ export function MemberSheet({ open, member, onClose, onSave, existingReceiptCoun
                     </Button>
                   </div>
                 ) : null}
+                {saveError ? <p className="mb-2 rounded-[var(--radius-card)] bg-red-50 px-3 py-2 text-[13px] font-bold text-status-expired">{saveError}</p> : null}
                 <Button className="w-full" type="submit" disabled={isSubmitting}>
                   <Save size={20} />
                   {isSubmitting ? "Saving..." : isNewCouple ? "Save Couple Members" : "Save Member"}

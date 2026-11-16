@@ -31,7 +31,7 @@ export function Input({ label, id, className, error, labelClassName, variant = "
           id={inputId}
           type={inputType}
           className={cn(
-            "w-full px-4 py-3 text-[15px] font-normal rounded-[var(--radius-card)] transition-all duration-200 outline-none pr-10",
+            "w-full px-4 py-3 text-[16px] font-normal rounded-[var(--radius-card)] transition-all duration-200 outline-none pr-10",
             variant === "light"
               ? "studio-input text-text-primary placeholder:text-text-muted"
               : "border border-white/10 bg-white/5 text-white placeholder:text-white/30 focus:border-brand-primary focus:bg-white/10 focus:ring-2 focus:ring-brand-primary/20",

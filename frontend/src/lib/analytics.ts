@@ -48,6 +48,14 @@ function memberTouchesPeriod(member: Member, start: Date, end: Date): boolean {
   }
 }
 
+function memberHasMoneyInPeriod(memberId: string, receipts: PaymentReceipt[], renewals: RenewalHistoryEntry[], start: Date, end: Date): boolean {
+  const period = { start, end };
+  return (
+    receipts.some((receipt) => receipt.memberId === memberId && dateInScope(receipt.paidOn, period)) ||
+    renewals.some((entry) => entry.memberId === memberId && dateInScope(entry.renewedOn, period))
+  );
+}
+
 export function splitAmountForCouple(amount: number): [number, number] {
   const normalized = safeAmount(amount);
   const first = Math.ceil(normalized / 2);
@@ -171,10 +179,19 @@ export function summarizePeriod(
     members
       .filter((member) => !receiptedIds.has(member.id) && dateInScope(member.joinDate, period))
       .reduce((total, member) => total + getMemberCollectedAmount(member), 0);
+  const inExpectedFees = (member: Member): boolean => {
+    if (period === null) {
+      return true;
+    }
+    return (
+      memberTouchesPeriod(member, period.start, period.end) ||
+      memberHasMoneyInPeriod(member.id, receipts, renewals, period.start, period.end)
+    );
+  };
   const expectedAmount =
     scopedRenewals.reduce((total, entry) => total + safeAmount(entry.amount) + safeAmount(entry.arrearsCarried), 0) +
     members
-      .filter((member) => !renewedIds.has(member.id) && (period === null || memberTouchesPeriod(member, period.start, period.end)))
+      .filter((member) => !renewedIds.has(member.id) && inExpectedFees(member))
       .reduce((total, member) => total + safeAmount(member.feesAmount), 0) +
     members
       .filter((member) => renewedIds.has(member.id) && dateInScope(member.joinDate, period))
@@ -201,7 +218,13 @@ export function summarizePeriod(
   };
 }
 
-export function getMembersForAnalyticsRange(members: Member[], range: AnalyticsRange, now = new Date()): Member[] {
+export function getMembersForAnalyticsRange(
+  members: Member[],
+  range: AnalyticsRange,
+  now = new Date(),
+  receipts: PaymentReceipt[] = [],
+  renewals: RenewalHistoryEntry[] = [],
+): Member[] {
   const nonDeleted = members.filter((member) => member.status !== "Deleted");
   if (range === "all") {
     return nonDeleted;
@@ -209,7 +232,11 @@ export function getMembersForAnalyticsRange(members: Member[], range: AnalyticsR
 
   const currentMonthEnd = endOfMonth(now);
   const periodStart = range === "1m" ? startOfMonth(now) : startOfMonth(subMonths(now, 1));
-  return nonDeleted.filter((member) => memberTouchesPeriod(member, periodStart, currentMonthEnd));
+  return nonDeleted.filter(
+    (member) =>
+      memberTouchesPeriod(member, periodStart, currentMonthEnd) ||
+      memberHasMoneyInPeriod(member.id, receipts, renewals, periodStart, currentMonthEnd),
+  );
 }
 
 export function summarizeAnalyticsRange(
@@ -220,7 +247,7 @@ export function summarizeAnalyticsRange(
   renewals: RenewalHistoryEntry[] = [],
 ): PeriodAnalytics {
   const label = range === "1m" ? "This Month" : range === "2m" ? "Last 2 Months" : "All Time";
-  const filtered = getMembersForAnalyticsRange(members, range, now);
+  const filtered = getMembersForAnalyticsRange(members, range, now, receipts, renewals);
   if (range === "all") {
     return summarizePeriod(label, filtered, now, { receipts, renewals, period: null });
   }
@@ -240,8 +267,8 @@ export function summarizeMemberAnalytics(
   const currentMonthEnd = endOfMonth(now);
   const lastTwoMonthsStart = startOfMonth(subMonths(now, 1));
 
-  const thisMonthMembers = nonDeleted.filter((member) => memberTouchesPeriod(member, currentMonthStart, currentMonthEnd));
-  const lastTwoMonthsMembers = nonDeleted.filter((member) => memberTouchesPeriod(member, lastTwoMonthsStart, currentMonthEnd));
+  const thisMonthMembers = getMembersForAnalyticsRange(nonDeleted, "1m", now, receipts, renewals);
+  const lastTwoMonthsMembers = getMembersForAnalyticsRange(nonDeleted, "2m", now, receipts, renewals);
 
   return {
     thisMonth: summarizePeriod("This Month", thisMonthMembers, now, { receipts, renewals, period: { start: currentMonthStart, end: currentMonthEnd } }),

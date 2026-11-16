@@ -296,7 +296,7 @@ export function TopBar({ trainer, onLogout, onSettings, onReports, members = [],
             onClick={() => void handleRefreshApp()}
           >
             <RefreshCw size={19} className={`transition-transform duration-500 ease-out ${refreshing ? "animate-spin" : "group-hover:rotate-180"}`} />
-            <span className="hidden lg:inline">{refreshing ? "Refreshing..." : "Refresh"}</span>
+            <span className="hidden md:inline">{refreshing ? "Refreshing..." : "Refresh"}</span>
           </button>
           <button
             type="button"
@@ -306,7 +306,7 @@ export function TopBar({ trainer, onLogout, onSettings, onReports, members = [],
             className="focus-ring flex h-10 min-w-10 items-center justify-center gap-1.5 rounded-full border border-transparent px-2 text-[13px] font-bold text-text-secondary transition hover:border-red-200 hover:bg-red-50 hover:text-status-expired"
           >
             <LogOut size={19} />
-            <span className="hidden lg:inline">Logout</span>
+            <span className="hidden md:inline">Logout</span>
           </button>
         </div>
       </div>

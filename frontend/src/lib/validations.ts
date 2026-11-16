@@ -72,7 +72,7 @@ export const accountUpdateSchema = z.object({
 });
 
 export const memberInputSchema = z.object({
-  name: requiredText,
+  name: z.string().trim().min(1, "Required").max(120, "Keep the name under 120 characters"),
   phone: z.string().regex(/^\d{10}$/, "Phone must be exactly 10 digits"),
   email: z.string().trim().max(254).refine((value) => value === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value), "Enter a valid email or leave it blank").default(""),
   age: z.coerce.number().int().min(12, "Age looks too low").max(90, "Age looks too high"),
@@ -82,20 +82,20 @@ export const memberInputSchema = z.object({
   heightCm: z.coerce.number().min(90, "Height looks too low").max(240, "Height looks too high"),
   goal: z.enum(goalOptions),
   goalOther: optionalText,
-  healthProblem: optionalText,
-  specialInstruction: optionalText,
-  warmupExercises: optionalText,
-  flexibilityTraining: optionalText,
-  cardioTraining: optionalText,
+  healthProblem: z.string().trim().max(500, "Keep under 500 characters").optional(),
+  specialInstruction: z.string().trim().max(500, "Keep under 500 characters").optional(),
+  warmupExercises: z.string().trim().max(500, "Keep under 500 characters").optional(),
+  flexibilityTraining: z.string().trim().max(500, "Keep under 500 characters").optional(),
+  cardioTraining: z.string().trim().max(500, "Keep under 500 characters").optional(),
   planType: z.enum(planOptions),
   membershipStart: isoDate,
   membershipDue: isoDate,
-  feesAmount: z.coerce.number().min(0, "Fees cannot be negative"),
+  feesAmount: z.coerce.number().int("Fees must be whole rupees").min(0, "Fees cannot be negative"),
   paymentStatus: z.enum(paymentOptions),
   method: z.enum(paymentMethodOptions).default("Cash"),
   avatar: z.string().optional(),
   trainingType: z.enum(trainingTypeOptions),
-  address: z.string().trim().default(""),
+  address: z.string().trim().max(500, "Keep the address under 500 characters").default(""),
   partialPaidAmount: z.coerce.number().min(0).default(0),
   balanceAmount: z.coerce.number().min(0).default(0),
 }).superRefine((value, ctx) => {
@@ -107,11 +107,11 @@ export const memberInputSchema = z.object({
     });
   }
 
-  if (value.membershipDue < value.membershipStart) {
+  if (value.membershipDue <= value.membershipStart) {
     ctx.addIssue({
       code: "custom",
       path: ["membershipDue"],
-      message: "Due date must be on or after the start date",
+      message: "Due date must be after the start date",
     });
   }
 

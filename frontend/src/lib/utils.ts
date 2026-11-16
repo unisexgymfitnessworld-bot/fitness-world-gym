@@ -105,6 +105,14 @@ export function getMembershipStatus(dueDate: string, paymentStatus?: string): Me
   return "Active";
 }
 
+/** Single display-status rule for table, cards, filters, and counts. */
+export function getDisplayStatus(member: Pick<Member, "status" | "membershipDue" | "paymentStatus">): MemberStatus {
+  if (member.status !== "Active") {
+    return member.status;
+  }
+  return getMembershipStatus(member.membershipDue, member.paymentStatus);
+}
+
 type DueAwareMember = Pick<Member, "membershipStart" | "membershipDue" | "paymentStatus" | "planType" | "status">;
 
 export function isPlanLongTerm(planType: PlanType, membershipStart?: string, membershipDue?: string): boolean {

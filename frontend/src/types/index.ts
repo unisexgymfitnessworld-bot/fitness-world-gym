@@ -135,7 +135,7 @@ export interface SmsLog {
 
 export interface SmsSendResult {
   requestId: string | null;
-  status: "sent" | "queued";
+  status: "sent" | "queued" | "demo";
   duplicate?: boolean;
   channel?: NotifyChannel | null;
 }
@@ -329,6 +329,8 @@ export interface RenewalHistoryEntry {
   amount: number;
   arrearsCarried: number;
   paymentStatus: PaymentStatus;
+  /** Cash collected at renewal time; absent on rows written before it was stored. */
+  collectedAmount?: number;
   renewedOn: string;
   createdAt: string;
 }
@@ -337,7 +339,6 @@ export interface DashboardStats {
   total: number;
   active: number;
   dueThisWeek: number;
-  pendingPayments: number;
 }
 
 export interface MemberFilters {
