@@ -11,7 +11,7 @@ import {
   type MoneyBuckets,
 } from "../lib/money";
 import { sampleAttendance, sampleMembers, samplePaymentReceipts, sampleRenewalHistory } from "../lib/sampleData";
-import { calculateBmi, daysUntil, formatCurrency, getMemberActionDueDate, getMembershipStatus, toMember } from "../lib/utils";
+import { calculateBmi, daysUntil, formatCurrency, getMemberActionDueDate, getMembershipStatus, toMember, todayISO } from "../lib/utils";
 import type { AttendanceEntry, BillChannel, DashboardStats, Member, MemberInput, PaymentMethod, PaymentReceipt, PaymentReceiptInput, PaymentStatus, RenewalHistoryEntry, PlanType, ResendResult, StatementResult } from "../types";
 
 interface MembersState {
@@ -201,6 +201,7 @@ export function useMembers(): MembersState {
     }
 
     let savedMember: Member;
+    const editReceipts: PaymentReceipt[] = [];
     setMembers((current) => {
       const existing = current.find((member) => member.id === memberId);
       if (!existing) {
@@ -214,19 +215,37 @@ export function useMembers(): MembersState {
       const editPartial = Math.min(Math.max(input.partialPaidAmount, 0), Math.max(input.feesAmount, 0));
       const editBalance = editArrears + Math.max(input.feesAmount - editPartial, 0);
       const editPayment: PaymentStatus = editBalance > 0 && input.paymentStatus === "Paid" ? "Partially Paid" : input.paymentStatus;
+      const editCash = editPartial - Math.max(existing.partialPaidAmount ?? 0, 0);
       savedMember = {
         ...existing,
         ...input,
         partialPaidAmount: editPartial,
         balanceAmount: editBalance,
         paymentStatus: editPayment,
+        totalCollected: Math.max(existing.totalCollected ?? 0, 0) + Math.max(editCash, 0),
         bmi: toMember(input, current).bmi,
         status: existing.status === "Suspended" ? "Suspended" : getMembershipStatus(input.membershipDue, editPayment),
         smsSent3days: existing.membershipDue === input.membershipDue ? existing.smsSent3days : false,
         updatedAt: new Date().toISOString(),
       };
+      // Guarded: updaters must be pure (StrictMode double-invokes in dev).
+      if (editCash > 0 && editReceipts.length === 0) {
+        editReceipts.push({
+          id: crypto.randomUUID(),
+          memberId,
+          receiptNo: generateLocalReceiptNo(),
+          paidOn: todayISO(),
+          amount: editCash,
+          method: input.method ?? "Cash",
+          note: `Payment recorded: ${input.planType} plan`,
+          createdAt: new Date().toISOString(),
+        });
+      }
       return current.map((member) => (member.id === memberId ? savedMember : member));
     });
+    if (editReceipts.length > 0) {
+      setPaymentReceipts((current) => [...editReceipts, ...current]);
+    }
     return savedMember!;
   }
 
@@ -371,7 +390,7 @@ export function useMembers(): MembersState {
       amount: result.feesAmount,
       arrearsCarried: result.arrearsClosed,
       paymentStatus: result.paymentStatus,
-      renewedOn: start,
+      renewedOn: todayISO(),
       createdAt: new Date().toISOString(),
     };
 
@@ -379,7 +398,7 @@ export function useMembers(): MembersState {
       id: crypto.randomUUID(),
       memberId,
       receiptNo: generateLocalReceiptNo(),
-      paidOn: start,
+      paidOn: todayISO(),
       amount: result.allocation.total,
       method,
       note: `Membership Renewal: ${planType ?? oldMember.planType} plan (${start} to ${due}) — ${receiptLines(result.allocation).join(", ")}`,

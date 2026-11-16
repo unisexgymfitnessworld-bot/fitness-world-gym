@@ -20,7 +20,7 @@ import { getCollectiblePendingAmount, getMembersForAnalyticsRange, summarizeAnal
 import { api, isApiConfigured } from "../lib/api";
 import { buildTodayFollowUps } from "../lib/followUps";
 import type { MessageTemplateId } from "../lib/messageTemplates";
-import { daysUntil, formatCurrency, formatDisplayDate, getMemberActionDueDate } from "../lib/utils";
+import { daysUntil, formatCurrency, formatDisplayDate, getMemberActionDueDate, todayISO } from "../lib/utils";
 import { useAppStore } from "../store/useAppStore";
 import type { BillChannel, MemberInput, NotifyChannelChoice, PaymentMethod, PaymentReceiptInput, PaymentStatus, PlanType, ResendResult, SmsSendResult, StatementResult } from "../types";
 
@@ -53,7 +53,7 @@ export function Dashboard() {
     [analysisMembers],
   );
   const collectedToday = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayISO();
     return paymentReceipts
       .filter((receipt) => receipt.paidOn === today)
       .reduce((sum, receipt) => sum + receipt.amount, 0);

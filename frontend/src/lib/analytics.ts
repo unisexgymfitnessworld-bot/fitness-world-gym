@@ -151,8 +151,11 @@ export function summarizePeriod(
   const receipts = scope?.receipts ?? [];
   const renewals = scope?.renewals ?? [];
   const period = scope?.period ?? null;
-  const scopedReceipts = receipts.filter((receipt) => dateInScope(receipt.paidOn, period));
-  const scopedRenewals = renewals.filter((entry) => dateInScope(entry.renewedOn, period));
+  // Collected and expected must describe the same members, or the rate mixes
+  // gym-wide cash with a filtered roster.
+  const memberIds = new Set(members.map((member) => member.id));
+  const scopedReceipts = receipts.filter((receipt) => memberIds.has(receipt.memberId) && dateInScope(receipt.paidOn, period));
+  const scopedRenewals = renewals.filter((entry) => memberIds.has(entry.memberId) && dateInScope(entry.renewedOn, period));
   const renewedIds = new Set(renewals.map((entry) => entry.memberId));
   const receiptedIds = new Set(receipts.map((receipt) => receipt.memberId));
   const firstRenewalByMember = new Map<string, RenewalHistoryEntry>();

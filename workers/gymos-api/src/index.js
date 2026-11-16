@@ -1397,7 +1397,48 @@ async function updateMember(env, user, memberId, input) {
     }),
   });
   if (!rows[0]) throw new ApiError(404, "MEMBER_NOT_FOUND", "Member not found");
-  return mapMember(rows[0]);
+  const updated = mapMember(rows[0]);
+  // A raised cycle-paid figure is newly recorded cash: without a receipt it
+  // stays invisible to every collection report.
+  const editCash = editPartial - moneyNum(current.partialPaidAmount);
+  if (editCash > 0) {
+    await ensureEditReceipt(env, user, updated, input, editCash);
+  }
+  return updated;
+}
+
+async function ensureEditReceipt(env, user, memberRow, input, delta) {
+  const bucketsOn = await bucketColumnsAvailable(env);
+  try {
+    await supabaseJson(env, "/payment_receipts?select=id", {
+      method: "POST",
+      body: JSON.stringify({
+        member_id: memberRow.id,
+        owner_user_id: user.id,
+        receipt_no: generateReceiptNo(),
+        paid_on: isoDateInTimeZone(),
+        amount: delta,
+        method: input.method ?? "Cash",
+        note: `Payment recorded: ${input.planType} plan`,
+        ...(bucketsOn ? { arrears_applied: 0, cycle_applied: delta, advance_applied: 0 } : {}),
+      }),
+    });
+  } catch (error) {
+    logError("edit_receipt_create_failed", error, { memberId: memberRow.id });
+    return;
+  }
+  if (bucketsOn) {
+    try {
+      const total = moneyNum(memberRow.totalCollected) + delta;
+      await supabaseJson(env, `/members?id=eq.${encodeURIComponent(memberRow.id)}&select=id`, {
+        method: "PATCH",
+        body: JSON.stringify({ total_collected: total }),
+      });
+      memberRow.totalCollected = total;
+    } catch (error) {
+      logError("edit_total_backfill_failed", error, { memberId: memberRow.id });
+    }
+  }
 }
 
 async function listAllPaymentReceipts(env, user) {
@@ -1726,8 +1767,8 @@ async function resumeRenewalFromHistory(env, user, member, historyRow, clientReq
         body: JSON.stringify({
           member_id: memberId,
           owner_user_id: user.id,
-          receipt_no: generateReceiptNo(new Date(historyRow.new_start_date)),
-          paid_on: historyRow.new_start_date,
+          receipt_no: generateReceiptNo(),
+          paid_on: historyRow.renewed_on || isoDateInTimeZone(),
           amount: renewed.allocation.total,
           method: historyRow.collected_method || "Cash",
           note: `Membership Renewal: ${historyRow.new_plan_type} plan (${historyRow.new_start_date} to ${historyRow.new_due_date}) — ${receiptSplitText(renewed.allocation)}`,
@@ -1873,12 +1914,13 @@ async function renewMember(env, user, memberId, membershipStart, membershipDue, 
   // would find the history key and the renewal could never complete cleanly.
   let receipt = null;
   if (safePartial > 0) {
-    const receiptNo = generateReceiptNo(new Date(membershipStart));
+    const receiptNo = generateReceiptNo();
     const receiptBody = {
       member_id: memberId,
       owner_user_id: user.id,
       receipt_no: receiptNo,
-      paid_on: membershipStart,
+      // Cash is booked today even when the new cycle starts later.
+      paid_on: isoDateInTimeZone(),
       amount: safePartial,
       method,
       note: bucketsOn && renewed
@@ -2096,8 +2138,10 @@ async function listAttendance(env, user, memberId, month) {
     order: "visit_date.desc",
   });
   if (month && /^\d{4}-\d{2}$/.test(month)) {
+    const [filterYear, filterMonth] = month.split("-").map(Number);
+    const nextMonth = filterMonth === 12 ? `${filterYear + 1}-01` : `${filterYear}-${String(filterMonth + 1).padStart(2, "0")}`;
     params.set("visit_date", `gte.${month}-01`);
-    params.append("visit_date", `lt.${month}-32`);
+    params.append("visit_date", `lt.${nextMonth}-01`);
   }
   const rows = await supabaseJson(env, `/attendance?${params.toString()}`);
   return rows.map(mapAttendance);

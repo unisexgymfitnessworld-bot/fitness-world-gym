@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "typecheck": "tsc -b --pretty false",
-    "test": "tsc src/lib/memberInsights.test.ts src/lib/memberInsights.ts src/lib/money.test.ts src/lib/money.ts --outDir node_modules/.tmp/test --rootDir src --module commonjs --target es2022 --moduleResolution bundler --esModuleInterop --skipLibCheck --ignoreConfig --noCheck && node --test node_modules/.tmp/test/lib/"
+    "test": "tsc src/lib/memberInsights.test.ts src/lib/memberInsights.ts src/lib/money.test.ts src/lib/money.ts src/lib/analytics.test.ts src/lib/analytics.ts --outDir node_modules/.tmp/test --rootDir src --module commonjs --target es2022 --moduleResolution bundler --esModuleInterop --skipLibCheck --ignoreConfig --noCheck && node --test node_modules/.tmp/test/lib/"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.107.0",

@@ -11,7 +11,7 @@ import {
 import { Eye, MessageCircle, MessageSquare, Pencil, UserX, SearchX, Plus, Download, UserCheck, Trash2 } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
-import { compareRegistrationNumbers, displayGoal, displayMemberStatus, displayPaymentStatus, formatDisplayDate, formatPhone, getDueTone, getMemberActionDueDate, getMemberDueKind, initials, formatCurrency } from "../../lib/utils";
+import { compareRegistrationNumbers, displayGoal, displayMemberStatus, displayPaymentStatus, formatDisplayDate, formatPhone, getDueTone, getMemberActionDueDate, getMemberDueKind, initials, formatCurrency, todayISO } from "../../lib/utils";
 import { csvCell, downloadCsv } from "../../lib/escape";
 import { getCollectiblePendingAmount } from "../../lib/analytics";
 import type { Member } from "../../types";
@@ -249,7 +249,7 @@ export function MemberTable({
         cell: (info) => {
           const status = info.getValue();
           const member = info.row.original;
-          const today = new Date().toISOString().slice(0, 10);
+          const today = todayISO();
           
           let displayStatus = status;
           if (status === "Active") {
