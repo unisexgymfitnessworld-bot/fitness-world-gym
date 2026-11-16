@@ -85,6 +85,9 @@ export function SmsSettingsPanel({ variant = "light", onSaved }: SmsSettingsPane
   const [saving, setSaving] = useState(false);
   const [formMessage, setFormMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [testChannel, setTestChannel] = useState<NotifyChannel>("sms");
+  // Developers are blocked from gym member/workspace endpoints by design, so
+  // their test box sends SMS through the developer-only endpoint instead.
+  const effectiveTestChannel: NotifyChannel = isDeveloper ? "sms" : testChannel;
   const [testTo, setTestTo] = useState("");
   const [testMessage, setTestMessage] = useState("Test message from Fitness World GymOS.");
   const [testing, setTesting] = useState(false);
@@ -251,9 +254,9 @@ export function SmsSettingsPanel({ variant = "light", onSaved }: SmsSettingsPane
     setTesting(true);
     setTestResult(null);
     try {
-      const channelLabel = testChannel === "whatsapp" ? "WhatsApp" : testChannel === "email" ? "Email" : "SMS";
+      const channelLabel = effectiveTestChannel === "whatsapp" ? "WhatsApp" : effectiveTestChannel === "email" ? "Email" : "SMS";
       let to: string;
-      if (testChannel === "email") {
+      if (effectiveTestChannel === "email") {
         to = testTo.trim().toLowerCase();
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
           throw new Error("Enter a valid email address.");
@@ -271,7 +274,9 @@ export function SmsSettingsPanel({ variant = "light", onSaved }: SmsSettingsPane
       if (!testMessage.trim()) {
         throw new Error("Enter a test message.");
       }
-      const result = await api.notifyTest(testChannel, to, testMessage.trim());
+      const result = isDeveloper
+        ? await api.testNotification(to, testMessage.trim())
+        : await api.notifyTest(effectiveTestChannel, to, testMessage.trim());
       setTestResult({
         tone: "success",
         text:
@@ -351,7 +356,7 @@ export function SmsSettingsPanel({ variant = "light", onSaved }: SmsSettingsPane
         ) : (
           <AlertTriangle size={20} className="mt-0.5 shrink-0 text-amber-500" />
         )}
-        <div>
+        <div className="min-w-0">
           <p className={cn("text-[14px] font-black", dark ? "text-white" : "text-text-primary")}>
             {anyReady ? `Notifications READY (${readyChannels.join(" · ")})` : "NO CHANNEL READY"}
           </p>
@@ -685,27 +690,33 @@ export function SmsSettingsPanel({ variant = "light", onSaved }: SmsSettingsPane
           Tests one channel at a time. Use your own number or email first.
         </p>
         <div className="mt-4 grid gap-4">
-          <label className={cn("grid gap-2 text-[14px] font-bold", dark ? "text-white" : "text-text-primary")}>
-            Channel
-            <select
-              className={cn(
-                "w-full rounded-[var(--radius-card)] px-4 py-3 text-[14px] font-semibold outline-none",
-                dark ? "border border-white/10 bg-white/5 text-white" : "studio-input text-text-primary",
-              )}
-              value={testChannel}
-              onChange={(event) => setTestChannel(event.target.value as NotifyChannel)}
-            >
-              {form.wa_enabled ? <option value="whatsapp">WhatsApp</option> : null}
-              <option value="sms">SMS</option>
-              <option value="email">Email</option>
-            </select>
-          </label>
+          {isDeveloper ? (
+            <p className={cn("text-[13px] font-bold", dark ? "text-white/70" : "text-text-secondary")}>
+              Channel: SMS — developer tests send SMS only.
+            </p>
+          ) : (
+            <label className={cn("grid gap-2 text-[14px] font-bold", dark ? "text-white" : "text-text-primary")}>
+              Channel
+              <select
+                className={cn(
+                  "w-full rounded-[var(--radius-card)] px-4 py-3 text-[14px] font-semibold outline-none",
+                  dark ? "border border-white/10 bg-white/5 text-white" : "studio-input text-text-primary",
+                )}
+                value={testChannel}
+                onChange={(event) => setTestChannel(event.target.value as NotifyChannel)}
+              >
+                {form.wa_enabled ? <option value="whatsapp">WhatsApp</option> : null}
+                <option value="sms">SMS</option>
+                <option value="email">Email</option>
+              </select>
+            </label>
+          )}
           <Input
-            label={testChannel === "email" ? "Destination Email" : "Destination Phone (10 digits)"}
+            label={effectiveTestChannel === "email" ? "Destination Email" : "Destination Phone (10 digits)"}
             variant={variant}
             value={testTo}
             onChange={(event) => setTestTo(event.target.value)}
-            placeholder={testChannel === "email" ? "you@example.com" : "e.g. 9876543210"}
+            placeholder={effectiveTestChannel === "email" ? "you@example.com" : "e.g. 9876543210"}
             autoComplete="off"
           />
           <label className={cn("grid gap-2 text-[15px] font-semibold", dark ? "text-white/80" : "text-text-primary")}>
@@ -741,14 +752,14 @@ export function SmsSettingsPanel({ variant = "light", onSaved }: SmsSettingsPane
           ) : null}
           <Button onClick={() => void handleTest()} disabled={testing} variant="secondary" className="w-full font-bold">
             {testing ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-            {testing ? "Sending..." : `Send Test ${testChannel === "whatsapp" ? "WhatsApp" : testChannel === "email" ? "Email" : "SMS"}`}
+            {testing ? "Sending..." : `Send Test ${effectiveTestChannel === "whatsapp" ? "WhatsApp" : effectiveTestChannel === "email" ? "Email" : "SMS"}`}
           </Button>
         </div>
       </div>
 
       <div className={cn("border-t pt-5", dark ? "border-white/10" : "border-border-default/60")}>
-        <div className="flex items-center justify-between gap-3">
-          <div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
             <p className={cn("flex items-center gap-2 text-[14px] font-black", dark ? "text-white" : "text-text-primary")}>
               <Clock3 size={15} />
               Recent Messages

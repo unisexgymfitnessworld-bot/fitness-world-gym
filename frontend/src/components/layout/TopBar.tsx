@@ -15,9 +15,12 @@ interface TopBarProps {
   onReports?: () => void;
   members?: Member[];
   onSelectMember?: (memberId: string) => void;
+  tone?: "light" | "dark";
+  searchEnabled?: boolean;
 }
 
-export function TopBar({ trainer, onLogout, onSettings, onReports, members = [], onSelectMember }: TopBarProps) {
+export function TopBar({ trainer, onLogout, onSettings, onReports, members = [], onSelectMember, tone = "light", searchEnabled = true }: TopBarProps) {
+  const dark = tone === "dark";
   const [searchQuery, setSearchQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
@@ -105,6 +108,7 @@ export function TopBar({ trainer, onLogout, onSettings, onReports, members = [],
 
   // Keyboard shortcut to focus search input: '/' key
   useEffect(() => {
+    if (!searchEnabled) return;
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       const activeTag = document.activeElement?.tagName.toLowerCase();
       if (activeTag === "input" || activeTag === "textarea") return;
@@ -118,7 +122,7 @@ export function TopBar({ trainer, onLogout, onSettings, onReports, members = [],
 
     window.addEventListener("keydown", handleGlobalKeyDown);
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
-  }, []);
+  }, [searchEnabled]);
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -135,20 +139,25 @@ export function TopBar({ trainer, onLogout, onSettings, onReports, members = [],
   return (
     <>
     <motion.header
-      className="gradient-border-top sticky top-0 z-30 border-b border-border-default bg-brand-white/92 text-text-primary shadow-[0_8px_30px_rgba(26,26,46,0.08)] backdrop-blur-xl print:hidden"
+      className={
+        dark
+          ? "sticky top-0 z-30 border-b border-white/10 bg-[#0B0D1D]/95 text-white shadow-[0_8px_30px_rgba(0,0,0,0.35)] backdrop-blur-xl print:hidden"
+          : "gradient-border-top sticky top-0 z-30 border-b border-border-default bg-brand-white/92 text-text-primary shadow-[0_8px_30px_rgba(26,26,46,0.08)] backdrop-blur-xl print:hidden"
+      }
       initial={{ y: -80, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ type: "spring", stiffness: 260, damping: 28, delay: 0.1 }}
     >
       <div className="mx-auto flex min-h-16 max-w-[1500px] items-center justify-between gap-2 px-3 py-2.5 sm:gap-4 sm:px-4 lg:min-h-[72px] lg:px-8">
         <div className="sm:hidden shrink-0">
-          <FwMark compact tone="light" />
+          <FwMark compact tone={dark ? "dark" : "light"} />
         </div>
         <div className="hidden sm:block shrink-0">
-          <FwMark tone="light" />
+          <FwMark tone={dark ? "dark" : "light"} />
         </div>
 
         {/* Desktop Quick Search Input */}
+        {searchEnabled && (
         <div ref={containerRef} className="relative flex-1 max-w-[280px] md:max-w-[340px] lg:max-w-[420px] hidden md:block mx-4">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
@@ -231,10 +240,11 @@ export function TopBar({ trainer, onLogout, onSettings, onReports, members = [],
             </div>
           )}
         </div>
+        )}
 
         <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
           {/* Mobile Search Button */}
-          {members.length > 0 && (
+          {searchEnabled && members.length > 0 && (
             <div className="md:hidden">
               <Button
                 variant="ghost"
@@ -251,18 +261,18 @@ export function TopBar({ trainer, onLogout, onSettings, onReports, members = [],
           )}
 
           <div className="hidden text-right leading-tight md:block">
-            <p className="max-w-[180px] truncate text-[15px] font-black text-text-primary">{trainer.name}</p>
-            <p className="max-w-[180px] truncate text-[12px] font-semibold text-text-secondary">{trainer.email}</p>
+            <p className={`max-w-[180px] truncate text-[15px] font-black ${dark ? "text-white" : "text-text-primary"}`}>{trainer.name}</p>
+            <p className={`max-w-[180px] truncate text-[12px] font-semibold ${dark ? "text-white/60" : "text-text-secondary"}`}>{trainer.email}</p>
           </div>
-          <div className="hidden h-10 w-10 shrink-0 overflow-hidden rounded-full border border-border-default bg-brand-primary-light md:flex items-center justify-center">
+          <div className={`hidden h-10 w-10 shrink-0 overflow-hidden rounded-full border md:flex items-center justify-center ${dark ? "border-white/10 bg-white/10" : "border-border-default bg-brand-primary-light"}`}>
             {trainer.avatar ? (
               <img src={trainer.avatar} alt={trainer.name} className="h-full w-full object-cover" />
             ) : (
-              <span className="text-[14px] font-extrabold text-brand-primary">{initials(trainer.name)}</span>
+              <span className={`text-[14px] font-extrabold ${dark ? "text-white" : "text-brand-primary"}`}>{initials(trainer.name)}</span>
             )}
           </div>
 
-          <span className="hidden h-8 w-px bg-border-default md:block" aria-hidden="true" />
+          <span className={`hidden h-8 w-px md:block ${dark ? "bg-white/10" : "bg-border-default"}`} aria-hidden="true" />
 
           {onReports && (
             <button
@@ -270,7 +280,7 @@ export function TopBar({ trainer, onLogout, onSettings, onReports, members = [],
               onClick={onReports}
               title="Monthly Reports"
               aria-label="Monthly Reports"
-              className="focus-ring flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-full border border-border-default bg-brand-white px-2.5 py-1 text-[13px] font-bold text-text-primary transition hover:border-brand-primary/40 hover:text-brand-primary sm:px-3.5"
+              className={`focus-ring flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-full border px-2.5 py-1 text-[13px] font-bold transition sm:px-3.5 ${dark ? "border-white/10 bg-white/5 text-white hover:border-white/25 hover:text-white" : "border-border-default bg-brand-white text-text-primary hover:border-brand-primary/40 hover:text-brand-primary"}`}
             >
               <FileSpreadsheet size={17} />
               <span className="hidden md:inline">Reports</span>
@@ -282,7 +292,7 @@ export function TopBar({ trainer, onLogout, onSettings, onReports, members = [],
               onClick={onSettings}
               title="Settings"
               aria-label="Settings"
-              className="focus-ring flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-full border border-border-default bg-brand-white px-2.5 py-1 text-[13px] font-bold text-text-primary transition hover:border-brand-primary/40 hover:text-brand-primary sm:px-3.5"
+              className={`focus-ring flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-full border px-2.5 py-1 text-[13px] font-bold transition sm:px-3.5 ${dark ? "border-white/10 bg-white/5 text-white hover:border-white/25 hover:text-white" : "border-border-default bg-brand-white text-text-primary hover:border-brand-primary/40 hover:text-brand-primary"}`}
             >
               <Settings size={17} />
               <span className="hidden md:inline">Settings</span>
@@ -293,7 +303,7 @@ export function TopBar({ trainer, onLogout, onSettings, onReports, members = [],
             aria-label={refreshing ? "Refreshing app, please wait" : "Refresh App"}
             title="Refresh App"
             disabled={refreshing}
-            className="focus-ring group flex h-10 min-w-10 items-center justify-center gap-1.5 rounded-full border border-transparent px-2 text-[13px] font-bold text-text-secondary transition hover:border-border-default hover:bg-surface-raised hover:text-text-primary disabled:opacity-60"
+            className={`focus-ring group flex h-10 min-w-10 items-center justify-center gap-1.5 rounded-full border border-transparent px-2 text-[13px] font-bold transition disabled:opacity-60 ${dark ? "text-white/60 hover:border-white/10 hover:bg-white/10 hover:text-white" : "text-text-secondary hover:border-border-default hover:bg-surface-raised hover:text-text-primary"}`}
             onClick={() => void handleRefreshApp()}
           >
             <RefreshCw size={19} className={`transition-transform duration-500 ease-out ${refreshing ? "animate-spin" : "group-hover:rotate-180"}`} />
@@ -304,7 +314,7 @@ export function TopBar({ trainer, onLogout, onSettings, onReports, members = [],
             aria-label="Logout"
             title="Logout"
             onClick={() => setConfirmLogoutOpen(true)}
-            className="focus-ring flex h-10 min-w-10 items-center justify-center gap-1.5 rounded-full border border-transparent px-2 text-[13px] font-bold text-text-secondary transition hover:border-red-200 hover:bg-red-50 hover:text-status-expired"
+            className={`focus-ring flex h-10 min-w-10 items-center justify-center gap-1.5 rounded-full border border-transparent px-2 text-[13px] font-bold transition ${dark ? "text-white/60 hover:border-red-400/30 hover:bg-red-500/10 hover:text-red-300" : "text-text-secondary hover:border-red-200 hover:bg-red-50 hover:text-status-expired"}`}
           >
             <LogOut size={19} />
             <span className="hidden md:inline">Logout</span>
