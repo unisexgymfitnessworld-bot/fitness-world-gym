@@ -15,31 +15,35 @@ and talks to Supabase through the REST/Auth APIs.
 2. Add Worker secrets. Use the Supabase publishable key for `SUPABASE_ANON_KEY`; use the service role or secret key for `SUPABASE_SERVICE_ROLE_KEY`.
 
    ```bash
+   npx wrangler secret put SUPABASE_URL
    npx wrangler secret put SUPABASE_ANON_KEY
    npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
    npx wrangler secret put FRONTEND_URLS
    npx wrangler secret put TRAINER_EMAILS
    npx wrangler secret put SMSGATE_USERNAME
    npx wrangler secret put SMSGATE_PASSWORD
+   npx wrangler secret put SMS_SECRET_KEY
    ```
 
    `FRONTEND_URLS` should be comma-separated:
 
    ```text
-   http://localhost:5173,http://127.0.0.1:5173,https://your-vercel-app.vercel.app
+   http://localhost:5173,http://127.0.0.1:5173,https://fitness-world-gymos.vercel.app
    ```
 
    `TRAINER_EMAILS` should be the exact comma-separated trainer email allowlist:
 
    ```text
-   vedasaradhiv@gmail.com,fitnessworld@gmail.com,trainer@fitnessworld.in
+   trainer1@example.com,trainer2@example.com
    ```
 
    New accounts created from the developer console are authorized by Supabase `app_metadata.role`.
 
-   SMS credentials can also be entered later from the app (Settings → SMS Setup,
-   open to trainers and developers) instead of secrets. Optional: `SMSGATE_DEVICE_ID` (pin sending to one phone),
-   `SMSGATE_SIM_NUMBER` (SIM slot to send from).
+   SMS credentials can also be entered later by a developer from the app
+   (Settings → SMS Notifications; connection settings are developer-only)
+   instead of secrets. Optional: `SMSGATE_DEVICE_ID` (pin sending to one phone),
+   `SMSGATE_SIM_NUMBER` (SIM slot to send from). Set `SMS_SECRET_KEY` before
+   saving any credential in the app.
 
 3. Deploy:
 
@@ -50,7 +54,7 @@ and talks to Supabase through the REST/Auth APIs.
 4. Set this on Vercel:
 
    ```text
-   VITE_API_BASE_URL=https://fitness-world-gymos-api.<your-subdomain>.workers.dev/api
+   VITE_API_BASE_URL=https://fitness-world-gymos-api.unisexgymfitnessworld.workers.dev/api
    ```
 
 ## Scheduled Jobs

@@ -19,14 +19,18 @@ in prod. Add the variables from `.env.example` to connect production services.
 
 ## Structure
 
-- `frontend` — React 19, Vite, TypeScript, Tailwind CSS v4, Motion, Zustand, React Hook Form, Zod, TanStack Table.
+- `frontend` — React 19, Vite, TypeScript, Tailwind CSS v4, Motion, Zustand, React Hook Form, Zod, TanStack Table. Deployed to Vercel.
 - `workers/gymos-api` — Cloudflare Worker API (the only backend): Supabase REST/Auth, SMSGate SMS reminders, cron jobs.
-- `supabase/migrations` — database schema, generated columns, triggers, indexes, grants, and RLS. Run all files in name order.
-- `docs` — deployment and keep-alive setup.
+- `supabase/migrations` — database schema, generated columns, triggers, indexes, grants, and RLS. Run all files in name order on a fresh database.
+- `supabase/APPLY_MISSING_MIGRATIONS.sql` — one-file catch-up for live databases that missed migrations. Run sections in order.
+- `appsscript/Code.gs` — Google Apps Script mailer (email channel for bills). Paste into a script project, deploy, save URL + secret in Settings.
+- `docs` — deployment, audit, and keep-alive setup. `docs/handouts` holds the gym phone APK and reference media (not app code).
+- `.github/workflows` — scheduled Supabase keep-alive ping.
 
 ## Messaging
 
 Automated SMS reminders go through a gym Android phone running
 [SMSGate](https://github.com/capcom6/android-sms-gateway) (free, uses the SIM pack).
-Keep the phone on and online. Configure credentials in Settings → SMS Setup
-after deploying (trainers and developers both can do this).
+Install `docs/handouts/smsgate-v1.78.2-release.apk` on the gym phone and keep it
+on and online. A developer saves the SMSGate credentials in Settings → SMS
+Notifications after deploying (connection settings are developer-only).

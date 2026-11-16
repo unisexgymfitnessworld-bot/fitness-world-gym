@@ -3,7 +3,7 @@
 1. Create a free account at https://uptimerobot.com.
 2. Select **Add Monitor**.
 3. Choose **HTTP(s)**.
-4. Set the URL to `https://fitness-world-gymos-api.your-subdomain.workers.dev/health`.
+4. Set the URL to `https://fitness-world-gymos-api.unisexgymfitnessworld.workers.dev/health`.
 5. Set the interval to **5 minutes**.
 6. Enable email alerts.
 7. Save the monitor.

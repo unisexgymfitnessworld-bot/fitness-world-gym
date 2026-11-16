@@ -8,8 +8,8 @@ This document lists the step-by-step production checklist and handover procedure
 
 Update these placeholders once the production environments are provisioned:
 
-- **Frontend URL (Vercel)**: `https://fitness-world.vercel.app` (or custom domain)
-- **Backend URL (Cloudflare Worker)**: `https://fitness-world-gymos-api.your-subdomain.workers.dev`
+- **Frontend URL (Vercel)**: `https://fitness-world-gymos.vercel.app` (or custom domain)
+- **Backend URL (Cloudflare Worker)**: `https://fitness-world-gymos-api.unisexgymfitnessworld.workers.dev`
 - **Database Dashboard (Supabase)**: `https://supabase.com/dashboard/project/your-project-id`
 
 ---
@@ -86,12 +86,12 @@ Update these placeholders once the production environments are provisioned:
    plaintext.
    Set `FRONTEND_URLS` to a comma-separated list, for example:
    ```text
-   http://localhost:5173,http://127.0.0.1:5173,https://your-app.vercel.app
+   http://localhost:5173,http://127.0.0.1:5173,https://fitness-world-gymos.vercel.app
    ```
    Set `TRAINER_EMAILS` to the exact trainer allowlist (REQUIRED — there is no
    fallback list; an empty value locks everyone out):
    ```text
-   digimartrix26@gmail.com,vijayfitnessworld@gmail.com,jaiga9655@gmail.com
+   trainer1@example.com,trainer2@example.com
    ```
    To change who can log in, edit this secret — never the code. The developer
    account additionally needs `app_metadata` `{"role": "developer"}` (step 6
@@ -113,15 +113,14 @@ Update these placeholders once the production environments are provisioned:
    npx wrangler deploy
    ```
 5. **Verify Health**:
-   Open `https://fitness-world-gymos-api.your-subdomain.workers.dev/health`.
+   Open `https://fitness-world-gymos-api.unisexgymfitnessworld.workers.dev/health`.
 6. **Create the first developer account**:
    Create it in Supabase Dashboard → **Authentication** → **Users** → **Add user** (auto-confirm email), then set its `app_metadata` to `{"role": "developer"}` via the user editor. Sign in with it and create the remaining trainer accounts from the developer console → Account Manager. Use unique passwords with at least 12 characters. Note: every login email must ALSO be listed in `TRAINER_EMAILS` — console-created accounts without an allowlist entry cannot sign in.
 
 ### Phase C: Frontend Setup on Vercel
 
-0. **Repo prerequisite**: this project folder is not a git repo yet. Run
-   `git init`, commit, create the GitHub repo, and push — Vercel and the
-   keep-alive workflow both need the GitHub repo to exist first.
+0. **Repo prerequisite**: push this folder to GitHub first — Vercel and the
+   keep-alive workflow both need the repo to exist.
 1. **Connect Repo**: Import the repository on [vercel.com](https://vercel.com).
 2. **Configure App settings**:
    - Framework Preset: `Vite`
@@ -129,20 +128,26 @@ Update these placeholders once the production environments are provisioned:
 3. **Define Environment Variables**:
    - `VITE_SUPABASE_URL=https://your-project.supabase.co`
    - `VITE_SUPABASE_PUBLISHABLE_KEY=your-publishable-key`
-   - `VITE_API_BASE_URL=https://fitness-world-gymos-api.your-subdomain.workers.dev/api`
+   - `VITE_API_BASE_URL=https://fitness-world-gymos-api.unisexgymfitnessworld.workers.dev/api`
 4. **Add Supabase Redirect URL for password reset**:
    - Open Supabase Dashboard -> Auth -> URL Configuration.
-   - Add `https://your-vercel-app.vercel.app/reset-password` to allowed redirect URLs.
+   - Add `https://fitness-world-gymos.vercel.app/reset-password` to allowed redirect URLs.
    - Keep local development redirect too if needed: `http://localhost:5173/reset-password`.
 5. **Deploy**: Build and verify.
 
 ---
 
-## 3. SMS Setup (SMSGate only)
+## 3. Messaging Setup (SMS + WhatsApp + Email)
 
-Automated reminders are SMS-only. The gym Android phone sends them for free through
-[SMSGate](https://github.com/capcom6/android-sms-gateway). There is no fallback
-provider: the phone must stay on and online for same-minute delivery.
+Reminders go out over WhatsApp and SMS with smart routing (WhatsApp first,
+then SMS): if a channel is down or unconfigured, the next ready one is tried
+automatically, and nobody is ever double-messaged. Email is bills-only
+(receipts, statements, PDF attachments) via the Apps Script mailer. SMS
+sends for free through the gym Android phone's SIM via
+[SMSGate](https://github.com/capcom6/android-sms-gateway) — install
+`docs/handouts/smsgate-v1.78.2-release.apk` on the gym phone for that.
+WhatsApp needs a self-hosted OpenWA server; Email needs the Apps Script
+mailer (`appsscript/Code.gs`) deployed with its URL + secret saved in Settings.
 
 The 09:00 IST job runs four sweeps: members due in 1–3 days (each reminded once,
 with catch-up if a day was missed), members due today (including plans the
@@ -157,9 +162,9 @@ of the plain renewal text — still one SMS per touchpoint. All four sweeps cove
 all plan lengths, including short (<30 day) plans: short-plan dues, Due Soon,
 follow-ups, reports, and the manual SMS button no longer exclude them.
 
-1. **Install the SMSGate app** on the gym phone from the project's Releases page and grant SMS permissions.
+1. **Install the SMSGate app** on the gym phone from `docs/handouts/smsgate-v1.78.2-release.apk` and grant SMS permissions.
 2. **Register a cloud account** inside the app (needed so the Worker API can reach the phone over the internet).
-3. **Enter the credentials** in GymOS → Settings (gear icon) → SMS Setup tab (trainers and developers both can do this): username, password, optional device ID / SIM number. Save, then use the built-in test box to send yourself a test message.
+3. **Enter the credentials** as a developer in GymOS → Settings (gear icon) → SMS Notifications tab (connection settings are developer-only; trainers only see status): username, password, optional device ID / SIM number. Save, then use the built-in test box to send yourself a test message.
 4. **Keep the phone on, online, and plugged in** at the gym desk on a recharge that includes SMS (most unlimited packs include 100 SMS/day). Turn off battery optimization for the SMS Gateway app so Android does not kill it.
 
 ### 3.1 Delivery reliability (how missed messages are prevented)
@@ -189,14 +194,14 @@ GymOS talks to [OpenWA](https://github.com/rmyndharis/OpenWA) (free, MIT, Docker
 
 ### 3.4 Smart Channel Order
 
-Automatic reminders try channels in the saved order (default WhatsApp → SMS → Email) and stop at the first one that accepts the message — a member is never double-messaged. A channel is skipped for the rest of a run only when it fails auth/config for one member. Manual sends pick Auto (same order) or one fixed channel in the message box. Every attempt is logged per channel in Recent Messages with retry.
+Automatic reminders try channels in the saved order (default WhatsApp → SMS; Email is bills-only and never used for reminders) and stop at the first one that accepts the message — a member is never double-messaged. A channel is skipped for the rest of a run only when it fails auth/config for one member. Manual sends pick Auto (same order) or one fixed channel in the message box. Every attempt is logged per channel in Recent Messages with retry.
 
 ---
 
 ## 4. Upgrading From the Old WhatsApp Build
 
 - The old WhatsApp setup (Render Baileys gateway, UltraMsg, Twilio) is gone. WhatsApp is back via self-hosted OpenWA (section 3.2) — free, but you host it.
-- Runtime settings moved from the `whatsapp_sessions` table to the `system_settings` table. After deploying, **re-enter credentials once** in Settings → Notifications (open to trainers and developers), then send a test from the built-in test box.
+- Runtime settings moved from the `whatsapp_sessions` table to the `system_settings` table. After deploying, a developer must **re-enter credentials once** in Settings → Notifications (connection settings are developer-only), then send a test from the built-in test box.
 - The legacy `whatsapp_sessions` table can be left in place. Optional cleanup (Supabase SQL Editor): `drop table if exists public.whatsapp_sessions;`
 - Delete the old Render `gymos-whatsapp-gateway` service if it still exists.
 
@@ -212,7 +217,7 @@ To prevent free tiers from pausing:
    - `*/10 * * * *` pings Supabase to prevent inactivity sleep.
 2. **UptimeRobot (Optional Worker Health Monitor)**:
    - Create a free account on [uptimerobot.com](https://uptimerobot.com).
-   - Add a monitor → HTTP(s) → URL: `https://fitness-world-gymos-api.your-subdomain.workers.dev/health`.
+   - Add a monitor → HTTP(s) → URL: `https://fitness-world-gymos-api.unisexgymfitnessworld.workers.dev/health`.
    - Set interval to **5 minutes** with email alerts.
 3. **GitHub Actions (Optional Supabase Backup Keep-Alive)**:
    - Save `SUPABASE_URL` and `SUPABASE_ANON_KEY` as repository secrets.
@@ -224,4 +229,4 @@ To prevent free tiers from pausing:
 
 To wipe test data and start clean: Settings → **Data** tab → export a backup first (Reports → Backup), tick the backup checkbox, type `ERASE ALL`. This deletes every member, receipt, renewal, visit, and message log in one atomic step and restarts member numbers from FW-001. Settings, notification credentials, and logins are untouched. Single members are erased from their profile instead: Delete, then **Delete forever** (purge needs the soft-delete first, so it can never be a one-tap accident).
 
-Developer SQL equivalent (Supabase SQL Editor): `select public.wipe_all_gym_data();` — requires section 9+ of `APPLY_MISSING_MIGRATIONS.sql`.
+Developer SQL equivalent (Supabase SQL Editor): `select public.wipe_all_gym_data('owner-user-id-here');` — the wipe is scoped to one owner's data and refuses to run without the id. Requires section 16+ of `APPLY_MISSING_MIGRATIONS.sql`.
